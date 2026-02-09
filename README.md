@@ -1,0 +1,2 @@
+- https://github.com/good593/Investment_crypto
+- https://github.com/good593/stock_forecast
