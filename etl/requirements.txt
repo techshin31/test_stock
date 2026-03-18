@@ -1,0 +1,5 @@
+jupyter==1.1.1
+pandas==3.0.1 # 데이터 처리
+seaborn==0.13.2 # 데이터 시각화
+requests==2.32.5 # HTTP 요청
+pytest-playwright==0.7.2 # 크롤링 

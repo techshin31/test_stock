@@ -76,7 +76,7 @@
     { "wics_minor_code": "502010", "wics_minor_name": "광고", "wi26_major_code": "WI330", "wi26_minor_code": "WI33010", "wi26_minor_name": "미디어" },
     { "wics_minor_code": "502020", "wics_minor_name": "방송과엔터테인먼트", "wi26_major_code": "WI330", "wi26_minor_code": "WI33010", "wi26_minor_name": "미디어" },
     { "wics_minor_code": "502030", "wics_minor_name": "출판", "wi26_major_code": "WI330", "wi26_minor_code": "WI33010", "wi26_minor_name": "미디어" },
-    { "wics_minor_code": "502040", "wics_minor_name": "게임엔터테인먼트", "wi26_major_code": "WI330", "wi26_minor_code": "WI33010", "wi26_minor_name": "미디어" },
+    { "wics_minor_code": "502040", "wics_minor_name": "게임엔터테인먼트", "wi26_major_code": "WI600", "wi26_minor_code": "WI60020", "wi26_minor_name": "게임소프트웨어" },
     { "wics_minor_code": "502050", "wics_minor_name": "양방향미디어와서비스", "wi26_major_code": "WI330", "wi26_minor_code": "WI33010", "wi26_minor_name": "미디어" },
     { "wics_minor_code": "551010", "wics_minor_name": "전기유틸리티", "wi26_major_code": "WI800", "wi26_minor_code": "WI80010", "wi26_minor_name": "유틸리티" },
     { "wics_minor_code": "551020", "wics_minor_name": "가스유틸리티", "wi26_major_code": "WI800", "wi26_minor_code": "WI80010", "wi26_minor_name": "유틸리티" },
