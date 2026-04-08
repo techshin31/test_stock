@@ -23,5 +23,5 @@ def comp_json(code):
     '''
     url = comp_url(code)
     response = requests.get(url)
-    return response.json()
+    return response
 
