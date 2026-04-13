@@ -1,0 +1,2 @@
+- https://story.pay.naver.com/content/2279_1_C1
+- https://kr.tradingview.com/support/solutions/43000759574/
