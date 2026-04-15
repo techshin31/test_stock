@@ -1,12 +1,11 @@
 jupyter==1.1.1
-pandas==3.0.1 # 데이터 처리
+pandas==3.0.2 # 데이터 처리
 seaborn==0.13.2 # 데이터 시각화
 koreanize-matplotlib==0.1.1
-requests==2.32.5 # HTTP 요청
 pytest-playwright==0.7.2 # 크롤링 
 # Playwright 브라우저 설치 (필수)
 # playwright install chromium
-requests
+requests==2.33.1
 tqdm==4.67.3
-
+pandas-ta==0.4.71b0
 
