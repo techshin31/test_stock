@@ -1,0 +1,7 @@
+jupyter==1.1.1
+pandas==3.0.2 # 데이터 처리
+seaborn==0.13.2 # 데이터 시각화
+koreanize-matplotlib==0.1.1
+tqdm==4.67.3
+pandas-ta==0.4.71b0
+

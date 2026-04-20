@@ -1,0 +1,16 @@
+{
+  "description": "WICS 대분류 (Major Sector)",
+  "source": "WICS Methodology.pdf",
+  "items": [
+    { "code": "10", "name": "에너지" },
+    { "code": "15", "name": "소재" },
+    { "code": "20", "name": "산업재" },
+    { "code": "25", "name": "경기관련소비재" },
+    { "code": "30", "name": "필수소비재" },
+    { "code": "35", "name": "건강관리" },
+    { "code": "40", "name": "금융" },
+    { "code": "45", "name": "IT" },
+    { "code": "50", "name": "커뮤니케이션서비스" },
+    { "code": "55", "name": "유틸리티" }
+  ]
+}
