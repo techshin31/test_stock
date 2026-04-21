@@ -29,7 +29,7 @@ def load_wics_all_by_wics_major(data_path:str, wics_major_cd:str) -> pd.DataFram
         if df_y is not None:
             it_mask = df_y['IDX_CD'].str.startswith(wics_major_cd)
             wics_frames.append(df_y[it_mask])
-            print(f'{file_path}: IT 행 {it_mask.sum():,}')
+            print(f'{file_path}: {wics_major_cd} 행 {it_mask.sum():,}')
 
     return pd.concat(wics_frames, ignore_index=True)
 

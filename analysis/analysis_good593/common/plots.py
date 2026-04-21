@@ -140,21 +140,25 @@ def plot_norm_with_wics_major(
     start = max(df_asset.index[0], df_cap.index[0])
     end   = min(df_asset.index[-1], df_cap.index[-1])
 
-    # 월별 리샘플 후 정규화
-    norm_asset = df_asset.loc[start:end, available_cols].copy()
-    norm_it    = df_cap.loc[start:end].copy().rename(f'{wics_major_nm}시총')
+    # ★ 월별 리샘플로 주기 통일 후 concat
+    # df_asset: 영업일별 → 월말 종가(last)
+    # df_cap  : 일별     → 월평균(mean)
+    norm_asset = df_asset.loc[start:end, available_cols].resample('ME').last()
+    norm_it    = df_cap.loc[start:end].resample('ME').mean().rename(f'{wics_major_nm}시총')
 
     combined = pd.concat([norm_it, norm_asset], axis=1).dropna()
     normed = combined / combined.iloc[0] * 100
 
     fig, ax = plt.subplots(figsize=(14, 6))
     line_styles = ['-', '--', '-.', ':']
-    colors_t = ['steelblue', 'tomato', 'seagreen', 'darkorange']
+    n = len(normed.columns)
+    cmap = plt.get_cmap('tab10')
+    colors_t = [cmap(i / max(n - 1, 1)) for i in range(n)]
     for i, col in enumerate(normed.columns):
         ax.plot(normed.index, normed[col],
                 label=col, linewidth=2,
                 linestyle=line_styles[i % len(line_styles)],
-                color=colors_t[i % len(colors_t)])
+                color=colors_t[i])
 
     ax.axhline(100, color='gray', linewidth=0.8, linestyle=':')
     ax.set_title(f'{wics_major_nm} 시총 vs 글로벌 지표 추이 (정규화, 기준=100)', fontsize=14, fontweight='bold')
