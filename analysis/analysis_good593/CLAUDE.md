@@ -94,3 +94,58 @@ data/
 ### Notebook Generation Pattern
 
 `create_nb.py` and `create_samsung_nb.py` use `nbformat` to programmatically build notebooks — combining markdown explanation cells with executable code cells. When adding new analysis metrics, update these generator scripts (not the `.ipynb` files directly) so regeneration stays consistent.
+
+---
+
+## Backtrader 백테스팅 서비스 할일 목록
+
+### Phase 1 — 기반 인프라
+
+- [ ] **`backtest/data/loader.py`** — 자산별 CSV 파싱 어댑터 구현
+  - `asset_combined_close.csv` 기본 진입점으로 `PandasData` 피드 변환
+  - CPI(월봉) → 일봉 forward-fill 처리
+  - BDI/SCFI 혼재 포맷 분리 파싱
+- [ ] **`backtest/runner.py`** — Cerebro 래퍼
+  - 전략 클래스 + 기간 + 초기자금 인자 수신
+  - `start_date` / `end_date` 파라미터로 in-sample / out-of-sample 구간 분리
+  - 수수료·슬리피지 기본값 설정 (0.05%)
+- [ ] **`backtest/metrics.py`** — 성과 지표 계산
+  - CAGR, MDD, Sharpe Ratio, Sortino Ratio, Calmar Ratio
+  - 월별 수익률 히트맵 (Jupyter 출력용)
+
+### Phase 2 — 내장 전략
+
+- [ ] **`backtest/strategies/momentum.py`** — 자산 모멘텀 로테이션 전략 (S-1)
+  - 매월 말 전 자산 N개월 수익률 계산, 상위 K개 자산 균등 투자
+  - 파라미터: `lookback` (1/3/6/12개월), `top_k` (1~3개)
+- [ ] **`backtest/strategies/regime.py`** — 매크로 국면 감지 전략 (S-2)
+  - BDI + 구리 MA 기준 Risk-On/Off 판별
+  - Risk-On → SOX/구리 매수 / Risk-Off → 금/국채 매수
+- [ ] **`backtest/strategies/hedge.py`** — 금/달러 역상관 헷지 전략 (S-3)
+  - 달러 강세 → 금 비중 축소 / 약세 → 금 비중 확대
+  - CPI YoY ≥ 4% → 실물자산(금+구리) 오버웨이트
+
+### Phase 3 — 분석 및 시각화
+
+- [ ] **`backtest/report.py`** — 전략 비교 리포트
+  - 복수 전략 성과 테이블 출력
+  - Buy & Hold 벤치마크 비교
+- [ ] **`backtest/optimizer.py`** — 파라미터 최적화
+  - Backtrader `optstrategy` 그리드 서치
+  - 결과 히트맵 시각화 (in/out-of-sample 분리 표시)
+- [ ] **`4_backtest_analysis.ipynb`** — 백테스팅 진입점 노트북 생성
+
+### 구현 순서
+
+1. `loader.py` → `asset_combined_close.csv` PandasData 변환 검증
+2. `runner.py` → Buy & Hold로 E2E 파이프라인 검증
+3. `metrics.py` → CAGR/MDD/Sharpe 계산 검증
+4. S-1 모멘텀 전략 구현
+5. S-2 매크로 국면 전략 구현
+6. `report.py` → 전략 비교 노트북 완성
+
+### 주의사항
+
+- CPI는 월 중순 발표 → 발표월 데이터는 **익월부터** 사용 (룩어헤드 바이어스 방지)
+- 슬리피지 0.1% 이상 설정 권장 (상품선물 스프레드)
+- BDI는 현물지수 → 직접 투자 불가, **신호 생성 전용**으로만 사용

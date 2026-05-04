@@ -4,4 +4,6 @@ seaborn==0.13.2 # 데이터 시각화
 koreanize-matplotlib==0.1.1
 tqdm==4.67.3
 pandas-ta==0.4.71b0
+yfinance>=0.2.54 # 자산 가격 수집 (백테스팅용)
+requests>=2.32.0 # FRED CPI 수집
 
