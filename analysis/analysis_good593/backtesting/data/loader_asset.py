@@ -40,8 +40,8 @@ def load_asset(ticker: str, years: list[int]) -> pd.DataFrame:
     result.index = pd.to_datetime(result.index)
 
     if ticker == "cpi":
-        # 월봉 → 일봉 forward-fill (룩어헤드 방지: shift 1개월)
-        result = result.resample("D").ffill()
+        # 월봉 → MS 기준 정규화 → 1개월 shift(익월부터 사용) → 일봉 ffill
+        result = result.resample("MS").last().shift(1).resample("D").ffill()
 
     return result
 
