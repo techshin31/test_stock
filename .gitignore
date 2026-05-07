@@ -5,3 +5,4 @@ __pycache__
 *.pyc 
 docs_cache
 
+.DS_Store

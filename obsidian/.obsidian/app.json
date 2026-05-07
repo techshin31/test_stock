@@ -1,0 +1,24 @@
+{
+  "legacyEditor": false,
+  "livePreview": true,
+  "defaultViewMode": "preview",
+  "displayInlineTitle": true,
+  "showLineNumber": false,
+  "strictLineBreaks": false,
+  "foldHeading": false,
+  "foldIndent": true,
+  "showFrontmatter": false,
+  "promptDelete": true,
+  "trashOption": "local",
+  "spellcheck": false,
+  "spellcheckLanguages": [
+    "ko"
+  ],
+  "showUnsupportedFiles": false,
+  "pdfExportSettings": {
+    "pageSize": "A4",
+    "landscape": false,
+    "margin": "0",
+    "downscaleEmbeddedImages": true
+  }
+}
