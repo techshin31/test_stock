@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 
@@ -21,7 +21,7 @@ import pandas as pd
 # ============================================================
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 OUTPUT_DIR = ROOT / "etl" / "wics_dart" / "output"
 RANKING_PATH = OUTPUT_DIR / "company_sector_rankings_2021_2025.csv"
 TARGET_PATH = OUTPUT_DIR / "text_targets_latest.csv"

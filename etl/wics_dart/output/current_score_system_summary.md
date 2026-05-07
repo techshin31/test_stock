@@ -2,7 +2,7 @@
 
 ## 1. 현재 실제 계산 방식
 
-현재 점수는 [build_sector_rankings.py](/C:/dev/Service_Stock_Analysis/etl/wics_dart/build_sector_rankings.py:1)를 기준으로 계산된다.
+현재 점수 기준과 계산식은 [scoring.py](/C:/dev/Project/Service_Stock_Analysis/etl/wics_dart/core/scoring.py:1)에 모여 있고, [build_sector_rankings.py](/C:/dev/Project/Service_Stock_Analysis/etl/wics_dart/pipeline/build_sector_rankings.py:1)는 CSV 입출력과 실행 진입점 역할을 한다.
 
 점수 계산 단위:
 

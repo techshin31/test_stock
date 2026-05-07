@@ -1,11 +1,11 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 
 import pandas as pd
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 OUTPUT_DIR = ROOT / "etl" / "wics_dart" / "output"
 MASTER_PATH = OUTPUT_DIR / "company_year_master_2021_2025.csv"
 MARKET_DIR = ROOT / "etl" / "stock" / "data"

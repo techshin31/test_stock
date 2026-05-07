@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 from pathlib import Path
@@ -28,7 +28,7 @@ from etl.company.dart_api import fetch_business_overview
 # ============================================================
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 TARGET_PATH = ROOT / "etl" / "wics_dart" / "output" / "text_targets_latest.csv"
 OUTPUT_PATH = ROOT / "etl" / "wics_dart" / "output" / "business_overview_text_latest.csv"
 
