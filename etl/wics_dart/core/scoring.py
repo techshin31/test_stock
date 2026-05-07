@@ -1,27 +1,17 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pandas as pd
 
 
 # ============================================================
-# 이 파일은 2021~2025 각 연도마다 같은 WICS 대분류 안에서
-# 기업들을 상대평가합니다.
+# WICS-DART FA scoring logic
 #
-# 현재는 업종 공통 지표를 먼저 percentile로 환산한 뒤,
-# 업종별로 다른 가중치를 적용해 종합점수를 계산합니다.
-#
-# 최종 결과물:
-#   company_sector_rankings_2021_2025.csv
+# This module only handles scoring rules:
+# - DART event counts -> scoring features
+# - year/sector percentile ranks
+# - sub-score calculation
+# - sector-specific overall score weights
 # ============================================================
-
-
-ROOT = Path(__file__).resolve().parents[2]
-OUTPUT_DIR = ROOT / "etl" / "wics_dart" / "output"
-COMPANY_DATA_DIR = ROOT / "etl" / "company" / "data"
-MASTER_PATH = OUTPUT_DIR / "company_year_master_2021_2025.csv"
-RANKING_PATH = OUTPUT_DIR / "company_sector_rankings_2021_2025.csv"
 
 
 EVENT_WEIGHTS = {
@@ -39,6 +29,16 @@ EVENT_WEIGHTS = {
     "bond_with_warrant": 0.5,
     "exchange_bond": 0.5,
 }
+
+
+EVENT_FEATURE_COLUMNS = [
+    "stock_code",
+    "fiscal_year",
+    "shareholder_return_raw",
+    "pipeline_event_raw",
+    "major_contract_raw",
+    "capital_support_raw",
+]
 
 
 SECTOR_WEIGHT_CONFIG = {
@@ -87,32 +87,43 @@ SECTOR_WEIGHT_CONFIG = {
 }
 
 
-def load_master() -> pd.DataFrame:
-    """다개년 마스터 테이블을 읽습니다."""
-    master = pd.read_csv(MASTER_PATH)
-    master["stock_code"] = master["stock_code"].astype(str).str.split(".").str[0].str.zfill(6)
-    master["fiscal_year"] = pd.to_numeric(master["fiscal_year"], errors="coerce").astype("Int64")
-    return master
+METRIC_RANKING_RULES = {
+    "revenue_growth_yoy": False,
+    "operating_margin": False,
+    "roe": False,
+    "debt_ratio": True,
+    "current_ratio": False,
+    "ocf_to_revenue": False,
+    "shareholder_return_raw": False,
+    "pipeline_event_raw": False,
+    "capital_support_raw": False,
+    "major_contract_raw": False,
+    "revenue": False,
+    "equity_ratio": False,
+    "financing_cash_flow": False,
+}
 
 
-def latest_event_path() -> Path | None:
-    candidates = list(COMPANY_DATA_DIR.glob("dart_reference_events_*.csv"))
-    return max(candidates, key=lambda path: (path.stat().st_size, path.stat().st_mtime)) if candidates else None
+def empty_event_features() -> pd.DataFrame:
+    """Return the empty event feature frame expected by the ranking merge."""
+    return pd.DataFrame(columns=EVENT_FEATURE_COLUMNS)
 
 
-def load_event_features() -> pd.DataFrame:
-    """DART 이벤트 공시를 기업-연도 단위 특징으로 집계합니다."""
-    event_path = latest_event_path()
-    if event_path is None:
-        return pd.DataFrame(columns=["stock_code", "fiscal_year"])
+def weighted_event_count(frame: pd.DataFrame, columns: list[str]) -> pd.Series:
+    total = pd.Series(0.0, index=frame.index)
+    for column in columns:
+        if column not in frame.columns:
+            continue
+        total = total + pd.to_numeric(frame[column], errors="coerce").fillna(0.0) * EVENT_WEIGHTS[column]
+    return total
 
-    events = pd.read_csv(
-        event_path,
-        dtype={"stock_code": str, "rcept_dt": str, "event_category": str, "event_subtype": str},
-    )
+
+def build_event_features(events: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate DART event disclosures into company-year scoring features."""
     if events.empty:
-        return pd.DataFrame(columns=["stock_code", "fiscal_year"])
+        return empty_event_features()
 
+    events = events.copy()
     events["stock_code"] = events["stock_code"].astype(str).str.split(".").str[0].str.zfill(6)
     events["fiscal_year"] = pd.to_numeric(events["rcept_dt"].str[:4], errors="coerce").astype("Int64")
     events = events.dropna(subset=["fiscal_year", "event_subtype"])
@@ -124,44 +135,25 @@ def load_event_features() -> pd.DataFrame:
         .reset_index()
     )
 
-    def get_col(frame: pd.DataFrame, column: str) -> pd.Series:
-        if column not in frame.columns:
-            return pd.Series(0, index=frame.index, dtype="float64")
-        return pd.to_numeric(frame[column], errors="coerce").fillna(0.0)
-
-    counts["shareholder_return_raw"] = (
-        get_col(counts, "cash_dividend") * EVENT_WEIGHTS["cash_dividend"]
-        + get_col(counts, "buyback") * EVENT_WEIGHTS["buyback"]
-        + get_col(counts, "share_cancellation") * EVENT_WEIGHTS["share_cancellation"]
-        + get_col(counts, "treasury_disposal") * EVENT_WEIGHTS["treasury_disposal"]
+    counts["shareholder_return_raw"] = weighted_event_count(
+        counts,
+        ["cash_dividend", "buyback", "share_cancellation", "treasury_disposal"],
     )
-    counts["pipeline_event_raw"] = (
-        get_col(counts, "clinical_trial") * EVENT_WEIGHTS["clinical_trial"]
-        + get_col(counts, "approval") * EVENT_WEIGHTS["approval"]
-        + get_col(counts, "technology_transfer") * EVENT_WEIGHTS["technology_transfer"]
+    counts["pipeline_event_raw"] = weighted_event_count(
+        counts,
+        ["clinical_trial", "approval", "technology_transfer"],
     )
-    counts["major_contract_raw"] = get_col(counts, "major_contract") * EVENT_WEIGHTS["major_contract"]
-    counts["capital_support_raw"] = (
-        get_col(counts, "paid_in_capital_increase") * EVENT_WEIGHTS["paid_in_capital_increase"]
-        + get_col(counts, "bonus_issue") * EVENT_WEIGHTS["bonus_issue"]
-        + get_col(counts, "convertible_bond") * EVENT_WEIGHTS["convertible_bond"]
-        + get_col(counts, "bond_with_warrant") * EVENT_WEIGHTS["bond_with_warrant"]
-        + get_col(counts, "exchange_bond") * EVENT_WEIGHTS["exchange_bond"]
+    counts["major_contract_raw"] = weighted_event_count(counts, ["major_contract"])
+    counts["capital_support_raw"] = weighted_event_count(
+        counts,
+        ["paid_in_capital_increase", "bonus_issue", "convertible_bond", "bond_with_warrant", "exchange_bond"],
     )
 
-    keep_columns = [
-        "stock_code",
-        "fiscal_year",
-        "shareholder_return_raw",
-        "pipeline_event_raw",
-        "major_contract_raw",
-        "capital_support_raw",
-    ]
-    return counts.loc[:, keep_columns]
+    return counts.loc[:, EVENT_FEATURE_COLUMNS]
 
 
 def percentile_rank(series: pd.Series, *, ascending: bool) -> pd.DataFrame:
-    """같은 연도·같은 섹터 안에서 순위와 percentile을 계산합니다."""
+    """Calculate rank and percentile inside one year-sector group."""
     valid = series.dropna()
 
     if valid.empty:
@@ -182,7 +174,7 @@ def percentile_rank(series: pd.Series, *, ascending: bool) -> pd.DataFrame:
 
 
 def bucket_from_score(score: float | None) -> str | None:
-    """종합점수를 읽기 쉬운 구간 라벨로 바꿉니다."""
+    """Convert the 0-1 overall score into a broad label."""
     if pd.isna(score):
         return None
     if score >= 0.8:
@@ -258,30 +250,14 @@ def apply_sector_weighted_score(result: pd.DataFrame) -> pd.DataFrame:
 
 
 def score_group(group: pd.DataFrame) -> pd.DataFrame:
-    """하나의 연도·섹터 그룹에 대해 상대평가 점수를 계산합니다."""
+    """Score one fiscal-year and WICS-large group by relative ranking."""
     result = group.copy()
 
     result["equity_ratio"] = pd.to_numeric(result["total_equity"], errors="coerce") / pd.to_numeric(
         result["total_assets"], errors="coerce"
     )
 
-    metric_rules = {
-        "revenue_growth_yoy": False,
-        "operating_margin": False,
-        "roe": False,
-        "debt_ratio": True,
-        "current_ratio": False,
-        "ocf_to_revenue": False,
-        "shareholder_return_raw": False,
-        "pipeline_event_raw": False,
-        "capital_support_raw": False,
-        "major_contract_raw": False,
-        "revenue": False,
-        "equity_ratio": False,
-        "financing_cash_flow": False,
-    }
-
-    for metric, ascending in metric_rules.items():
+    for metric, ascending in METRIC_RANKING_RULES.items():
         if metric not in result.columns:
             continue
         score_df = percentile_rank(result[metric], ascending=ascending)
@@ -313,14 +289,15 @@ def score_group(group: pd.DataFrame) -> pd.DataFrame:
         ["revenue_percentile", "major_contract_raw_percentile"],
     )
 
-    result = apply_sector_weighted_score(result)
-    return result
+    return apply_sector_weighted_score(result)
 
 
-def build_rankings(master: pd.DataFrame) -> pd.DataFrame:
-    """2021~2025 전체 기업-섹터 랭킹 테이블을 만듭니다."""
-    events = load_event_features()
-    working = master.merge(events, on=["stock_code", "fiscal_year"], how="left")
+def build_rankings(master: pd.DataFrame, event_features: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Build the full company-sector ranking table from master data and event features."""
+    if event_features is None:
+        event_features = empty_event_features()
+
+    working = master.merge(event_features, on=["stock_code", "fiscal_year"], how="left")
 
     frames: list[pd.DataFrame] = []
     for (fiscal_year, wics_large), group in working.groupby(["fiscal_year", "wics_large"], dropna=False):
@@ -330,21 +307,8 @@ def build_rankings(master: pd.DataFrame) -> pd.DataFrame:
         frames.append(scored)
 
     ranking = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-    ranking = ranking.sort_values(
+    return ranking.sort_values(
         ["fiscal_year", "wics_large", "overall_score", "company_name"],
         ascending=[True, True, False, True],
         na_position="last",
     )
-    return ranking
-
-
-def main() -> None:
-    """다개년 섹터 랭킹 계산 단계를 실행합니다."""
-    master = load_master()
-    ranking = build_rankings(master)
-    ranking.to_csv(RANKING_PATH, index=False, encoding="utf-8-sig")
-    print(f"Saved sector ranking table: {RANKING_PATH}")
-
-
-if __name__ == "__main__":
-    main()

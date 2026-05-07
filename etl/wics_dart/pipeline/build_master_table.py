@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 from typing import Iterable
@@ -27,7 +27,7 @@ import pandas as pd
 # ============================================================
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 COMPANY_DATA_DIR = ROOT / "etl" / "company" / "data"
 WICS_PATH = ROOT / "etl" / "wics" / "data" / "csv" / "wics_company_2026.csv"
 DART_COMPANY_PATH = COMPANY_DATA_DIR / "dart_company_2026.csv"
