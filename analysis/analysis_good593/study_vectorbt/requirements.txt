@@ -1,0 +1,53 @@
+# ============================================================
+# vectorbt 백테스팅 학습 환경
+#
+# [권장 Python 버전]
+#   Python 3.10.x  ← vectorbt 0.26.2 공식 지원 범위
+#   Python 3.11.x  ← 동작은 하나 일부 경고 발생 가능
+#
+# [가상환경 생성 및 설치]
+#   python -m venv .venv
+#   .venv\Scripts\activate        (Windows)
+#   pip install -r requirements.txt
+# ============================================================
+
+
+# ── 핵심: 백테스팅 엔진 ─────────────────────────────────────────
+# pandas 2.0+ 에서 제거된 API(Styler.render 등)를 사용하므로
+# pandas는 반드시 1.x 계열로 고정
+vectorbt==0.26.2
+pandas==1.5.3
+# vectorbt 0.26.2 + Python <3.11 → numba 0.56.x 강제
+# numba 0.56.x 는 numpy <1.24 를 요구 → numpy 1.23.x 로 고정
+numpy==1.23.5
+numba==0.56.4
+
+# ── vectorbt 필수 의존성 ─────────────────────────────────────────
+scipy==1.10.1
+plotly==5.18.0          # vectorbt 기본 플로팅 백엔드
+mypy-extensions==1.0.0  # vectorbt 내부 타입 검사용
+
+# ── 주가 데이터 수집 ─────────────────────────────────────────────
+# yfinance 0.2.x 계열: vectorbt와 검증된 조합
+# 1.x 계열(2026년 출시)은 API 변경으로 일부 코드 수정 필요
+yfinance==0.2.66
+requests==2.31.0
+lxml==5.1.0
+beautifulsoup4==4.12.3
+html5lib==1.1
+
+# ── 시각화 ───────────────────────────────────────────────────────
+matplotlib==3.8.4
+seaborn==0.13.2
+
+# ── Jupyter 환경 ─────────────────────────────────────────────────
+jupyter==1.0.0
+notebook==6.5.6         # 7.x는 UI 변경 큼 → 6.x 유지
+ipykernel==6.29.3
+ipywidgets==8.1.2
+widgetsnbextension==4.0.10
+
+# ── 공통 유틸리티 ────────────────────────────────────────────────
+python-dateutil==2.9.0
+pytz==2024.1
+tqdm==4.66.2            # 진행바 (yfinance 내부 사용)
