@@ -20,7 +20,7 @@ import yfinance as yf
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from .strategies import partial_sizing_strategy
+from .strategies.combined import partial_sizing_strategy
 
 
 # ── 1. 데이터 로드 ────────────────────────────────────────────────────────────
