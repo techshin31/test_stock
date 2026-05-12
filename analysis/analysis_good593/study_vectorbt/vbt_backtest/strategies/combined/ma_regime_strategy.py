@@ -19,11 +19,11 @@ import numpy as np
 import pandas as pd
 import vectorbt as vbt
 
-from .adx_strategy import calc_adx
-from .bollinger_band import make_signals as bb_make_signals
-from .golden_cross import make_signals as gc_make_signals
-from .macd_strategy import calc_macd
-from .obv_strategy import calc_obv
+from ..indicators.adx_strategy import calc_adx
+from ..indicators.obv_strategy import calc_obv
+from ..base.bollinger_band import make_signals as bb_make_signals
+from ..base.golden_cross import make_signals as gc_make_signals
+from ..base.macd_strategy import calc_macd
 
 
 # ── 국면 상수 ─────────────────────────────────────────────────────────────────
