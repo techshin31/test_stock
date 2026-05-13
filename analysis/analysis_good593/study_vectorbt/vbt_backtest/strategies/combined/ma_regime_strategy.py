@@ -3,11 +3,11 @@ MA 정렬 + ADX 시장국면 기반 통합 전략 스위처
 
 국면 → 전략 매핑 (4국면):
   UPTREND   (상승 추세): MA bull정렬 AND ADX > threshold AND ADX >= 20
-    → 골든크로스 | 포지션 100%
+    → 골든크로스 진입 | 포지션 100%
   DOWNTREND (하락 추세): MA bear정렬 AND ADX > threshold AND ADX >= 20
     → 전량 청산, 현금 보유 | 포지션 0%
   SIDEWAYS  (횡보장):   ADX < 20
-    → 볼린저 밴드 하단 반등 | 포지션 50%
+    → 볼린저 밴드 하단 진입 | 포지션 50%
   TRANSITION(전환 구간): 위 3가지 조건 미해당
     → 신규 진입 차단, 기존 포지션 유지 | 포지션 NaN
 
@@ -18,6 +18,11 @@ MA 정렬 + ADX 시장국면 기반 통합 전략 스위처
   SIDEWAYS (불확실) →  50% 절반 포지션 ← 손실 제한
   DOWNTREND(위험)   →   0% 전량 청산  ← 손실 방어
   TRANSITION(모호)  →  NaN 유지       ← 불필요한 조기 청산 방지
+
+청산 방식 (run_backtest 기준):
+  DOWNTREND 전환 → 유일한 전량 청산 조건 (size=0.0)
+  UPTREND / SIDEWAYS / TRANSITION → DOWNTREND 전환 전까지 포지션 유지
+  ※ 개별 종목 손절(%손실 기준)은 미구현
 """
 
 import numpy as np
@@ -135,12 +140,12 @@ def make_signals(
         close, fast_window=ma_windows[0], slow_window=ma_windows[1]
     )
     gc_entries = gc_entries_raw & UPTREND      # UPTREND 국면에서만 진입
-    gc_exits   = gc_exits_raw | DOWNTREND     # 하락 추세 전환 시 전량 청산
+    gc_exits   = gc_exits_raw | DOWNTREND     # 데드크로스(MA20<MA60) 또는 DOWNTREND 전환 시 청산
 
     # ── 2) SIDEWAYS: 볼린저 밴드 ─────────────────────────────────────────────
     bb_entries_raw, bb_exits_raw = bb_make_signals(close, window=bb_window, num_std=bb_std)
     bb_entries = bb_entries_raw & SIDEWAYS    # SIDEWAYS 국면에서만 진입
-    bb_exits   = bb_exits_raw | DOWNTREND    # 하락 추세 전환 시 전량 청산
+    bb_exits   = bb_exits_raw | DOWNTREND    # BB 상단 터치 또는 DOWNTREND 전환 시 청산
 
     # TRANSITION: 신규 진입 없음, 기존 포지션 유지 → 별도 청산 신호 없음
 
@@ -180,7 +185,11 @@ def run_backtest(
     fees: float = 0.0015,
     slippage: float = 0.001,
 ) -> vbt.Portfolio:
-    """MA 정렬 + ADX 4국면 기반 통합 전략 백테스트 실행"""
+    """MA 정렬 + ADX 4국면 기반 통합 전략 백테스트 실행
+
+    청산은 DOWNTREND 전환(size=0.0)만 적용된다.
+    make_signals()의 gc_exits/bb_exits(데드크로스·BB상단)는 사용하지 않는다.
+    """
     _, _, size_series, _ = make_signals(
         close, high, low,
         ma_windows=ma_windows,

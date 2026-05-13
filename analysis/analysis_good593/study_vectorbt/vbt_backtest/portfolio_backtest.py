@@ -20,7 +20,7 @@ import yfinance as yf
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from .strategies.combined import partial_sizing_strategy
+from .strategies.combined import partial_auto_strategy
 
 
 # ── 1. 데이터 로드 ────────────────────────────────────────────────────────────
@@ -65,9 +65,8 @@ def build_size_df(
     low_df: pd.DataFrame,
     volume_df: pd.DataFrame,
     adx_threshold: float = 25.0,
-    adx_scale: float = 30.0,
 ) -> tuple[pd.DataFrame, dict]:
-    """종목별 partial_sizing 신호 생성 → 포트폴리오 비중 DataFrame 구성
+    """종목별 partial_auto 신호 생성 → 포트폴리오 비중 DataFrame 구성
 
     각 종목의 size_series를 N으로 나눠 공유 현금 기준 비중으로 변환한다.
     (종목별 최대 비중 = 1/N)
@@ -75,7 +74,7 @@ def build_size_df(
     Returns
     -------
     size_df      : 비중 DataFrame (index=날짜, columns=종목명)
-    signal_info  : 종목별 신호 횟수 dict (진입 횟수, 약세 부분청산, 강세 전량청산)
+    signal_info  : 종목별 신호 횟수 dict (진입 횟수, 1차익절 횟수, 2차청산 횟수)
     """
     names = list(close_df.columns)
     n = len(names)
@@ -83,18 +82,17 @@ def build_size_df(
     signal_counts = {}
 
     for name in names:
-        _, _, size_s, detail = partial_sizing_strategy.make_signals(
+        _, _, size_s, detail = partial_auto_strategy.make_signals(
             close_df[name], high_df[name], low_df[name], volume_df[name],
             adx_threshold=adx_threshold,
-            adx_scale=adx_scale,
         )
         size_df[name] = size_s / n
 
-        entries = detail['strong_entries'] | detail['weak_entries'] | detail['range_entries']
+        entries = detail['entry1'] | detail['entry2'] | detail['entry_range']
         signal_counts[name] = {
-            '진입 횟수':    int(entries.sum()),
-            '약세 부분청산': int(detail['weak_bear_start'].sum()),
-            '강세 전량청산': int(detail['strong_bear_start'].sum()),
+            '진입 횟수':   int(entries.sum()),
+            '1차 익절':    int(detail['transition_from_up'].sum()),
+            '2차 청산':    int(detail['dead_cross'].sum()),
         }
 
     return size_df, signal_counts
