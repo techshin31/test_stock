@@ -65,20 +65,32 @@ def build_size_df(
     low_df: pd.DataFrame,
     volume_df: pd.DataFrame,
     adx_threshold: float = 25.0,
+    min_momentum: float = 0.0,
 ) -> tuple[pd.DataFrame, dict]:
-    """종목별 partial_auto 신호 생성 → 포트폴리오 비중 DataFrame 구성
+    """종목별 partial_auto 신호 생성 → 국면별 모멘텀 비례 가중치 포트폴리오 DataFrame 구성
 
-    각 종목의 size_series를 N으로 나눠 공유 현금 기준 비중으로 변환한다.
-    (종목별 최대 비중 = 1/N)
+    [국면별 모멘텀 윈도우]
+    UPTREND    → 126일(6개월): 추세가 길게 이어지므로 장기 모멘텀 신뢰도 높음
+    TRANSITION →  63일(3개월): 방향 불확실, 중기 모멘텀으로 중간값 사용
+    SIDEWAYS   →  21일(1개월): 단기 등락 반복, 빠른 반응 필요
+    DOWNTREND  → 진입 안 함 (어차피 size=0 청산 국면)
+
+    [처리 순서]
+    1. 종목별 partial_auto 신호 생성
+    2. 국면 정보(detail['masks'])로 종목별 모멘텀 Series 구성
+    3. min_momentum 미만 종목 진입 제외
+    4. 통과 종목의 모멘텀 합 대비 비율로 가중치 산출
+    5. 최종 비중 = 신호 크기 × 모멘텀 가중치 (가변 투자 비중)
 
     Returns
     -------
-    size_df      : 비중 DataFrame (index=날짜, columns=종목명)
-    signal_info  : 종목별 신호 횟수 dict (진입 횟수, 1차익절 횟수, 2차청산 횟수)
+    size_df     : 비중 DataFrame (index=날짜, columns=종목명)
+    signal_info : 종목별 신호 횟수 dict
     """
     names = list(close_df.columns)
-    n = len(names)
-    size_df = pd.DataFrame(np.nan, index=close_df.index, columns=names)
+
+    size_raw    = pd.DataFrame(np.nan, index=close_df.index, columns=names)
+    momentum_df = pd.DataFrame(np.nan, index=close_df.index, columns=names)
     signal_counts = {}
 
     for name in names:
@@ -86,14 +98,45 @@ def build_size_df(
             close_df[name], high_df[name], low_df[name], volume_df[name],
             adx_threshold=adx_threshold,
         )
-        size_df[name] = size_s / n
+        size_raw[name] = size_s
 
         entries = detail['entry1'] | detail['entry2'] | detail['entry_range']
         signal_counts[name] = {
-            '진입 횟수':   int(entries.sum()),
-            '1차 익절':    int(detail['transition_from_up'].sum()),
-            '2차 청산':    int(detail['dead_cross'].sum()),
+            '진입 횟수': int(entries.sum()),
+            '1차 익절':  int(detail['transition_from_up'].sum()),
+            '2차 청산':  int(detail['dead_cross'].sum()),
         }
+
+        # 국면별 모멘텀 윈도우 선택
+        UPTREND    = detail['masks']['UPTREND']
+        SIDEWAYS   = detail['masks']['SIDEWAYS']
+        TRANSITION = detail['masks']['TRANSITION']
+
+        mom_21  = close_df[name].pct_change(21)    # SIDEWAYS: 1개월
+        mom_63  = close_df[name].pct_change(63)    # TRANSITION: 3개월
+        mom_126 = close_df[name].pct_change(126)   # UPTREND: 6개월
+
+        mom = pd.Series(np.nan, index=close_df.index)
+        mom[UPTREND]    = mom_126[UPTREND]
+        mom[SIDEWAYS]   = mom_21[SIDEWAYS]
+        mom[TRANSITION] = mom_63[TRANSITION]
+        momentum_df[name] = mom
+
+    # 진입 신호 마스크 (양수 = 매수 신호)
+    entry_mask = size_raw > 0
+
+    # 유효 진입: 신호 발생 + 모멘텀 min_momentum 이상
+    valid_entry = entry_mask & (momentum_df >= min_momentum)
+
+    # 유효 진입 종목의 날짜별 모멘텀 합 → 가중치 산출
+    mom_valid  = momentum_df.where(valid_entry)
+    mom_sum    = mom_valid.sum(axis=1).replace(0, np.nan)
+    mom_weight = mom_valid.div(mom_sum, axis=0)
+
+    # size_df 구성
+    size_df = size_raw.copy()
+    size_df[entry_mask & ~valid_entry] = np.nan
+    size_df[valid_entry] = (size_raw * mom_weight)[valid_entry]
 
     return size_df, signal_counts
 
