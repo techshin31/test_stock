@@ -348,6 +348,33 @@ ATR_MULTIPLIER   = 2.0
 KOSPI_MA         = 120
 CASH_RETURN      = 0.035
 
+METRICS_TARGET = {
+    "cagr":              0.06,   # 6%
+    "mdd":              -0.25,   # -25%
+    "mdd_duration":       12,    # 12개월
+    "calmar":             0.3,
+    "sortino":            0.5,
+    "alpha":              0.02,  # 2%p
+    "beta":               0.8,
+    "mdd_reduction":      0.20,  # 20%
+    "calmar_improvement": 0.1,
+    "info_ratio":         0.3,
+    "win_rate":           0.5,
+}
+METRICS_ALERT = {
+    "cagr":              0.04,
+    "mdd":              -0.35,
+    "mdd_duration":       18,
+    "calmar":             0.2,
+    "sortino":            0.3,
+    "alpha":              0.0,
+    "beta":               1.0,
+    "mdd_reduction":      0.10,
+    "calmar_improvement": 0.0,
+    "info_ratio":         0.0,
+    "win_rate":           0.4,
+}
+
 
 def get_signal(close_df, high_df, low_df, kospi=None):
     """오늘의 매매 신호 생성 — 자동매매 시스템 진입점
@@ -378,6 +405,9 @@ def get_signal(close_df, high_df, low_df, kospi=None):
 
 #### `profiles/aggressive.py`
 
+> **구현 범위:** 파일과 상수만 정의한다. `get_signal()`을 포함한 전략 로직은 구현하지 않는다.
+> `neutral.py` 검증 완료 후 별도로 구현한다.
+
 `neutral.py`와 동일한 구조. 아래 상수가 **모두 정의되어야** `get_signal()`과 `run_walk_forward()`가 오류 없이 동작한다.
 
 ```python
@@ -397,6 +427,33 @@ ATR_PERIOD       = 14
 ATR_MULTIPLIER   = 2.5   # 더 민감한 stop-loss
 KOSPI_MA         = 120
 CASH_RETURN      = 0.035
+
+METRICS_TARGET = {
+    "cagr":              0.10,   # 10%
+    "mdd":              -0.35,   # -35%
+    "mdd_duration":       18,    # 18개월
+    "calmar":             0.3,
+    "sortino":            0.7,
+    "alpha":              0.05,  # 5%p
+    "beta":               1.2,
+    "mdd_reduction":      0.10,  # 10%
+    "calmar_improvement": 0.1,
+    "info_ratio":         0.3,
+    "win_rate":           0.5,
+}
+METRICS_ALERT = {
+    "cagr":              0.07,
+    "mdd":              -0.45,
+    "mdd_duration":       24,
+    "calmar":             0.2,
+    "sortino":            0.4,
+    "alpha":              0.0,
+    "beta":               1.5,
+    "mdd_reduction":      0.0,
+    "calmar_improvement": 0.0,
+    "info_ratio":         0.0,
+    "win_rate":           0.4,
+}
 
 
 def get_signal(close_df, high_df, low_df, kospi=None):
@@ -464,15 +521,61 @@ def run_walk_forward(profile, close_df, high_df, low_df, volume_df, **kwargs):
     )
 ```
 
-#### `backtest/metrics.py` — `build_metrics_table()`
+#### `backtest/metrics.py` — `calc_metrics()` + `build_metrics_table()`
 
-`profile_name` 파라미터를 받아 레이블에 사용한다. "위험중립형" 하드코딩 없이 성향 이름이 자동 반영된다.
+**`calc_metrics()`** — vbt.Portfolio에서 성과 지표를 계산해 dict로 반환한다.
 
 ```python
-def build_metrics_table(pf, pf_bh, close_df, profile_name="위험중립형", benchmark_series=None):
-    ...
-    (val_09, f"★ {profile_name} 포트"),
+def calc_metrics(pf, pf_bh, close_df, benchmark_series=None):
+    """
+    Parameters
+    ----------
+    pf               : vbt.Portfolio  전략 포트폴리오
+    pf_bh            : vbt.Portfolio  Buy & Hold 포트폴리오
+    close_df         : DataFrame      주식 종가 (ETF 제외)
+    benchmark_series : Series         KOSPI 지수 (None이면 상대 지표 생략)
+
+    Returns  (dict)
+    -------
+    절대 지표
+      cagr          : float   연환산 수익률
+      mdd           : float   최대 낙폭 (음수)
+      mdd_duration  : int     MDD 지속 기간 (월)
+      calmar        : float   CAGR / |MDD|
+      sortino       : float   하락 변동성 대비 수익률
+
+    상대 지표 (benchmark_series 있을 때만)
+      alpha         : float   KOSPI 대비 연환산 초과 수익
+      beta          : float   시장 민감도
+      mdd_reduction : float   포트 MDD 감소율 vs KOSPI MDD
+      calmar_improvement : float  Calmar 개선폭 vs KOSPI
+      info_ratio    : float   초과 수익의 일관성 (정보 비율)
+      win_rate      : float   수익 거래 비율
+    """
 ```
+
+**`build_metrics_table()`** — profile의 목표값·경보선을 읽어 상태(✓ ⚠ ✗)를 함께 출력한다.
+
+```python
+def build_metrics_table(pf, pf_bh, close_df, profile, benchmark_series=None):
+    """
+    Parameters
+    ----------
+    profile : module  profiles.neutral 또는 profiles.aggressive
+              METRICS_TARGET, METRICS_ALERT을 읽어 목표/경보 기준 적용
+
+    Returns
+    -------
+    DataFrame  컬럼: 지표명 | 전략값 | B&H값 | 목표 | 경보선 | 상태
+               상태: ✓ (목표 달성) · ⚠ (경보선 이내) · ✗ (경보선 초과)
+    """
+    metrics = calc_metrics(pf, pf_bh, close_df, benchmark_series)
+    ...
+    # profile.METRICS_TARGET, profile.METRICS_ALERT로 상태 판정
+```
+
+`build_metrics_table(pf, pf_bh, close_df, profile=neutral)`처럼 profile 모듈을 직접 전달한다.
+`profile_name` 문자열은 `profile.__name__.split(".")[-1]`로 자동 추출한다.
 
 #### `backtest/plots/performance.py`
 
