@@ -28,3 +28,4 @@ from .optimizer import grid_search
 from . import strategies
 from . import data
 from . import portfolio_backtest
+from . import config

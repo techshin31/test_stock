@@ -131,6 +131,7 @@ def run_backtest(
     low: pd.Series,
     volume: pd.Series = None,    # walk_forward 호환용 (미사용)
     adx_threshold: float = 25.0,
+    adx_sideways: float = 20.0,
     fees: float = 0.0015,
     slippage: float = 0.001,
 ) -> vbt.Portfolio:
@@ -145,6 +146,7 @@ def run_backtest(
     _, _, size_series, _ = make_signals(
         close, high, low,
         adx_threshold=adx_threshold,
+        adx_sideways=adx_sideways,
     )
     return vbt.Portfolio.from_orders(
         close,

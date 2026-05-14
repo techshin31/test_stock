@@ -1,24 +1,24 @@
 {
   "main": {
-    "id": "e5efe50c49bb0094",
+    "id": "main",
     "type": "split",
     "children": [
       {
-        "id": "afe676aad9318a32",
+        "id": "f08102ef90e8e696",
         "type": "tabs",
         "children": [
           {
-            "id": "dc0c981393b3ac83",
+            "id": "d5e52e03f867d746",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "02_산업분석/IT_산업분석.md",
-                "mode": "source",
+                "file": "투자성향/위험중립형_전략.md",
+                "mode": "preview",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "IT_산업분석"
+              "title": "위험중립형_전략"
             }
           }
         ]
@@ -27,15 +27,15 @@
     "direction": "vertical"
   },
   "left": {
-    "id": "e54c3e94eda33661",
+    "id": "left-ribbon",
     "type": "split",
     "children": [
       {
-        "id": "f5d9f08594672ae8",
+        "id": "file-explorer",
         "type": "tabs",
         "children": [
           {
-            "id": "925333919d8f034c",
+            "id": "leaf-explorer",
             "type": "leaf",
             "state": {
               "type": "file-explorer",
@@ -48,7 +48,7 @@
             }
           },
           {
-            "id": "441b9ba04bd09261",
+            "id": "e6d5aa414a025be3",
             "type": "leaf",
             "state": {
               "type": "search",
@@ -65,7 +65,7 @@
             }
           },
           {
-            "id": "8699b140af1d8d4a",
+            "id": "df186769cda11576",
             "type": "leaf",
             "state": {
               "type": "bookmarks",
@@ -78,23 +78,23 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 255.5
   },
   "right": {
-    "id": "a9c694a253a7b35b",
+    "id": "right-ribbon",
     "type": "split",
     "children": [
       {
-        "id": "ecd9e320ce6d9fc9",
+        "id": "backlink-pane",
         "type": "tabs",
         "children": [
           {
-            "id": "0bcf24e36abcc942",
+            "id": "leaf-backlink",
             "type": "leaf",
             "state": {
               "type": "backlink",
               "state": {
-                "file": "02_산업분석/IT_산업분석.md",
+                "file": "투자성향/위험중립형_전략.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,25 +104,40 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "IT_산업분석 의 백링크"
+              "title": "위험중립형_전략 의 백링크"
             }
           },
           {
-            "id": "aa5bf11178b08c76",
+            "id": "leaf-outline",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "투자성향/위험중립형_전략.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "위험중립형_전략 의 개요"
+            }
+          },
+          {
+            "id": "2a558f228459c7e8",
             "type": "leaf",
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "02_산업분석/IT_산업분석.md",
+                "file": "투자성향/위험중립형_전략.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "IT_산업분석 의 나가는 링크"
+              "title": "위험중립형_전략 의 나가는 링크"
             }
           },
           {
-            "id": "ecff6a7cc0eddd40",
+            "id": "def9cd87844fba91",
             "type": "leaf",
             "state": {
               "type": "tag",
@@ -137,7 +152,7 @@
             }
           },
           {
-            "id": "1a15e53aa441369a",
+            "id": "fa9407a730506b8f",
             "type": "leaf",
             "state": {
               "type": "all-properties",
@@ -149,28 +164,12 @@
               "icon": "lucide-archive",
               "title": "모든 속성"
             }
-          },
-          {
-            "id": "d5bd3c2e01e396d0",
-            "type": "leaf",
-            "state": {
-              "type": "outline",
-              "state": {
-                "file": "02_산업분석/IT_산업분석.md",
-                "followCursor": false,
-                "showSearch": false,
-                "searchQuery": ""
-              },
-              "icon": "lucide-list",
-              "title": "IT_산업분석 의 개요"
-            }
           }
         ]
       }
     ],
     "direction": "horizontal",
-    "width": 300,
-    "collapsed": true
+    "width": 220
   },
   "left-ribbon": {
     "hiddenItems": {
@@ -180,13 +179,31 @@
       "daily-notes:오늘의 일일 노트 열기": false,
       "templates:템플릿 삽입": false,
       "command-palette:명령어 팔레트 열기": false,
+      "markdown-importer:마크다운 형식 불러오기 열기": false,
       "bases:새 베이스 생성하기": false
     }
   },
-  "active": "dc0c981393b3ac83",
+  "active": "d5e52e03f867d746",
   "lastOpenFiles": [
-    "04_트레이딩개발/트레이딩_개발_인사이트.md",
-    "04_트레이딩개발",
-    "00_Index.md"
+    "성과지표/Calmar비율.md",
+    "성과지표/CAGR.md.tmp.14536.bb99b11c04ae",
+    "성과지표/Sortino비율.md",
+    "성과지표/Sortino비율.md.tmp.14536.1fbac09d834e",
+    "성과지표/MDD_Duration.md",
+    "성과지표/Profit_Factor.md",
+    "성과지표/MDD.md",
+    "성과지표/CAGR.md",
+    "성과지표/승률.md",
+    "성과지표/샤프비율.md",
+    "성과지표/CAGR.md.tmp.14536.71c589d56a6f",
+    "성과지표",
+    "최적화/Grid_Search_최적화.md",
+    "최적화/Walk_Forward_최적화.md",
+    "최적화",
+    "전략/환영합니다!.md",
+    "투자성향_분류.md",
+    "위험중립형_전략.md",
+    "적극투자형_전략.md",
+    "인버스ETF_매매원칙.md"
   ]
 }

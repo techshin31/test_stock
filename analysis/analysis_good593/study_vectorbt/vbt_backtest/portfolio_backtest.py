@@ -65,6 +65,7 @@ def build_size_df(
     low_df: pd.DataFrame,
     volume_df: pd.DataFrame,
     adx_threshold: float = 25.0,
+    adx_sideways: float = 20.0,
     min_momentum: float = 0.0,
 ) -> tuple[pd.DataFrame, dict]:
     """종목별 partial_auto 신호 생성 → 국면별 모멘텀 비례 가중치 포트폴리오 DataFrame 구성
@@ -97,6 +98,7 @@ def build_size_df(
         _, _, size_s, detail = partial_auto_strategy.make_signals(
             close_df[name], high_df[name], low_df[name], volume_df[name],
             adx_threshold=adx_threshold,
+            adx_sideways=adx_sideways,
         )
         size_raw[name] = size_s
 
