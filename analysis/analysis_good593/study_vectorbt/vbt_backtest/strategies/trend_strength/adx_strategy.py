@@ -13,6 +13,8 @@ ADX(Average Directional Index) 기반 추세 강도 필터 전략
 import pandas as pd
 import vectorbt as vbt
 
+from ..volatility.atr import calc_atr
+
 
 def calc_adx(
     high: pd.Series,
@@ -27,17 +29,6 @@ def calc_adx(
     -------
     DataFrame with columns: ADX, plus_di, minus_di
     """
-    # True Range
-    prev_close = close.shift(1)
-    tr = pd.concat(
-        [
-            high - low,
-            (high - prev_close).abs(),
-            (low - prev_close).abs(),
-        ],
-        axis=1,
-    ).max(axis=1)
-
     # 방향 움직임
     up_move = high - high.shift(1)
     down_move = low.shift(1) - low
@@ -46,7 +37,7 @@ def calc_adx(
     minus_dm = down_move.where((down_move > up_move) & (down_move > 0), 0.0)
 
     # Wilder's smoothing (EWM com = window - 1)
-    atr = tr.ewm(com=window - 1, min_periods=window).mean()
+    atr = calc_atr(high, low, close, period=window)
     plus_di = 100 * plus_dm.ewm(com=window - 1, min_periods=window).mean() / atr
     minus_di = 100 * minus_dm.ewm(com=window - 1, min_periods=window).mean() / atr
 

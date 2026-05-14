@@ -78,7 +78,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 255.5
+    "width": 211.5
   },
   "right": {
     "id": "right-ribbon",
@@ -185,11 +185,14 @@
   },
   "active": "d5e52e03f867d746",
   "lastOpenFiles": [
+    "최적화/Walk_Forward_최적화.md",
+    "TA지표/변동성/ATR_평균진폭.md",
+    "성과지표/Sortino비율.md",
+    "성과지표/MDD_Duration.md",
+    "투자성향/위험중립형_전략.md",
     "성과지표/Calmar비율.md",
     "성과지표/CAGR.md.tmp.14536.bb99b11c04ae",
-    "성과지표/Sortino비율.md",
     "성과지표/Sortino비율.md.tmp.14536.1fbac09d834e",
-    "성과지표/MDD_Duration.md",
     "성과지표/Profit_Factor.md",
     "성과지표/MDD.md",
     "성과지표/CAGR.md",
@@ -198,7 +201,6 @@
     "성과지표/CAGR.md.tmp.14536.71c589d56a6f",
     "성과지표",
     "최적화/Grid_Search_최적화.md",
-    "최적화/Walk_Forward_최적화.md",
     "최적화",
     "전략/환영합니다!.md",
     "투자성향_분류.md",

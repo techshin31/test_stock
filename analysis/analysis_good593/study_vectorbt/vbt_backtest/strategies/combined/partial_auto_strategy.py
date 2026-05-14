@@ -25,6 +25,7 @@ import vectorbt as vbt
 
 from ..volatility.bollinger_band import make_signals as bb_make_signals
 from .ma_regime_strategy import calc_regime, REGIME_COLORS
+from ..volatility.atr import calc_atr
 
 
 def make_signals(
@@ -44,6 +45,10 @@ def make_signals(
     exit1_size: float = 0.4,         # 1차 매도 후 유지 비중 (TRANSITION)
     exit2_size: float = 0.1,         # 2차 매도 후 유지 비중 (데드크로스)
     recent_window: int = 60,         # 2차 매수 유효 기간 (거래일)
+    kospi: pd.Series = None,         # KOSPI 지수 (MA 아래면 신규 진입 차단)
+    kospi_ma: int = 120,             # KOSPI 필터 이동평균 기간
+    atr_multiplier: float = 2.0,     # ATR 배수 (stop-loss 민감도)
+    atr_period: int = 14,            # ATR 계산 기간
 ) -> tuple:
     """
     분할 매수/매도 신호 생성
@@ -82,6 +87,12 @@ def make_signals(
 
     entries = entry1 | entry2 | entry_range
 
+    # ── KOSPI 시장 필터: MA 아래면 신규 진입 차단 ─────────────────────────────
+    if kospi is not None:
+        kospi_aligned = kospi.reindex(close.index, method="ffill")
+        kospi_above_ma = kospi_aligned > kospi_aligned.rolling(kospi_ma).mean()
+        entries = entries & kospi_above_ma
+
     # ── 매도 신호 ──────────────────────────────────────────────────────────────
     # 데드크로스 (MA20이 MA60을 하향 돌파) — 추세 전환 시작 신호
     dead_cross = (ma_s < ma_m) & (ma_s.shift(1) >= ma_m.shift(1))
@@ -110,6 +121,13 @@ def make_signals(
     size_series[bb_exit & SIDEWAYS] = 0.0          # 횡보 목표 달성: 전량 청산
     size_series[DOWNTREND]          = 0.0          # 하락 확정: 전량 청산 (최우선)
 
+    # ── ATR Stop-Loss: 일일 낙폭이 ATR × multiplier 초과 시 즉시 청산 ─────────
+    atr = calc_atr(high, low, close, period=atr_period)
+    daily_drop = close.pct_change()
+    atr_stop = daily_drop < -(atr.shift(1) / close.shift(1) * atr_multiplier)
+    exits = exits | atr_stop
+    size_series[atr_stop] = 0.0     # ATR stop-loss: 전량 청산 (최우선 덮어씀)
+
     detail = {
         "regime":             regime,
         "masks":              masks,
@@ -120,6 +138,7 @@ def make_signals(
         "transition_from_up": transition_from_up,  # TRANSITION 전환 (1차 익절)
         "dead_cross":         dead_cross,          # 데드크로스 (2차 청산)
         "bb_exit_sideways":   bb_exit & SIDEWAYS,  # 횡보 청산
+        "atr_stop":           atr_stop,            # ATR stop-loss 발동
     }
 
     return entries, exits, size_series, detail

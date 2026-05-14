@@ -18,6 +18,16 @@ def load_close(ticker: str, start: str = "2018-01-01", end: str = "2024-12-31") 
     return load_stock(ticker, start, end)["Close"].rename(ticker)
 
 
+def load_kospi(start: str = "2019-01-01", end: str = "2024-12-31") -> pd.Series:
+    """KOSPI 지수 종가 시리즈 로드 (^KS11) — 포트폴리오 벤치마크용"""
+    return load_close("^KS11", start, end).rename("KOSPI")
+
+
+def load_cash_etf(start: str = "2019-01-01", end: str = "2024-12-31") -> pd.Series:
+    """KODEX 단기채권 ETF 종가 시리즈 로드 (153130.KS) — 현금 대체 운용용"""
+    return load_close("153130.KS", start, end).rename("단기채")
+
+
 def load_csv(
     path: str,
     date_col: str = "Date",
