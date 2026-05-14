@@ -1,5 +1,14 @@
 """파라미터 그리드 서치 + Walk-Forward Optimization — 전략과 독립적인 최적화 유틸리티"""
 
+# ── Walk-Forward 기본 탐색 범위 (위험중립형 기준) ─────────────────────────────
+ADX_PARAM_GRID = {
+    "adx_threshold": [15, 20, 25, 30],   # 추세 진입 강도 (4가지)
+    "adx_sideways":  [10, 15, 20],        # 횡보 판별 기준 (3가지) → 총 12조합
+}
+
+WF_TRAIN_MONTHS = 12   # Walk-Forward 학습 구간 (개월)
+WF_TEST_MONTHS  = 6    # Walk-Forward 검증/적용 구간 (개월)
+
 import itertools
 from typing import Callable
 

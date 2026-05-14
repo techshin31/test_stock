@@ -29,9 +29,9 @@ import numpy as np
 import pandas as pd
 import vectorbt as vbt
 
-from ..indicators.adx_strategy import calc_adx
-from ..base.bollinger_band import make_signals as bb_make_signals
-from ..base.golden_cross import make_signals as gc_make_signals
+from ..trend_strength.adx_strategy import calc_adx
+from ..volatility.bollinger_band import make_signals as bb_make_signals
+from ..trend.golden_cross import make_signals as gc_make_signals
 
 
 # ── 국면 상수 ─────────────────────────────────────────────────────────────────

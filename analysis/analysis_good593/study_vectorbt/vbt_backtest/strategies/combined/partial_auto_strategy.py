@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 import vectorbt as vbt
 
-from ..base.bollinger_band import make_signals as bb_make_signals
+from ..volatility.bollinger_band import make_signals as bb_make_signals
 from .ma_regime_strategy import calc_regime, REGIME_COLORS
 
 

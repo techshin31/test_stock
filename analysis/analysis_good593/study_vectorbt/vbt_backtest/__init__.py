@@ -5,15 +5,10 @@ vbt_backtest — vectorbt 기반 백테스팅 패키지
 ---------
 # yfinance 데이터로 백테스트
 from vbt_backtest.data import load_close
-from vbt_backtest.strategies import golden_cross
+from vbt_backtest.strategies.trend import golden_cross
 from vbt_backtest.optimizer import grid_search
 
 close = load_close('AAPL', start='2018-01-01', end='2023-12-31')
-pf = golden_cross.run_backtest(close)
-
-# 사용자 CSV 데이터로 백테스트
-from vbt_backtest.data import load_csv
-close = load_csv('data/samsung.csv')
 pf = golden_cross.run_backtest(close)
 
 # 파라미터 최적화
@@ -22,10 +17,16 @@ result = grid_search(
     golden_cross.run_backtest,
     param_grid={"fast_window": [5, 10, 20], "slow_window": [60, 90]},
 )
+
+# 투자성향 설정 불러오기
+from vbt_backtest.profiles import neutral
+pf = golden_cross.run_backtest(close, fees=neutral.FEES, slippage=neutral.SLIPPAGE)
 """
 
 from .optimizer import grid_search
 from . import strategies
 from . import data
 from . import portfolio_backtest
-from . import config
+from . import profiles
+from . import metrics
+from . import plots
