@@ -1,17 +1,4 @@
-"""멀티종목 포트폴리오 백테스팅 — 데이터 로드 · 신호 생성 · 백테스트 실행
-
-사용 예시
----------
-from vbt_backtest.portfolio_backtest import (
-    load_portfolio_data, build_size_df,
-    run_portfolio_backtest, run_bh_portfolio, run_bh_single,
-)
-from vbt_backtest.metrics import build_metrics_table
-from vbt_backtest.plots.performance import (
-    plot_equity_curves, plot_weight_heatmap,
-    plot_contribution, plot_diversification, plot_yearly_returns,
-)
-"""
+"""멀티종목 포트폴리오 백테스팅 — 데이터 로드 · 신호 생성 · 백테스트 실행"""
 
 import itertools
 
