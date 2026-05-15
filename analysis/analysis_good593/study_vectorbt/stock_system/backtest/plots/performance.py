@@ -253,6 +253,129 @@ def plot_yearly_returns(
     plt.show()
 
 
+def plot_yearly_pnl(
+    pf: vbt.Portfolio,
+    pf_bh: vbt.Portfolio,
+    benchmark_series: pd.Series = None,
+    profile_name: str = "전략",
+) -> None:
+    """연도별 실제 손익(만원) + 연말 자산가치 비교
+
+    상단: 전략 / B&H / 벤치마크의 연도별 실제 손익 막대
+    하단: 연말 기준 자산가치 꺾은선 + 요약 테이블 출력
+    """
+    val     = pf.value()
+    init    = val.iloc[0]
+    bh_raw  = pf_bh.value().reindex(val.index, method="ffill")
+    bh_norm = bh_raw / bh_raw.iloc[0] * init
+
+    def _ye(s: pd.Series) -> pd.Series:
+        return s.resample("A").last()
+
+    def _pnl(s: pd.Series) -> pd.Series:
+        ye = _ye(s)
+        p  = ye.diff()
+        p.iloc[0] = ye.iloc[0] - s.iloc[0]
+        return p
+
+    def _fmt(v: float) -> str:
+        man  = v / 10_000
+        sign = "+" if man >= 0 else ""
+        if abs(man) >= 10_000:
+            return f"{sign}{man / 10_000:.1f}억"
+        return f"{sign}{man:,.0f}만"
+
+    ye_st, pnl_st = _ye(val),    _pnl(val)
+    ye_bh, pnl_bh = _ye(bh_norm), _pnl(bh_norm)
+
+    series = [
+        (f"★ {profile_name}", pnl_st, ye_st, "#b2182b", "#fca69a"),
+        ("균등 B&H",           pnl_bh, ye_bh, "#fd8d3c", "#fdbe85"),
+    ]
+    if benchmark_series is not None:
+        bm       = benchmark_series.reindex(val.index, method="ffill").dropna()
+        bm_norm  = bm / bm.iloc[0] * init
+        bm_label = benchmark_series.name or "KOSPI"
+        series.append((bm_label, _pnl(bm_norm), _ye(bm_norm), "#4292c6", "#9ecae1"))
+
+    years = [str(y.year) for y in ye_st.index]
+    x     = np.arange(len(years))
+    n_s   = len(series)
+    w     = 0.8 / n_s
+    y_rng = max(abs(pnl_st).max(), abs(pnl_bh).max()) / 10_000 * 0.05
+
+    fig, axes = plt.subplots(2, 1, figsize=(14, 9),
+                             gridspec_kw={"height_ratios": [3, 2]})
+
+    # ── 상단: 연도별 P&L 막대 ──────────────────────────────────────────────
+    ax = axes[0]
+    for i, (label, pnl, ye, c_pos, c_neg) in enumerate(series):
+        off    = (i - n_s / 2 + 0.5) * w
+        colors = [c_pos if v >= 0 else c_neg for v in pnl]
+        bars   = ax.bar(x + off, pnl / 10_000, w,
+                        color=colors, edgecolor="#333", lw=0.5, label=label, alpha=0.9)
+        for bar, v in zip(bars, pnl):
+            vp = v / 10_000
+            yp = vp + y_rng if vp >= 0 else vp - y_rng
+            ax.text(bar.get_x() + bar.get_width() / 2, yp, _fmt(v),
+                    ha="center", va="bottom" if vp >= 0 else "top",
+                    fontsize=7.5, fontweight="bold")
+
+    ax.axhline(0, color="black", lw=0.9)
+    ax.set_xticks(x)
+    ax.set_xticklabels(years, fontsize=10)
+    ax.set_ylabel("연간 손익 (만원)")
+    ax.set_title("연도별 실제 손익", fontsize=12)
+    ax.legend(fontsize=9)
+    ax.grid(True, alpha=0.3, axis="y")
+
+    # ── 하단: 연말 자산가치 꺾은선 ─────────────────────────────────────────
+    ax2     = axes[1]
+    ls_list = ["-", "--", ":"]
+    mk_list = ["s", "o", "^"]
+    cl_list = ["crimson", "orange", "steelblue"]
+    for i, (label, pnl, ye, c_pos, c_neg) in enumerate(series):
+        ax2.plot(ye.index, ye / 10_000,
+                 linestyle=ls_list[i], marker=mk_list[i], color=cl_list[i],
+                 lw=2, ms=6, label=label)
+
+    y_pad = max((ye_st.max() - ye_st.min()) / 10_000 * 0.06, init / 10_000 * 0.02)
+    for d, v in zip(ye_st.index, ye_st):
+        ax2.text(d, v / 10_000 + y_pad, f"{v / 10_000:,.0f}만",
+                 ha="center", va="bottom", fontsize=8,
+                 color="crimson", fontweight="bold")
+
+    ax2.axhline(init / 10_000, color="gray", lw=1, ls=":", alpha=0.7,
+                label=f"원금 {init / 10_000:,.0f}만")
+    ax2.set_ylabel("연말 자산가치 (만원)")
+    ax2.set_title("연도별 자산 성장 추이 (연말 기준)", fontsize=12)
+    ax2.legend(fontsize=9)
+    ax2.grid(True, alpha=0.3)
+    ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:,.0f}만"))
+
+    plt.suptitle(
+        f"연도별 실제 손익 + 자산 성장  [초기 자본 {init / 10_000:,.0f}만원]",
+        fontsize=14, fontweight="bold",
+    )
+    plt.tight_layout()
+    plt.show()
+
+    # ── 요약 테이블 ────────────────────────────────────────────────────────
+    print(f"\n초기 자본: {init / 10_000:,.0f}만원\n")
+    print(f"{'연도':>4}  {'전략 잔고':>9}  {'전략 손익':>9}  "
+          f"{'B&H 잔고':>9}  {'B&H 손익':>9}")
+    print("-" * 52)
+    for yr, ye_s, pnl_s, ye_b, pnl_b in zip(years, ye_st, pnl_st, ye_bh, pnl_bh):
+        print(f"{yr:>4}  {ye_s / 10_000:>7,.0f}만  {_fmt(pnl_s):>9}  "
+              f"{ye_b / 10_000:>7,.0f}만  {_fmt(pnl_b):>9}")
+
+    total_pnl = ye_st.iloc[-1] - init
+    win_yrs   = int((pnl_st > 0).sum())
+    print(f"\n  ■ 최종 잔고: {ye_st.iloc[-1] / 10_000:,.0f}만원"
+          f"  ■ 총 손익: {_fmt(total_pnl)}"
+          f"  ■ 수익 연도: {win_yrs}/{len(years)}")
+
+
 def plot_mdd_comparison(
     pf: vbt.Portfolio,
     pf_bh: vbt.Portfolio,

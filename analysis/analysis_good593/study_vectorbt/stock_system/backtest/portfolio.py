@@ -139,6 +139,7 @@ def _run_portfolio_backtest(
     size_df: pd.DataFrame,
     fees: float = 0.0015,
     slippage: float = 0.001,
+    init_cash: float = 1_000_000,
 ) -> vbt.Portfolio:
     return vbt.Portfolio.from_orders(
         close_df,
@@ -148,6 +149,7 @@ def _run_portfolio_backtest(
         cash_sharing=True,
         fees=fees,
         slippage=slippage,
+        init_cash=init_cash,
         freq="D",
     )
 
@@ -158,12 +160,14 @@ def run_bh_portfolio(
     close_df: pd.DataFrame,
     fees: float = 0.0015,
     slippage: float = 0.001,
+    init_cash: float = 1_000_000,
 ) -> vbt.Portfolio:
     """균등 비중 Buy & Hold (첫날 1/N씩 매수)"""
     n = close_df.shape[1]
     bh_size = pd.DataFrame(np.nan, index=close_df.index, columns=close_df.columns)
     bh_size.iloc[0] = 1.0 / n
-    return _run_portfolio_backtest(close_df, bh_size, fees=fees, slippage=slippage)
+    return _run_portfolio_backtest(close_df, bh_size, fees=fees, slippage=slippage,
+                                   init_cash=init_cash)
 
 
 # ── Walk-Forward (내부용) ─────────────────────────────────────────────────────
@@ -194,6 +198,7 @@ def _walk_forward_portfolio(
     test_months: int = 3,
     fees: float = 0.0015,
     slippage: float = 0.001,
+    init_cash: float = 1_000_000,
     metric: str = "calmar_ratio",
     warmup_days: int = 150,
     min_momentum: float = 0.0,
@@ -255,7 +260,8 @@ def _walk_forward_portfolio(
                     atr_multiplier=atr_multiplier,
                     atr_period=atr_period,
                 )
-                pf    = _run_portfolio_backtest(tr_close, sz_df, fees=fees, slippage=slippage)
+                pf    = _run_portfolio_backtest(tr_close, sz_df, fees=fees, slippage=slippage,
+                                              init_cash=init_cash)
                 score = _score_equity(pf.value(), metric)
                 scan_rows.append({**params, metric: score if np.isfinite(score) else np.nan})
                 if np.isfinite(score) and score > best_score:
@@ -325,7 +331,8 @@ def _walk_forward_portfolio(
     else:
         close_all = close_used
 
-    pf = _run_portfolio_backtest(close_all, size_used, fees=fees, slippage=slippage)
+    pf = _run_portfolio_backtest(close_all, size_used, fees=fees, slippage=slippage,
+                                 init_cash=init_cash)
 
     wf_info = {
         "windows":      windows,
