@@ -14,11 +14,8 @@ import vectorbt as vbt
 
 def _calc_mdd_duration_months(equity: pd.Series) -> float:
     """드로다운 최장 지속 기간 (개월 수)"""
-    in_dd = (equity / equity.cummax() - 1) < 0
-    max_days = current = 0
-    for d in in_dd:
-        current  = current + 1 if d else 0
-        max_days = max(max_days, current)
+    in_dd    = (equity / equity.cummax() - 1) < 0
+    max_days = in_dd.groupby((~in_dd).cumsum()).sum().max()
     return round(max_days / 21, 1)
 
 
@@ -197,3 +194,48 @@ def build_metrics_table(
         })
 
     return pd.DataFrame(rows).set_index("지표")
+
+
+def build_period_stats_table(
+    pf: vbt.Portfolio,
+    pf_bh: vbt.Portfolio,
+    benchmark_series: pd.Series = None,
+    freq: str = "Y",
+    profile_name: str = "전략",
+) -> pd.DataFrame:
+    """기간별(연/분기/월) 수익률 비교 테이블
+
+    Parameters
+    ----------
+    freq : 'Y' 연도별 | 'Q' 분기별 | 'M' 월별
+    """
+    _resample = {"Y": "A", "Q": "Q", "M": "M"}[freq]
+
+    val    = pf.value()
+    val_bh = pf_bh.value().reindex(val.index, method="ffill")
+    val_bh = val_bh / val_bh.iloc[0] * val.iloc[0]
+
+    def _ret(equity: pd.Series) -> pd.Series:
+        return equity.resample(_resample).last().pct_change().dropna() * 100
+
+    cols: dict = {f"{profile_name}(%)": _ret(val), "B&H(%)": _ret(val_bh)}
+
+    if benchmark_series is not None:
+        bm = benchmark_series.reindex(val.index, method="ffill").dropna()
+        bm = bm / bm.iloc[0] * val.iloc[0]
+        cols["KOSPI(%)"] = _ret(bm)
+
+    df = pd.DataFrame(cols)
+
+    if benchmark_series is not None:
+        df[f"{profile_name}-KOSPI(%p)"] = df[f"{profile_name}(%)"] - df["KOSPI(%)"]
+    df[f"{profile_name}-B&H(%p)"] = df[f"{profile_name}(%)"] - df["B&H(%)"]
+
+    if freq == "Q":
+        df.index = [f"{i.year}Q{i.quarter}" for i in df.index]
+    elif freq == "Y":
+        df.index = [str(i.year) for i in df.index]
+    elif freq == "M":
+        df.index = [i.strftime("%Y-%m") for i in df.index]
+
+    return df.round(2)

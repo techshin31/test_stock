@@ -10,10 +10,10 @@ from ...strategies.regime import (
 )
 
 REGIME_COLORS = {
-    REGIME_UPTREND:    "#d4edda",
-    REGIME_DOWNTREND:  "#f8d7da",
-    REGIME_SIDEWAYS:   "#fff3cd",
-    REGIME_TRANSITION: "#e2e3e5",
+    REGIME_UPTREND:    "#2ecc71",   # 선명한 초록
+    REGIME_DOWNTREND:  "#e74c3c",   # 선명한 빨강
+    REGIME_SIDEWAYS:   "#f39c12",   # 선명한 주황
+    REGIME_TRANSITION: "#95a5a6",   # 중간 회색
 }
 
 
@@ -30,12 +30,12 @@ def plot_regime(
     start_date  = close.index[0]
     for date, reg in regime.items():
         if reg != prev_regime and prev_regime is not None:
-            ax.axvspan(start_date, date, alpha=0.3,
+            ax.axvspan(start_date, date, alpha=0.25,
                        color=REGIME_COLORS.get(prev_regime, "white"))
             start_date = date
         prev_regime = reg
     if prev_regime is not None:
-        ax.axvspan(start_date, close.index[-1], alpha=0.3,
+        ax.axvspan(start_date, close.index[-1], alpha=0.25,
                    color=REGIME_COLORS.get(prev_regime, "white"))
 
     patches = [

@@ -71,15 +71,14 @@ def make_signals(
 
     # 2차: UPTREND 유지 + 종가가 MA20 위에서 유지
     #   1차 매수 후 recent_window 거래일 이내에만 유효, 1차 진입일 중복 제외
-    ma20_support = close > ma_s
-    has_position = entry1.rolling(recent_window, min_periods=1).max().astype(bool)
-    entry2 = ma20_support & UPTREND & has_position & ~entry1
+    ma20_support       = close > ma_s
+    had_entry1_recently = entry1.rolling(recent_window, min_periods=1).max().astype(bool)
+    entry2 = ma20_support & UPTREND & had_entry1_recently & ~entry1
 
     # 횡보: SIDEWAYS + BB 하단 터치 (과매도 반전)
-    upper, mid, lower = calc_bollinger(close, bb_window, bb_std)
-    bb_entry = (close > lower) & (close.shift(1) <= lower.shift(1))
-    bb_exit  = (close < upper) & (close.shift(1) >= upper.shift(1))
-    entry_range = bb_entry & SIDEWAYS
+    upper, mid, lower  = calc_bollinger(close, bb_window, bb_std)
+    bb_exit_sideways   = (close < upper) & (close.shift(1) >= upper.shift(1)) & SIDEWAYS
+    entry_range = (close > lower) & (close.shift(1) <= lower.shift(1)) & SIDEWAYS
 
     entries = entry1 | entry2 | entry_range
 
@@ -94,7 +93,7 @@ def make_signals(
         & UPTREND.shift(1).fillna(False)
     )
 
-    exits = dead_cross | DOWNTREND | (bb_exit & SIDEWAYS)
+    exits = dead_cross | DOWNTREND | bb_exit_sideways
 
     # ── size_series (목표 비중) — 나중 할당이 앞 값을 덮어씀 ────────────────────
     size_series = pd.Series(np.nan, index=close.index, dtype=float)
@@ -107,7 +106,7 @@ def make_signals(
     # [높은 우선순위] 매도
     size_series[transition_from_up] = exit1_size    # TRANSITION: 40% 유지
     size_series[dead_cross]         = exit2_size    # 데드크로스: 10% 유지
-    size_series[bb_exit & SIDEWAYS] = 0.0           # 횡보 목표 달성: 전량 청산
+    size_series[bb_exit_sideways]   = 0.0           # 횡보 목표 달성: 전량 청산
     size_series[DOWNTREND]          = 0.0           # 하락 확정: 전량 청산
 
     # ── ATR Stop-Loss: 최우선 ──────────────────────────────────────────────────
@@ -126,7 +125,7 @@ def make_signals(
         "entry_range":        entry_range,
         "transition_from_up": transition_from_up,
         "dead_cross":         dead_cross,
-        "bb_exit_sideways":   bb_exit & SIDEWAYS,
+        "bb_exit_sideways":   bb_exit_sideways,
         "atr_stop":           atr_stop,
     }
     return entries, exits, size_series, detail

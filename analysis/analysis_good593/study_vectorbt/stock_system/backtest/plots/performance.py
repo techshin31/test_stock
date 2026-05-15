@@ -14,11 +14,7 @@ def _calc_mdd(equity: pd.Series) -> float:
 
 def _calc_mdd_duration(equity: pd.Series) -> int:
     in_dd = (equity / equity.cummax() - 1) < 0
-    max_dur = current = 0
-    for d in in_dd:
-        current = current + 1 if d else 0
-        max_dur = max(max_dur, current)
-    return max_dur
+    return int(in_dd.groupby((~in_dd).cumsum()).sum().max())
 
 
 def plot_equity_curves(
@@ -154,15 +150,11 @@ def plot_contribution(pf: vbt.Portfolio, close_df: pd.DataFrame, names: list) ->
 
 def plot_diversification(
     pf: vbt.Portfolio,
-    pf_bh: vbt.Portfolio,
     close_df: pd.DataFrame,
     names: list,
 ) -> None:
     """분산투자 효과: 상관관계 히트맵 + 변동성 비교"""
-    val    = pf.value()
-    val_bh = pf_bh.value()
-    init   = val.iloc[0]
-    bh_norm = val_bh / val_bh.iloc[0] * init
+    val = pf.value()
 
     returns_df = close_df.pct_change().dropna()
     corr_mat   = returns_df.corr()
@@ -380,5 +372,128 @@ def plot_yearly_stock_etf(
     ax.set_title("연도별 주식 vs 단기채 수익 기여도", fontsize=13, fontweight="bold")
     ax.legend(fontsize=9, ncol=2)
     ax.grid(True, alpha=0.3, axis="y")
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_quarterly_returns(
+    pf: vbt.Portfolio,
+    pf_bh: vbt.Portfolio,
+    n: int = 5,
+    benchmark_series: pd.Series = None,
+    profile_name: str = "전략",
+) -> None:
+    """분기별 수익률 비교 바차트"""
+    val     = pf.value()
+    val_bh  = pf_bh.value()
+    init    = val.iloc[0]
+    bh_norm = val_bh.reindex(val.index, method="ffill")
+    bh_norm = bh_norm / bh_norm.iloc[0] * init
+
+    if benchmark_series is not None:
+        bm       = benchmark_series.reindex(val.index, method="ffill").dropna()
+        bm_norm  = bm / bm.iloc[0] * init
+        bm_label = benchmark_series.name or "벤치마크"
+    else:
+        bm_norm  = bh_norm
+        bm_label = "균등 B&H"
+
+    def _quarterly(equity: pd.Series) -> pd.Series:
+        return equity.resample("Q").last().pct_change().dropna()
+
+    qr    = _quarterly(val)
+    qr_bh = _quarterly(bh_norm)
+    qr_bm = _quarterly(bm_norm)
+
+    quarters = [f"{q.year}Q{q.quarter}" for q in qr.index]
+    x = np.arange(len(quarters))
+    w = 0.28
+
+    fig, ax = plt.subplots(figsize=(max(14, len(quarters) * 0.9), 6))
+
+    C_BM = ["#4292c6" if v >= 0 else "#9ecae1" for v in qr_bm]
+    C_BH = ["#fd8d3c" if v >= 0 else "#fdbe85" for v in qr_bh]
+    C_ST = ["#b2182b" if v >= 0 else "#fca69a" for v in qr]
+
+    b1 = ax.bar(x - w, qr_bm * 100, w, color=C_BM, edgecolor="#333", lw=0.6, label=bm_label)
+    b2 = ax.bar(x,     qr_bh * 100, w, color=C_BH, edgecolor="#333", lw=0.6, label=f"{n}종목 균등 B&H")
+    b3 = ax.bar(x + w, qr     * 100, w, color=C_ST, edgecolor="#333", lw=0.6, label=f"★ {profile_name} 포트")
+
+    ax.axhline(0, color="black", lw=0.9)
+    ax.set_xticks(x)
+    ax.set_xticklabels(quarters, rotation=45, ha="right", fontsize=8)
+    ax.set_ylabel("분기 수익률 (%)")
+    ax.set_title("분기별 성과 비교", fontsize=13)
+    ax.legend(fontsize=9)
+    ax.grid(True, alpha=0.3, axis="y")
+
+    for bars, vals in [(b1, qr_bm), (b2, qr_bh), (b3, qr)]:
+        for bar, v in zip(bars, vals):
+            vp = v * 100
+            yp = vp + 0.3 if vp >= 0 else vp - 0.9
+            ax.text(bar.get_x() + bar.get_width() / 2, yp,
+                    f"{vp:.0f}%", ha="center",
+                    va="bottom" if vp >= 0 else "top",
+                    fontsize=6, fontweight="bold")
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_monthly_heatmap(
+    pf: vbt.Portfolio,
+    pf_bh: vbt.Portfolio,
+    n: int = 5,
+    benchmark_series: pd.Series = None,
+    profile_name: str = "전략",
+) -> None:
+    """월별 수익률 히트맵 (캘린더 뷰) — 전략 / B&H / KOSPI 비교"""
+    val    = pf.value()
+    val_bh = pf_bh.value().reindex(val.index, method="ffill")
+    val_bh = val_bh / val_bh.iloc[0] * val.iloc[0]
+
+    MONTH_LABELS = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월","연간"]
+
+    def _pivot(equity: pd.Series) -> pd.DataFrame:
+        mr    = equity.resample("M").last().pct_change().dropna()
+        pivot = pd.DataFrame({
+            "ret":   (mr * 100).values,
+            "year":  mr.index.year,
+            "month": mr.index.month,
+        }).pivot_table(index="year", columns="month", values="ret", aggfunc="first")
+        pivot  = pivot.reindex(columns=range(1, 13))
+        annual = ((mr + 1).resample("A").prod() - 1) * 100
+        annual.index = annual.index.year
+        pivot["연간"]  = annual.reindex(pivot.index).values
+        pivot.columns  = MONTH_LABELS
+        return pivot
+
+    targets = [(_pivot(val), f"★ {profile_name}"), (_pivot(val_bh), f"{n}종목 균등 B&H")]
+    if benchmark_series is not None:
+        bm       = benchmark_series.reindex(val.index, method="ffill").dropna()
+        bm_norm  = bm / bm.iloc[0] * val.iloc[0]
+        bm_label = benchmark_series.name or "KOSPI"
+        targets.append((_pivot(bm_norm), bm_label))
+
+    n_plots = len(targets)
+    n_rows  = len(targets[0][0])
+
+    all_vals = np.concatenate([p.values[~np.isnan(p.values)] for p, _ in targets])
+    vmax     = max(abs(all_vals).max() if len(all_vals) > 0 else 10, 5)
+
+    fig, axes = plt.subplots(n_plots, 1, figsize=(18, n_rows * 0.7 * n_plots + 2))
+    if n_plots == 1:
+        axes = [axes]
+
+    for ax, (pivot, title) in zip(axes, targets):
+        sns.heatmap(pivot, ax=ax, cmap="RdYlGn", center=0, vmin=-vmax, vmax=vmax,
+                    annot=True, fmt=".1f", linewidths=0.4, linecolor="white",
+                    cbar_kws={"label": "수익률 (%)", "shrink": 0.7})
+        ax.set_title(f"{title} 월별 수익률 (%)", fontsize=12)
+        ax.set_xlabel("")
+        ax.set_ylabel("연도")
+        ax.tick_params(axis="x", labelsize=9)
+
+    plt.suptitle("월별 수익률 히트맵 비교", fontsize=14, fontweight="bold")
     plt.tight_layout()
     plt.show()

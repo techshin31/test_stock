@@ -15,10 +15,10 @@ def calc_adx(
     plus_dm  = (high - prev_high).clip(lower=0)
     minus_dm = (prev_low - low).clip(lower=0)
     # +DM과 -DM이 같거나 둘 다 0이면 0
-    mask_plus  = (plus_dm > minus_dm) & (plus_dm > 0)
-    mask_minus = (minus_dm > plus_dm) & (minus_dm > 0)
-    plus_dm  = plus_dm.where(mask_plus, 0.0)
-    minus_dm = minus_dm.where(mask_minus, 0.0)
+    valid_plus_dm  = (plus_dm > minus_dm) & (plus_dm > 0)
+    valid_minus_dm = (minus_dm > plus_dm) & (minus_dm > 0)
+    plus_dm  = plus_dm.where(valid_plus_dm, 0.0)
+    minus_dm = minus_dm.where(valid_minus_dm, 0.0)
 
     tr = pd.concat([
         high - low,
