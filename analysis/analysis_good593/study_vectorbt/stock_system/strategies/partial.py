@@ -45,6 +45,7 @@ def make_signals(
     kospi_ma: int = 120,
     atr_multiplier: float = 2.0,
     atr_period: int = 14,
+    use_adx_mode: bool = True,
 ) -> tuple:
     """분할 매수/매도 신호 생성
 
@@ -55,7 +56,7 @@ def make_signals(
     """
     regime, masks, adx_df = calc_regime(
         close, high, low, ma_windows, adx_window, adx_threshold, adx_sideways,
-        kospi=kospi, kospi_ma=kospi_ma,
+        kospi=kospi, kospi_ma=kospi_ma, use_adx_mode=use_adx_mode,
     )
 
     UPTREND    = masks["UPTREND"]

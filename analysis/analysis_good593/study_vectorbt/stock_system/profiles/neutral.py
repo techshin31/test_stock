@@ -12,7 +12,7 @@ MOMENTUM_WINDOW  = {"UPTREND": 126, "TRANSITION": 63, "SIDEWAYS": 21}
 MIN_MOMENTUM     = 0.0
 ATR_PERIOD       = 14
 ATR_MULTIPLIER   = 2.0
-KOSPI_MA         = 120
+KOSPI_MA         = 60
 CASH_RETURN      = 0.035
 
 METRICS_TARGET = {
@@ -43,12 +43,14 @@ METRICS_ALERT = {
 }
 
 
-def get_signal(close_df, high_df, low_df, kospi=None):
+def get_signal(close_df, high_df, low_df, kospi=None, use_adx_mode: bool = True):
     """오늘의 매매 신호 생성 — 자동매매 시스템 진입점
 
     Parameters
     ----------
-    close_df : DataFrame  최소 150일 이상의 과거 종가 (MA120 warmup 필요)
+    close_df     : DataFrame  최소 150일 이상의 과거 종가 (MA120 warmup 필요)
+    use_adx_mode : WF IS score > 0이면 True(ADX 모드), ≤ 0이면 False(MA+KOSPI 모드)
+                   best_params.json의 use_adx_mode 값을 그대로 전달할 것
 
     Returns
     -------
@@ -65,6 +67,7 @@ def get_signal(close_df, high_df, low_df, kospi=None):
             kospi_ma=KOSPI_MA,
             atr_multiplier=ATR_MULTIPLIER,
             atr_period=ATR_PERIOD,
+            use_adx_mode=use_adx_mode,
         )
         result[name] = size_s.iloc[-1]
     return result

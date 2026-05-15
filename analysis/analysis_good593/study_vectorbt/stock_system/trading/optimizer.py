@@ -47,8 +47,10 @@ def run_optimization(
     if not windows:
         raise RuntimeError("WF 구간이 생성되지 않았습니다. 데이터 기간을 늘려주세요.")
 
-    best_params = windows[-1]["best_params"]
-    best_params["profile"] = profile_name
+    last = windows[-1]
+    best_params = last["best_params"]
+    best_params["profile"]      = profile_name
+    best_params["use_adx_mode"] = last["use_adx_mode"]
 
     Path(output_path).write_text(json.dumps(best_params, ensure_ascii=False, indent=2))
     print(f"[optimizer] best_params 저장 완료: {output_path}")

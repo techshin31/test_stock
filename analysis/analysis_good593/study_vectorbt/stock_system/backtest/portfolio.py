@@ -34,6 +34,7 @@ def build_size_df(
     kospi_ma: int = 120,
     atr_multiplier: float = 2.0,
     atr_period: int = 14,
+    use_adx_mode: bool = True,
 ) -> tuple:
     """종목별 신호 생성 → 국면별 모멘텀 비례 가중치 DataFrame 구성
 
@@ -62,6 +63,7 @@ def build_size_df(
             kospi_ma=kospi_ma,
             atr_multiplier=atr_multiplier,
             atr_period=atr_period,
+            use_adx_mode=use_adx_mode,
         )
         size_raw[name] = size_s
 
@@ -277,7 +279,11 @@ def _walk_forward_portfolio(
                 else {k: vals[len(vals) // 2] for k, vals in param_grid.items()}
             )
 
-        # ── 2. 검증: warmup 버퍼 포함 신호 계산 → test 구간만 기록 ─────────────
+        # ── 2. 검증: IS score 기반 모드 결정 → warmup 버퍼 포함 신호 계산 ────────
+        # IS score > 0: ADX 모드 (학습 구간에서 ADX 파라미터가 수익을 냄)
+        # IS score ≤ 0: MA+KOSPI 모드 (어떤 ADX 파라미터도 수익 미달 → ADX 신뢰 불가)
+        use_adx_mode = np.isfinite(best_score) and best_score > 0
+
         warmup_start = train_end - pd.Timedelta(days=int(warmup_days * 1.5))
         warmup_start = max(warmup_start, idx[0])
         wu_mask      = (idx >= warmup_start) & (idx < test_end)
@@ -292,6 +298,7 @@ def _walk_forward_portfolio(
                 kospi_ma=kospi_ma,
                 atr_multiplier=atr_multiplier,
                 atr_period=atr_period,
+                use_adx_mode=use_adx_mode,
             )
             test_dates = close_df[test_mask].index
             full_size_df.loc[test_dates] = sz_wu.reindex(test_dates).values
@@ -300,13 +307,14 @@ def _walk_forward_portfolio(
             continue
 
         windows.append({
-            "train_start": period_start,
-            "train_end":   train_end,
-            "test_start":  close_df[test_mask].index[0],
-            "test_end":    close_df[test_mask].index[-1],
-            "best_params": best_params,
-            "best_score":  round(best_score, 4) if np.isfinite(best_score) else np.nan,
-            "scan":        (
+            "train_start":  period_start,
+            "train_end":    train_end,
+            "test_start":   close_df[test_mask].index[0],
+            "test_end":     close_df[test_mask].index[-1],
+            "best_params":  best_params,
+            "best_score":   round(best_score, 4) if np.isfinite(best_score) else np.nan,
+            "use_adx_mode": use_adx_mode,
+            "scan":         (
                 pd.DataFrame(scan_rows)
                 .sort_values(metric, ascending=False)
                 .reset_index(drop=True)

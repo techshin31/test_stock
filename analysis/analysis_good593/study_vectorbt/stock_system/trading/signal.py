@@ -29,6 +29,7 @@ def get_today_signal(
 
     params = json.loads(Path(params_path).read_text())
     profile_name = params.get("profile", "neutral")
+    use_adx_mode = params.get("use_adx_mode", True)
     profile = get_profile(profile_name)
 
     end   = pd.Timestamp.today().strftime("%Y-%m-%d")
@@ -36,6 +37,8 @@ def get_today_signal(
 
     data   = load_data(start, end)
     signal = profile.get_signal(
-        data["close"], data["high"], data["low"], kospi=data["kospi"]
+        data["close"], data["high"], data["low"],
+        kospi=data["kospi"],
+        use_adx_mode=use_adx_mode,
     )
     return signal
