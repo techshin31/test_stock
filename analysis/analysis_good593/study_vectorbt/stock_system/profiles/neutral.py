@@ -57,20 +57,6 @@ def make_signals(
 ) -> tuple:
     """분할 매수/매도 신호 생성 — 위험중립형 전략
 
-    [분할 매수] 3단계
-      1차: 비UPTREND → UPTREND 전환 첫날                → ENTRY1_SIZE (40%)
-      2차: UPTREND 유지 + 종가 > MA20 (RECENT_WINDOW 이내) → ENTRY2_SIZE (70%)
-      횡보: SIDEWAYS + BB 하단 상향 돌파                 → ENTRY_RANGE_SIZE (30%)
-
-    [분할 매도] 3단계
-      1차: UPTREND → TRANSITION 전환 첫날               → EXIT1_SIZE (40%) 유지
-      2차: 데드크로스 (MA20 < MA60)                     → EXIT2_SIZE (10%) 유지
-      3차: DOWNTREND 진입                               → 0% 전량 청산
-      횡보 청산: SIDEWAYS + BB 상단 하향 돌파             → 0% 전량 청산
-
-    [ATR stop-loss] 최우선
-      당일 낙폭 > ATR × ATR_MULTIPLIER → 0% 즉시 전량 청산
-
     Returns
     -------
     entries, exits, size_series, detail
@@ -93,8 +79,8 @@ def make_signals(
     DOWNTREND  = masks["DOWNTREND"]
     SIDEWAYS   = masks["SIDEWAYS"]
     TRANSITION = masks["TRANSITION"]
-    ma_s       = masks["ma_s"]   # MA20
-    ma_m       = masks["ma_m"]   # MA60
+    ma_s       = masks["ma_s"]
+    ma_m       = masks["ma_m"]
 
     # ── 매수 신호 ──────────────────────────────────────────────────────────────
     entry1 = UPTREND & ~UPTREND.shift(1).fillna(False)
@@ -152,13 +138,25 @@ def make_signals(
     return entries, exits, size_series, detail
 
 
-def get_signal(close_df, high_df, low_df, kospi=None, use_adx_mode: bool = True):
+def get_signal(
+    close_df,
+    high_df,
+    low_df,
+    kospi=None,
+    use_adx_mode=True,
+    adx_params: dict = None,
+):
     """오늘의 매매 신호 생성 — 자동매매 시스템 진입점
 
     Parameters
     ----------
     close_df     : DataFrame  최소 150일 이상의 과거 종가 (MA120 warmup 필요)
-    use_adx_mode : WF IS score > 0이면 True(ADX 모드), ≤ 0이면 False(MA+KOSPI 모드)
+    use_adx_mode : bool 또는 dict {종목명: bool}
+                   bool → 전 종목 동일 모드 적용
+                   dict → WF 결과로 종목별 모드 적용 (IS score > 0이면 True)
+    adx_params   : None 또는 dict {종목명: {"adx_threshold": float, "adx_sideways": float}}
+                   None → 기본값(ADX_THRESHOLD·ADX_SIDEWAYS) 사용
+                   dict → WF best_params를 종목별로 적용
 
     Returns
     -------
@@ -166,10 +164,14 @@ def get_signal(close_df, high_df, low_df, kospi=None, use_adx_mode: bool = True)
     """
     result = {}
     for name in close_df.columns:
+        mode = use_adx_mode.get(name, True) if isinstance(use_adx_mode, dict) else use_adx_mode
+        sp   = adx_params.get(name, {}) if adx_params else {}
+
         _, _, size_s, _ = make_signals(
             close_df[name], high_df[name], low_df[name],
             kospi=kospi,
-            use_adx_mode=use_adx_mode,
+            use_adx_mode=mode,
+            **sp,
         )
         result[name] = size_s.iloc[-1]
     return result

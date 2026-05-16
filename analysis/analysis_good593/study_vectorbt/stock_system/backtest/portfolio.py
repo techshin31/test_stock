@@ -25,7 +25,7 @@ def build_size_df(
     close_df: pd.DataFrame,
     high_df: pd.DataFrame,
     low_df: pd.DataFrame,
-    volume_df: pd.DataFrame,
+    per_stock_params: dict = None,
     adx_threshold: float = 25.0,
     adx_sideways: float = 20.0,
     min_momentum: float = 0.0,
@@ -34,8 +34,8 @@ def build_size_df(
 ) -> tuple:
     """종목별 신호 생성 → 국면별 모멘텀 비례 가중치 DataFrame 구성
 
-    profile.make_signals()로 신호를 생성하고, profile.MOMENTUM_WINDOW로
-    국면별 모멘텀 윈도우를 결정한다.
+    per_stock_params가 주어지면 종목별 best_params·use_adx_mode를 사용하고,
+    없으면 adx_threshold·adx_sideways·use_adx_mode 공통값을 fallback으로 사용한다.
 
     Returns
     -------
@@ -50,12 +50,22 @@ def build_size_df(
     signal_info = {}
 
     for name in names:
+        if per_stock_params and name in per_stock_params:
+            sp   = per_stock_params[name]
+            thr  = sp["best_params"].get("adx_threshold", adx_threshold)
+            sid  = sp["best_params"].get("adx_sideways", adx_sideways)
+            mode = sp["use_adx_mode"]
+        else:
+            thr  = adx_threshold
+            sid  = adx_sideways
+            mode = use_adx_mode
+
         _, _, size_s, detail = profile.make_signals(
             close_df[name], high_df[name], low_df[name],
-            adx_threshold=adx_threshold,
-            adx_sideways=adx_sideways,
+            adx_threshold=thr,
+            adx_sideways=sid,
             kospi=kospi,
-            use_adx_mode=use_adx_mode,
+            use_adx_mode=mode,
         )
         size_raw[name] = size_s
 
@@ -186,7 +196,6 @@ def _walk_forward_portfolio(
     close_df: pd.DataFrame,
     high_df: pd.DataFrame,
     low_df: pd.DataFrame,
-    volume_df: pd.DataFrame,
     param_grid: dict,
     train_months: int = 12,
     test_months: int = 3,
@@ -199,7 +208,7 @@ def _walk_forward_portfolio(
     kospi: pd.Series = None,
     cash_etf: pd.Series = None,
 ) -> tuple:
-    """IS 12개월 학습 → OOS test_months 적용 슬라이딩 WF
+    """IS 12개월 학습 → OOS test_months 적용 슬라이딩 WF (종목별 독립 그리드 서치)
 
     Returns
     -------
@@ -207,8 +216,10 @@ def _walk_forward_portfolio(
     wf_info : dict (windows, n_windows, close_df_all, names_all)
     """
     idx    = close_df.index
+    names  = list(close_df.columns)
     keys   = list(param_grid.keys())
     combos = list(itertools.product(*param_grid.values()))
+    default_params = {k: vals[len(vals) // 2] for k, vals in param_grid.items()}
 
     windows      = []
     period_start = idx[0]
@@ -228,47 +239,49 @@ def _walk_forward_portfolio(
             period_start += pd.DateOffset(months=test_months)
             continue
 
-        # ── 1. 학습: 그리드 서치 ──────────────────────────────────────────────
         tr_close = close_df[train_mask]
         tr_high  = high_df[train_mask]
         tr_low   = low_df[train_mask]
-        tr_vol   = volume_df[train_mask]
 
-        best_score  = -np.inf
-        best_params = None
-        scan_rows   = []
+        # ── 1. 학습: 종목별 독립 그리드 서치 ──────────────────────────────────
+        per_stock_params = {}
 
-        for combo in combos:
-            params = dict(zip(keys, combo))
-            try:
-                sz_df, _ = build_size_df(
-                    profile,
-                    tr_close, tr_high, tr_low, tr_vol,
-                    adx_threshold=params.get("adx_threshold", 25.0),
-                    adx_sideways=params.get("adx_sideways", 20.0),
-                    min_momentum=min_momentum,
-                    kospi=kospi,
-                )
-                pf    = _run_portfolio_backtest(tr_close, sz_df, fees=fees, slippage=slippage,
-                                               init_cash=init_cash)
-                score = _score_equity(pf.value(), metric)
-                scan_rows.append({**params, metric: score if np.isfinite(score) else np.nan})
-                if np.isfinite(score) and score > best_score:
-                    best_score  = score
-                    best_params = params
-            except Exception:
-                continue
+        for name in names:
+            best_score_s  = -np.inf
+            best_params_s = None
 
-        if best_params is None:
-            best_params = (
-                windows[-1]["best_params"]
-                if windows
-                else {k: vals[len(vals) // 2] for k, vals in param_grid.items()}
-            )
+            for combo in combos:
+                params = dict(zip(keys, combo))
+                try:
+                    _, _, size_s, _ = profile.make_signals(
+                        tr_close[name], tr_high[name], tr_low[name],
+                        adx_threshold=params.get("adx_threshold", 25.0),
+                        adx_sideways=params.get("adx_sideways", 20.0),
+                        kospi=kospi,
+                        use_adx_mode=True,
+                    )
+                    pf_s  = _run_portfolio_backtest(
+                        tr_close[[name]], size_s.to_frame(name),
+                        fees=fees, slippage=slippage, init_cash=init_cash,
+                    )
+                    score = _score_equity(pf_s.value(), metric)
+                    if np.isfinite(score) and score > best_score_s:
+                        best_score_s  = score
+                        best_params_s = params
+                except Exception:
+                    continue
 
-        # ── 2. IS score 기반 모드 결정 → warmup 버퍼 포함 신호 계산 ──────────────
-        use_adx_mode = np.isfinite(best_score) and best_score > 0
+            if best_params_s is None:
+                prev = windows[-1]["per_stock"].get(name, {}) if windows else {}
+                best_params_s = prev.get("best_params") or default_params
 
+            per_stock_params[name] = {
+                "best_params":  best_params_s,
+                "use_adx_mode": bool(np.isfinite(best_score_s) and best_score_s > 0),
+                "best_score":   round(best_score_s, 4) if np.isfinite(best_score_s) else np.nan,
+            }
+
+        # ── 2. warmup 버퍼 포함 신호 계산 ────────────────────────────────────
         warmup_start = train_end - pd.Timedelta(days=int(warmup_days * 1.5))
         warmup_start = max(warmup_start, idx[0])
         wu_mask      = (idx >= warmup_start) & (idx < test_end)
@@ -276,12 +289,10 @@ def _walk_forward_portfolio(
         try:
             sz_wu, _ = build_size_df(
                 profile,
-                close_df[wu_mask], high_df[wu_mask], low_df[wu_mask], volume_df[wu_mask],
-                adx_threshold=best_params.get("adx_threshold", 25.0),
-                adx_sideways=best_params.get("adx_sideways", 20.0),
+                close_df[wu_mask], high_df[wu_mask], low_df[wu_mask],
+                per_stock_params=per_stock_params,
                 min_momentum=min_momentum,
                 kospi=kospi,
-                use_adx_mode=use_adx_mode,
             )
             test_dates = close_df[test_mask].index
             full_size_df.loc[test_dates] = sz_wu.reindex(test_dates).values
@@ -290,18 +301,11 @@ def _walk_forward_portfolio(
             continue
 
         windows.append({
-            "train_start":  period_start,
-            "train_end":    train_end,
-            "test_start":   close_df[test_mask].index[0],
-            "test_end":     close_df[test_mask].index[-1],
-            "best_params":  best_params,
-            "best_score":   round(best_score, 4) if np.isfinite(best_score) else np.nan,
-            "use_adx_mode": use_adx_mode,
-            "scan":         (
-                pd.DataFrame(scan_rows)
-                .sort_values(metric, ascending=False)
-                .reset_index(drop=True)
-            ),
+            "train_start": period_start,
+            "train_end":   train_end,
+            "test_start":  close_df[test_mask].index[0],
+            "test_end":    close_df[test_mask].index[-1],
+            "per_stock":   per_stock_params,
         })
 
         period_start += pd.DateOffset(months=test_months)
@@ -341,7 +345,6 @@ def run_walk_forward(
     close_df: pd.DataFrame,
     high_df: pd.DataFrame,
     low_df: pd.DataFrame,
-    volume_df: pd.DataFrame,
     **kwargs,
 ) -> tuple:
     """투자성향 파라미터로 포트폴리오 Walk-Forward 백테스팅 실행
@@ -352,7 +355,7 @@ def run_walk_forward(
     """
     return _walk_forward_portfolio(
         profile,
-        close_df, high_df, low_df, volume_df,
+        close_df, high_df, low_df,
         param_grid=profile.ADX_PARAM_GRID,
         train_months=profile.WF_TRAIN_MONTHS,
         test_months=profile.WF_TEST_MONTHS,
