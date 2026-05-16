@@ -43,5 +43,9 @@ METRICS_ALERT = {
 }
 
 
-# get_signal()은 neutral.py 검증 완료 후 별도 구현 예정
-# 현재는 상수 정의만 완료된 상태
+def make_signals(*_args, **_kwargs) -> tuple:
+    raise NotImplementedError("적극투자형 make_signals() 미구현")
+
+
+def get_signal(*_args, **_kwargs) -> dict:
+    raise NotImplementedError("적극투자형 get_signal() 미구현")

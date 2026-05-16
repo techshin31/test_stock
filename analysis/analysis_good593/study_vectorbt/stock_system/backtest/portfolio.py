@@ -17,12 +17,11 @@ import numpy as np
 import pandas as pd
 import vectorbt as vbt
 
-from ..strategies.partial import make_signals
-
 
 # ── 신호 생성 + 모멘텀 비례 가중치 ────────────────────────────────────────────
 
 def build_size_df(
+    profile,
     close_df: pd.DataFrame,
     high_df: pd.DataFrame,
     low_df: pd.DataFrame,
@@ -31,38 +30,31 @@ def build_size_df(
     adx_sideways: float = 20.0,
     min_momentum: float = 0.0,
     kospi: pd.Series = None,
-    kospi_ma: int = 120,
-    atr_multiplier: float = 2.0,
-    atr_period: int = 14,
     use_adx_mode: bool = True,
 ) -> tuple:
     """종목별 신호 생성 → 국면별 모멘텀 비례 가중치 DataFrame 구성
 
-    국면별 모멘텀 윈도우:
-      UPTREND    → 126일: 장기 추세 신뢰도 높음
-      TRANSITION →  63일: 방향 불확실, 중기 중간값
-      SIDEWAYS   →  21일: 단기 등락 반복, 빠른 반응
+    profile.make_signals()로 신호를 생성하고, profile.MOMENTUM_WINDOW로
+    국면별 모멘텀 윈도우를 결정한다.
 
     Returns
     -------
     size_df      : 비중 DataFrame
     signal_info  : 종목별 신호 횟수 dict
     """
-    names = list(close_df.columns)
+    names       = list(close_df.columns)
+    mom_windows = profile.MOMENTUM_WINDOW
 
     size_raw    = pd.DataFrame(np.nan, index=close_df.index, columns=names)
     momentum_df = pd.DataFrame(np.nan, index=close_df.index, columns=names)
     signal_info = {}
 
     for name in names:
-        _, _, size_s, detail = make_signals(
+        _, _, size_s, detail = profile.make_signals(
             close_df[name], high_df[name], low_df[name],
             adx_threshold=adx_threshold,
             adx_sideways=adx_sideways,
             kospi=kospi,
-            kospi_ma=kospi_ma,
-            atr_multiplier=atr_multiplier,
-            atr_period=atr_period,
             use_adx_mode=use_adx_mode,
         )
         size_raw[name] = size_s
@@ -78,14 +70,14 @@ def build_size_df(
         SIDEWAYS   = detail["masks"]["SIDEWAYS"]
         TRANSITION = detail["masks"]["TRANSITION"]
 
-        mom_21  = close_df[name].pct_change(21)
-        mom_63  = close_df[name].pct_change(63)
-        mom_126 = close_df[name].pct_change(126)
+        mom_up  = close_df[name].pct_change(mom_windows["UPTREND"])
+        mom_sid = close_df[name].pct_change(mom_windows["SIDEWAYS"])
+        mom_tr  = close_df[name].pct_change(mom_windows["TRANSITION"])
 
         mom = pd.Series(np.nan, index=close_df.index)
-        mom[UPTREND]    = mom_126[UPTREND]
-        mom[SIDEWAYS]   = mom_21[SIDEWAYS]
-        mom[TRANSITION] = mom_63[TRANSITION]
+        mom[UPTREND]    = mom_up[UPTREND]
+        mom[SIDEWAYS]   = mom_sid[SIDEWAYS]
+        mom[TRANSITION] = mom_tr[TRANSITION]
         momentum_df[name] = mom
 
     entry_mask  = size_raw > 0
@@ -119,10 +111,9 @@ def add_cash_etf(
     -------
     size_df, close_df, high_df, low_df — 단기채 컬럼 추가 버전
     """
-    # ffill로 유지(NaN) 구간의 실제 보유 비중을 추정한 뒤 합산
-    invested   = size_df.ffill().fillna(0).clip(0, 1).sum(axis=1)
+    invested    = size_df.ffill().fillna(0).clip(0, 1).sum(axis=1)
     cash_weight = (1 - invested).clip(0, 1)
-    etf_size   = cash_weight.where(cash_weight >= min_weight, np.nan)
+    etf_size    = cash_weight.where(cash_weight >= min_weight, np.nan)
 
     etf_close_aligned = cash_etf_close.reindex(close_df.index, method="ffill")
 
@@ -191,6 +182,7 @@ def _score_equity(equity: pd.Series, metric: str) -> float:
 
 
 def _walk_forward_portfolio(
+    profile,
     close_df: pd.DataFrame,
     high_df: pd.DataFrame,
     low_df: pd.DataFrame,
@@ -205,9 +197,6 @@ def _walk_forward_portfolio(
     warmup_days: int = 150,
     min_momentum: float = 0.0,
     kospi: pd.Series = None,
-    kospi_ma: int = 120,
-    atr_multiplier: float = 2.0,
-    atr_period: int = 14,
     cash_etf: pd.Series = None,
 ) -> tuple:
     """IS 12개월 학습 → OOS test_months 적용 슬라이딩 WF
@@ -253,17 +242,15 @@ def _walk_forward_portfolio(
             params = dict(zip(keys, combo))
             try:
                 sz_df, _ = build_size_df(
+                    profile,
                     tr_close, tr_high, tr_low, tr_vol,
                     adx_threshold=params.get("adx_threshold", 25.0),
                     adx_sideways=params.get("adx_sideways", 20.0),
                     min_momentum=min_momentum,
                     kospi=kospi,
-                    kospi_ma=kospi_ma,
-                    atr_multiplier=atr_multiplier,
-                    atr_period=atr_period,
                 )
                 pf    = _run_portfolio_backtest(tr_close, sz_df, fees=fees, slippage=slippage,
-                                              init_cash=init_cash)
+                                               init_cash=init_cash)
                 score = _score_equity(pf.value(), metric)
                 scan_rows.append({**params, metric: score if np.isfinite(score) else np.nan})
                 if np.isfinite(score) and score > best_score:
@@ -279,9 +266,7 @@ def _walk_forward_portfolio(
                 else {k: vals[len(vals) // 2] for k, vals in param_grid.items()}
             )
 
-        # ── 2. 검증: IS score 기반 모드 결정 → warmup 버퍼 포함 신호 계산 ────────
-        # IS score > 0: ADX 모드 (학습 구간에서 ADX 파라미터가 수익을 냄)
-        # IS score ≤ 0: MA+KOSPI 모드 (어떤 ADX 파라미터도 수익 미달 → ADX 신뢰 불가)
+        # ── 2. IS score 기반 모드 결정 → warmup 버퍼 포함 신호 계산 ──────────────
         use_adx_mode = np.isfinite(best_score) and best_score > 0
 
         warmup_start = train_end - pd.Timedelta(days=int(warmup_days * 1.5))
@@ -290,14 +275,12 @@ def _walk_forward_portfolio(
 
         try:
             sz_wu, _ = build_size_df(
+                profile,
                 close_df[wu_mask], high_df[wu_mask], low_df[wu_mask], volume_df[wu_mask],
                 adx_threshold=best_params.get("adx_threshold", 25.0),
                 adx_sideways=best_params.get("adx_sideways", 20.0),
                 min_momentum=min_momentum,
                 kospi=kospi,
-                kospi_ma=kospi_ma,
-                atr_multiplier=atr_multiplier,
-                atr_period=atr_period,
                 use_adx_mode=use_adx_mode,
             )
             test_dates = close_df[test_mask].index
@@ -368,6 +351,7 @@ def run_walk_forward(
     profile : profiles 모듈 (get_profile("neutral") 반환값)
     """
     return _walk_forward_portfolio(
+        profile,
         close_df, high_df, low_df, volume_df,
         param_grid=profile.ADX_PARAM_GRID,
         train_months=profile.WF_TRAIN_MONTHS,
@@ -375,9 +359,6 @@ def run_walk_forward(
         fees=profile.FEES,
         slippage=profile.SLIPPAGE,
         min_momentum=profile.MIN_MOMENTUM,
-        atr_multiplier=profile.ATR_MULTIPLIER,
-        atr_period=profile.ATR_PERIOD,
-        kospi_ma=profile.KOSPI_MA,
         metric="calmar_ratio",
         **kwargs,
     )
