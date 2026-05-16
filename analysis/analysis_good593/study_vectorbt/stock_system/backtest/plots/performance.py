@@ -19,51 +19,80 @@ def _calc_mdd_duration(equity: pd.Series) -> int:
 
 def plot_equity_curves(
     pf: vbt.Portfolio,
-    pf_bh: vbt.Portfolio,
     names: list,
     n: int,
+    pf_bh: vbt.Portfolio = None,
     benchmark_series: pd.Series = None,
+    etf_series: pd.Series = None,
     profile_name: str = "위험중립형",
 ) -> None:
-    """자산 곡선 · 드로다운 · 보유 종목 수 3단 플롯"""
-    val    = pf.value()
-    val_bh = pf_bh.value()
-    init   = val.iloc[0]
-    bh_norm = val_bh / val_bh.iloc[0] * init
+    """자산 곡선 · 드로다운 · 보유 종목 수 3단 플롯
 
-    if benchmark_series is not None:
-        bm = benchmark_series.reindex(val.index, method="ffill").dropna()
-        bm_norm  = bm / bm.iloc[0] * init
-        bm_label = benchmark_series.name or "벤치마크"
-    else:
-        bm_norm  = bh_norm
-        bm_label = f"{n}종목 균등 B&H"
+    Parameters
+    ----------
+    pf_bh            : B&H 포트폴리오 (None이면 미표시)
+    benchmark_series : KOSPI 등 벤치마크 시리즈
+    etf_series       : 단기채 ETF 가격 시리즈 (None이면 미표시)
+    """
+    val  = pf.value()
+    init = val.iloc[0]
 
     asset_vals = pf.asset_value(group_by=False)
     asset_vals.columns = names
 
-    fig, axes = plt.subplots(3, 1, figsize=(14, 11),
-                              gridspec_kw={"height_ratios": [3, 1, 1]}, sharex=True)
+    # ── 비교 시리즈 정규화 ──────────────────────────────────────────────────
+    bh_norm, bm_norm, etf_norm = None, None, None
+    bm_label = "벤치마크"
 
-    axes[0].plot(bm_norm,  color="gray",    lw=1.5, ls=":",  label=bm_label)
-    axes[0].plot(bh_norm,  color="orange",  lw=2.0, ls="--", label=f"{n}종목 균등 B&H")
-    axes[0].plot(val,      color="crimson", lw=2.5, ls="-",  label=f"★ {profile_name} 포트")
+    if pf_bh is not None:
+        bh_v    = pf_bh.value()
+        bh_norm = bh_v / bh_v.iloc[0] * init
+
+    if benchmark_series is not None:
+        bm       = benchmark_series.reindex(val.index, method="ffill").dropna()
+        bm_norm  = bm / bm.iloc[0] * init
+        bm_label = benchmark_series.name or "KOSPI"
+
+    if etf_series is not None:
+        etf      = etf_series.reindex(val.index, method="ffill").dropna()
+        etf_norm = etf / etf.iloc[0] * init
+
+    # ── 자산 곡선 ──────────────────────────────────────────────────────────
+    fig, axes = plt.subplots(3, 1, figsize=(14, 11),
+                             gridspec_kw={"height_ratios": [3, 1, 1]}, sharex=True)
+
+    if bm_norm is not None:
+        axes[0].plot(bm_norm,  color="gray",       lw=1.5, ls=":",   label=bm_label)
+    if etf_norm is not None:
+        axes[0].plot(etf_norm, color="steelblue",  lw=1.5, ls="-.",  label="단기채 100%")
+    if bh_norm is not None:
+        axes[0].plot(bh_norm,  color="orange",     lw=2.0, ls="--",  label=f"{n}종목 균등 B&H")
+    axes[0].plot(val,          color="crimson",    lw=2.5, ls="-",   label=f"★ {profile_name} 포트")
     axes[0].set_title("자산 곡선 비교", fontsize=13)
     axes[0].set_ylabel("포트폴리오 가치 (정규화)")
     axes[0].legend(fontsize=10)
     axes[0].grid(True, alpha=0.3)
 
-    dd    = (val      / val.cummax()      - 1) * 100
-    dd_bh = (bh_norm  / bh_norm.cummax() - 1) * 100
-    dd_bm = (bm_norm  / bm_norm.cummax() - 1) * 100
-    axes[1].fill_between(dd.index,    0, dd,    color="crimson", alpha=0.4, label=f"{profile_name} MDD")
-    axes[1].fill_between(dd_bh.index, 0, dd_bh, color="orange",  alpha=0.3, label=f"{n}종목 B&H MDD")
-    axes[1].fill_between(dd_bm.index, 0, dd_bm, color="gray",    alpha=0.2, label=f"{bm_label} MDD")
+    # ── 드로다운 ───────────────────────────────────────────────────────────
+    dd = (val / val.cummax() - 1) * 100
+    axes[1].fill_between(dd.index, 0, dd, color="crimson", alpha=0.4, label=f"{profile_name} MDD")
+    dd_min = dd.min()
+
+    if bm_norm is not None:
+        dd_bm  = (bm_norm / bm_norm.cummax() - 1) * 100
+        axes[1].fill_between(dd_bm.index, 0, dd_bm, color="gray",   alpha=0.2, label=f"{bm_label} MDD")
+        dd_min = min(dd_min, dd_bm.min())
+    if bh_norm is not None:
+        dd_bh  = (bh_norm / bh_norm.cummax() - 1) * 100
+        axes[1].fill_between(dd_bh.index, 0, dd_bh, color="orange", alpha=0.3, label=f"{n}종목 B&H MDD")
+        dd_min = min(dd_min, dd_bh.min())
+
     axes[1].set_ylabel("드로다운 (%)")
-    axes[1].set_ylim(min(dd.min(), dd_bh.min(), dd_bm.min()) * 1.15, 5)
+    axes[1].set_ylim(dd_min * 1.15, 5)
     axes[1].legend(fontsize=9)
     axes[1].grid(True, alpha=0.3)
 
+    # ── 보유 종목 수 ────────────────────────────────────────────────────────
     n_held = (asset_vals > 0.5).sum(axis=1)
     axes[2].fill_between(n_held.index, 0, n_held, color="steelblue", alpha=0.5)
     axes[2].set_ylabel("보유 종목 수")
@@ -73,6 +102,57 @@ def plot_equity_curves(
     axes[2].grid(True, alpha=0.3)
 
     plt.suptitle(f"{profile_name} 포트폴리오 vs {bm_label} 비교", fontsize=14, fontweight="bold")
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_per_stock_equity_curves(
+    pf: vbt.Portfolio,
+    close_df: pd.DataFrame,
+    names: list,
+    profile_name: str = "위험중립형",
+    benchmark_series: pd.Series = None,
+    cols: int = 2,
+) -> None:
+    """종목별 단독 B&H vs 전략 포트 자산 곡선 비교
+
+    각 서브플롯: 해당 종목 단독 B&H (정규화) + 전략 포트폴리오 + 벤치마크
+    """
+    val         = pf.value()
+    init        = val.iloc[0]
+    stock_names = [n for n in names if n in close_df.columns]
+    n_stocks    = len(stock_names)
+
+    if benchmark_series is not None:
+        bm       = benchmark_series.reindex(val.index, method="ffill").dropna()
+        bm_norm  = bm / bm.iloc[0] * init
+        bm_label = benchmark_series.name or "벤치마크"
+    else:
+        bm_norm  = None
+        bm_label = None
+
+    rows = (n_stocks + cols - 1) // cols
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 7, rows * 4), sharex=True)
+    axes_flat  = axes.flatten() if n_stocks > 1 else [axes]
+
+    for ax, name in zip(axes_flat, stock_names):
+        stock_close = close_df[name].reindex(val.index, method="ffill")
+        stock_norm  = stock_close / stock_close.iloc[0] * init
+
+        if bm_norm is not None:
+            ax.plot(bm_norm,   color="gray",    lw=1.2, ls=":",  label=bm_label, alpha=0.7)
+        ax.plot(stock_norm,    color="orange",  lw=1.8, ls="--", label=f"{name} B&H")
+        ax.plot(val,           color="crimson", lw=2.0, ls="-",  label=f"★ {profile_name} 포트")
+
+        ax.set_title(name, fontsize=11, fontweight="bold")
+        ax.set_ylabel("자산 가치 (정규화)")
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
+
+    for ax in axes_flat[n_stocks:]:
+        ax.set_visible(False)
+
+    plt.suptitle(f"종목별 단독 B&H vs {profile_name} 포트 비교", fontsize=13, fontweight="bold")
     plt.tight_layout()
     plt.show()
 

@@ -19,30 +19,30 @@ KOSPI_MA         = 60
 CASH_RETURN      = 0.035
 
 METRICS_TARGET = {
-    "cagr":              0.06,
-    "mdd":              -0.25,
-    "mdd_duration":       12,
-    "calmar":             0.3,
-    "sortino":            0.5,
-    "alpha":              0.02,
+    "cagr":              0.08,   # 8%  — 단기채(~4%) 대비 의미있는 초과수익
+    "mdd":              -0.30,   # -30% — 복수종목 현실 반영
+    "mdd_duration":       24,    # 24개월
+    "calmar":             0.35,  # 8% / 30% ≈ 0.27, 여유 포함
+    "sortino":            0.8,
+    "alpha":              0.02,  # KOSPI 대비 +2%
     "beta":               0.8,
-    "mdd_reduction":      0.20,
+    "mdd_reduction":      0.20,  # KOSPI 대비 MDD 20% 감소
     "calmar_improvement": 0.1,
-    "info_ratio":         0.3,
-    "win_rate":           0.5,
+    "info_ratio":         0.2,
+    "win_rate":           0.55,
 }
 METRICS_ALERT = {
-    "cagr":              0.04,
-    "mdd":              -0.35,
-    "mdd_duration":       18,
-    "calmar":             0.2,
-    "sortino":            0.3,
+    "cagr":              0.05,   # 5% — 예금 수준이면 전략 가치 의심
+    "mdd":              -0.40,
+    "mdd_duration":       36,
+    "calmar":             0.20,
+    "sortino":            0.5,
     "alpha":              0.0,
     "beta":               1.0,
     "mdd_reduction":      0.10,
     "calmar_improvement": 0.0,
     "info_ratio":         0.0,
-    "win_rate":           0.4,
+    "win_rate":           0.45,
 }
 
 

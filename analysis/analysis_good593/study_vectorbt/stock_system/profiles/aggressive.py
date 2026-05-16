@@ -16,30 +16,30 @@ KOSPI_MA         = 120
 CASH_RETURN      = 0.035
 
 METRICS_TARGET = {
-    "cagr":              0.10,
-    "mdd":              -0.35,
-    "mdd_duration":       18,
-    "calmar":             0.3,
-    "sortino":            0.7,
-    "alpha":              0.05,
-    "beta":               1.2,
-    "mdd_reduction":      0.10,
-    "calmar_improvement": 0.1,
-    "info_ratio":         0.3,
-    "win_rate":           0.5,
+    "cagr":              0.15,   # 15%  — B&H 초과가 목표
+    "mdd":              -0.35,   # -35% — 높은 위험 허용
+    "mdd_duration":       24,
+    "calmar":             0.45,  # 15% / 35% ≈ 0.43
+    "sortino":            1.0,
+    "alpha":              0.05,  # KOSPI 대비 +5%
+    "beta":               1.3,
+    "mdd_reduction":      0.0,   # KOSPI 대비 MDD 감소 불필요 (수익 우선)
+    "calmar_improvement": 0.3,   # B&H 대비 Calmar 명확히 개선
+    "info_ratio":         0.5,
+    "win_rate":           0.55,
 }
 METRICS_ALERT = {
-    "cagr":              0.07,
-    "mdd":              -0.45,
-    "mdd_duration":       24,
-    "calmar":             0.2,
-    "sortino":            0.4,
-    "alpha":              0.0,
+    "cagr":              0.10,   # 10% 미만이면 B&H 대비 의미 없음
+    "mdd":              -0.50,   # -50% — 원금 절반 손실은 전략 실패
+    "mdd_duration":       36,
+    "calmar":             0.25,
+    "sortino":            0.6,
+    "alpha":              0.02,
     "beta":               1.5,
-    "mdd_reduction":      0.0,
-    "calmar_improvement": 0.0,
-    "info_ratio":         0.0,
-    "win_rate":           0.4,
+    "mdd_reduction":     -0.10,  # KOSPI보다 10% 이상 나쁘면 경보
+    "calmar_improvement": 0.1,
+    "info_ratio":         0.2,
+    "win_rate":           0.45,
 }
 
 

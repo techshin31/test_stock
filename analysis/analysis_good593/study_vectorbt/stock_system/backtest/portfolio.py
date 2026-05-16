@@ -93,13 +93,26 @@ def build_size_df(
     entry_mask  = size_raw > 0
     valid_entry = entry_mask & (momentum_df >= min_momentum)
 
-    mom_valid  = momentum_df.where(valid_entry)
-    mom_sum    = mom_valid.sum(axis=1).replace(0, np.nan)
-    mom_weight = mom_valid.div(mom_sum, axis=0)
+    # 각 종목이 원하는 총 비중 합계
+    desired       = size_raw.where(valid_entry, 0)
+    total_desired = desired.sum(axis=1)
+
+    # 현금 부족 시: 신호강도 × 모멘텀 결합 가중치
+    combined     = (size_raw * momentum_df).where(valid_entry)
+    combined_sum = combined.sum(axis=1).replace(0, np.nan)
+    weight       = combined.div(combined_sum, axis=0)   # 합계 = 1.0
 
     size_df = size_raw.copy()
     size_df[entry_mask & ~valid_entry] = np.nan
-    size_df[valid_entry] = (size_raw * mom_weight)[valid_entry]
+
+    sufficient   = (total_desired > 0) & (total_desired <= 1.0)
+    insufficient = total_desired > 1.0
+
+    # Case 2: 현금 충분 → 각자 size_raw 그대로
+    size_df[valid_entry & sufficient.values[:, None]]   = size_raw[valid_entry & sufficient.values[:, None]]
+
+    # Case 3: 현금 부족 → 신호강도×모멘텀 비율로 100% 배분
+    size_df[valid_entry & insufficient.values[:, None]] = weight[valid_entry & insufficient.values[:, None]]
 
     return size_df, signal_info
 
@@ -164,8 +177,11 @@ def run_bh_portfolio(
     fees: float = 0.0015,
     slippage: float = 0.001,
     init_cash: float = 1_000_000,
+    start_date=None,
 ) -> vbt.Portfolio:
-    """균등 비중 Buy & Hold (첫날 1/N씩 매수)"""
+    """균등 비중 Buy & Hold (start_date 또는 첫날 1/N씩 매수)"""
+    if start_date is not None:
+        close_df = close_df[close_df.index >= start_date]
     n = close_df.shape[1]
     bh_size = pd.DataFrame(np.nan, index=close_df.index, columns=close_df.columns)
     bh_size.iloc[0] = 1.0 / n

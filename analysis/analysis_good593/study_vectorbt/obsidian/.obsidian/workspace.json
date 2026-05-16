@@ -13,6 +13,20 @@
             "state": {
               "type": "markdown",
               "state": {
+                "file": "투자성향/적극투자형_전략.md",
+                "mode": "preview",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "적극투자형_전략"
+            }
+          },
+          {
+            "id": "d0470d238fd8865c",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
                 "file": "투자성향/위험중립형_전략.md",
                 "mode": "preview",
                 "source": false
@@ -21,7 +35,8 @@
               "title": "위험중립형_전략"
             }
           }
-        ]
+        ],
+        "currentTab": 1
       }
     ],
     "direction": "vertical"
@@ -184,24 +199,29 @@
       "bases:새 베이스 생성하기": false
     }
   },
-  "active": "d5e52e03f867d746",
+  "active": "d0470d238fd8865c",
   "lastOpenFiles": [
+    "성과지표/IR.md",
+    "성과지표/IR.md.tmp.13612.cc69d4c699e5",
+    "성과지표/Calmar개선.md",
+    "성과지표/Calmar개선.md.tmp.13612.67c1e7e8d5d9",
+    "성과지표/MDD감소율.md",
+    "성과지표/Beta.md",
+    "성과지표/Beta.md.tmp.13612.949268a44ef8",
+    "성과지표/Alpha.md",
+    "성과지표/Alpha.md.tmp.13612.01b0fb0613c4",
+    "투자성향/적극투자형_전략.md",
+    "투자성향/적극투자형_전략.md.tmp.13612.95352735240c",
+    "투자성향/위험중립형_전략.md.tmp.13612.0c183d4399c9",
+    "투자성향/위험중립형_전략.md",
+    "투자성향/위험중립형_전략.md.tmp.13612.c435c2b32639",
+    "투자성향/위험중립형_전략.md.tmp.13612.2a0e0b1c74ae",
+    "투자성향/위험중립형_전략.md.tmp.13612.d0fa5b4d9e02",
     "투자성향/위험중립형_전략.md.tmp.10444.60fb334146d8",
-    "투자성향/위험중립형_전략.md.tmp.10444.d58ddaf282f0",
-    "투자성향/위험중립형_전략.md.tmp.10444.6de3fa0a5ee5",
-    "투자성향/위험중립형_전략.md.tmp.10444.3e4a4470c3da",
-    "투자성향/위험중립형_전략.md.tmp.2480.cbe130786910",
-    "투자성향/위험중립형_전략.md.tmp.2480.59dcd3ec340b",
-    "투자성향/위험중립형_전략.md.tmp.2480.5d6eb6ec1c7f",
-    "투자성향/위험중립형_전략.md.tmp.19104.414c050e864a",
-    "투자성향/위험중립형_전략.md.tmp.19104.f01b71e2f4a5",
-    "투자성향/위험중립형_전략.md.tmp.19104.5ef4d0324b76",
-    "투자성향/위험중립형_전략.md.tmp.19104.2c1e5f758805",
     "최적화/Walk_Forward_최적화.md",
     "TA지표/변동성/ATR_평균진폭.md",
     "성과지표/Sortino비율.md",
     "성과지표/MDD_Duration.md",
-    "투자성향/위험중립형_전략.md",
     "성과지표/Calmar비율.md",
     "성과지표/Profit_Factor.md",
     "성과지표/MDD.md",
