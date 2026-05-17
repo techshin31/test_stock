@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import koreanize_matplotlib
 
-from ...strategies.regime import (
+from ..strategies.regime import (
     REGIME_SIDEWAYS, REGIME_UPTREND, REGIME_DOWNTREND, REGIME_TRANSITION,
 )
 
