@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 from ..profiles import get_profile
-from ..backtest.portfolio import run_walk_forward
+from ..backtest.engine import run_walk_forward
 from .data import load_data
 
 

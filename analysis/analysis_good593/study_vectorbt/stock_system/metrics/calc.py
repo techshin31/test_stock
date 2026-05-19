@@ -2,7 +2,6 @@
 
 import numpy as np
 import pandas as pd
-import vectorbt as vbt
 
 
 def _calc_mdd_duration_months(equity: pd.Series) -> float:
@@ -39,16 +38,14 @@ def _calc_equity_metrics(equity: pd.Series) -> dict:
 
 
 def calc_metrics(
-    pf: vbt.Portfolio,
-    close_df: pd.DataFrame,
+    equity: pd.Series,
     benchmark_series: pd.Series = None,
 ) -> dict:
     """전략 포트폴리오 성과 지표 계산
 
     Parameters
     ----------
-    pf               : 전략 포트폴리오
-    close_df         : 주식 종가 (참고용, 현재 미사용)
+    equity           : 포트폴리오 가치 곡선 (backtest: pf.value(), trading: 잔고 시계열)
     benchmark_series : KOSPI 지수 (None이면 상대 지표 생략)
 
     Returns
@@ -56,7 +53,6 @@ def calc_metrics(
     절대 지표: cagr, mdd, mdd_duration, calmar, sortino, win_rate
     상대 지표: alpha, beta, mdd_reduction, calmar_improvement, info_ratio
     """
-    equity = pf.value()
     result = _calc_equity_metrics(equity)
 
     if benchmark_series is not None:

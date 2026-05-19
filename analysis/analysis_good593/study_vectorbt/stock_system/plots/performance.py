@@ -2,7 +2,6 @@
 
 import numpy as np
 import pandas as pd
-import vectorbt as vbt
 import matplotlib.pyplot as plt
 import koreanize_matplotlib
 import seaborn as sns
@@ -18,10 +17,11 @@ def _calc_mdd_duration(equity: pd.Series) -> int:
 
 
 def plot_equity_curves(
-    pf: vbt.Portfolio,
+    equity: pd.Series,
+    asset_values: pd.DataFrame,
     names: list,
     n: int,
-    pf_bh: vbt.Portfolio = None,
+    equity_bh: pd.Series = None,
     benchmark_series: pd.Series = None,
     etf_series: pd.Series = None,
     profile_name: str = "위험중립형",
@@ -30,23 +30,23 @@ def plot_equity_curves(
 
     Parameters
     ----------
-    pf_bh            : B&H 포트폴리오 (None이면 미표시)
-    benchmark_series : KOSPI 등 벤치마크 시리즈
-    etf_series       : 단기채 ETF 가격 시리즈 (None이면 미표시)
+    equity       : 포트폴리오 가치 곡선
+    asset_values : 종목별 자산 가치 DataFrame (columns = names)
+    equity_bh    : B&H 포트폴리오 가치 곡선 (None이면 미표시)
+    etf_series   : 단기채 ETF 가격 시리즈 (None이면 미표시)
     """
-    val  = pf.value()
+    val  = equity
     init = val.iloc[0]
 
-    asset_vals = pf.asset_value(group_by=False)
+    asset_vals = asset_values.copy()
     asset_vals.columns = names
 
     # ── 비교 시리즈 정규화 ──────────────────────────────────────────────────
     bh_norm, bm_norm, etf_norm = None, None, None
     bm_label = "벤치마크"
 
-    if pf_bh is not None:
-        bh_v    = pf_bh.value()
-        bh_norm = bh_v / bh_v.iloc[0] * init
+    if equity_bh is not None:
+        bh_norm = equity_bh / equity_bh.iloc[0] * init
 
     if benchmark_series is not None:
         bm       = benchmark_series.reindex(val.index, method="ffill").dropna()
@@ -107,7 +107,7 @@ def plot_equity_curves(
 
 
 def plot_per_stock_equity_curves(
-    pf: vbt.Portfolio,
+    equity: pd.Series,
     close_df: pd.DataFrame,
     names: list,
     profile_name: str = "위험중립형",
@@ -118,7 +118,7 @@ def plot_per_stock_equity_curves(
 
     각 서브플롯: 해당 종목 단독 B&H (정규화) + 전략 포트폴리오 + 벤치마크
     """
-    val         = pf.value()
+    val         = equity
     init        = val.iloc[0]
     stock_names = [n for n in names if n in close_df.columns]
     n_stocks    = len(stock_names)
@@ -157,10 +157,14 @@ def plot_per_stock_equity_curves(
     plt.show()
 
 
-def plot_weight_heatmap(pf: vbt.Portfolio, names: list) -> None:
+def plot_weight_heatmap(
+    equity: pd.Series,
+    asset_values: pd.DataFrame,
+    names: list,
+) -> None:
     """월별 종목 보유 비중 히트맵"""
-    val        = pf.value()
-    asset_vals = pf.asset_value(group_by=False)
+    val        = equity
+    asset_vals = asset_values.copy()
     asset_vals.columns = names
 
     weights   = asset_vals.div(val, axis=0).clip(0, 1) * 100
@@ -186,10 +190,15 @@ def plot_weight_heatmap(pf: vbt.Portfolio, names: list) -> None:
         print(f"  {name:12s}: {avg_w[name]:.1f}%  (최대 {weights[name].max():.1f}%)")
 
 
-def plot_contribution(pf: vbt.Portfolio, close_df: pd.DataFrame, names: list) -> None:
+def plot_contribution(
+    equity: pd.Series,
+    asset_values: pd.DataFrame,
+    close_df: pd.DataFrame,
+    names: list,
+) -> None:
     """종목별 포트폴리오 수익 기여도 분석"""
-    val        = pf.value()
-    asset_vals = pf.asset_value(group_by=False)
+    val        = equity
+    asset_vals = asset_values.copy()
     asset_vals.columns = names
 
     stock_rets    = close_df.pct_change().fillna(0)
@@ -229,12 +238,12 @@ def plot_contribution(pf: vbt.Portfolio, close_df: pd.DataFrame, names: list) ->
 
 
 def plot_diversification(
-    pf: vbt.Portfolio,
+    equity: pd.Series,
     close_df: pd.DataFrame,
     names: list,
 ) -> None:
     """분산투자 효과: 상관관계 히트맵 + 변동성 비교"""
-    val = pf.value()
+    val = equity
 
     returns_df = close_df.pct_change().dropna()
     corr_mat   = returns_df.corr()
@@ -271,17 +280,16 @@ def plot_diversification(
 
 
 def plot_yearly_returns(
-    pf: vbt.Portfolio,
-    pf_bh: vbt.Portfolio,
+    equity: pd.Series,
+    equity_bh: pd.Series,
     n: int = 5,
     benchmark_series: pd.Series = None,
     profile_name: str = "위험중립형",
 ) -> None:
     """연도별 성과 비교 바차트"""
-    val    = pf.value()
-    val_bh = pf_bh.value()
-    init   = val.iloc[0]
-    bh_norm = val_bh.reindex(val.index, method="ffill")
+    val     = equity
+    init    = val.iloc[0]
+    bh_norm = equity_bh.reindex(val.index, method="ffill")
     bh_norm = bh_norm / bh_norm.iloc[0] * init
 
     if benchmark_series is not None:
@@ -292,8 +300,8 @@ def plot_yearly_returns(
         bm_norm  = bh_norm
         bm_label = "균등 B&H"
 
-    def _yearly(equity: pd.Series) -> pd.Series:
-        return equity.resample("A").last().pct_change().dropna()
+    def _yearly(eq: pd.Series) -> pd.Series:
+        return eq.resample("A").last().pct_change().dropna()
 
     yr     = _yearly(val)
     yr_bh  = _yearly(bh_norm)
@@ -334,8 +342,8 @@ def plot_yearly_returns(
 
 
 def plot_yearly_pnl(
-    pf: vbt.Portfolio,
-    pf_bh: vbt.Portfolio,
+    equity: pd.Series,
+    equity_bh: pd.Series,
     benchmark_series: pd.Series = None,
     profile_name: str = "전략",
 ) -> None:
@@ -344,10 +352,10 @@ def plot_yearly_pnl(
     상단: 전략 / B&H / 벤치마크의 연도별 실제 손익 막대
     하단: 연말 기준 자산가치 꺾은선 + 요약 테이블 출력
     """
-    val     = pf.value()
+    val     = equity
     init    = val.iloc[0]
-    bh_raw  = pf_bh.value().reindex(val.index, method="ffill")
-    bh_norm = bh_raw / bh_raw.iloc[0] * init
+    bh_norm = equity_bh.reindex(val.index, method="ffill")
+    bh_norm = bh_norm / bh_norm.iloc[0] * init
 
     def _ye(s: pd.Series) -> pd.Series:
         return s.resample("A").last()
@@ -365,7 +373,7 @@ def plot_yearly_pnl(
             return f"{sign}{man / 10_000:.1f}억"
         return f"{sign}{man:,.0f}만"
 
-    ye_st, pnl_st = _ye(val),    _pnl(val)
+    ye_st, pnl_st = _ye(val),     _pnl(val)
     ye_bh, pnl_bh = _ye(bh_norm), _pnl(bh_norm)
 
     series = [
@@ -457,20 +465,20 @@ def plot_yearly_pnl(
 
 
 def plot_mdd_comparison(
-    pf: vbt.Portfolio,
-    pf_bh: vbt.Portfolio,
+    equity: pd.Series,
+    equity_bh: pd.Series,
     kospi: pd.Series,
     n: int = 5,
     profile_name: str = "위험중립형",
 ) -> None:
     """MDD Depth + Duration 비교 (기준: KOSPI)"""
-    port_val = pf.value()
+    port_val = equity
     kospi_eq = kospi.reindex(port_val.index, method="ffill").dropna()
     kospi_eq = kospi_eq / kospi_eq.iloc[0] * port_val.iloc[0]
 
     targets = {
         "KOSPI\n(벤치마크)":   kospi_eq,
-        f"{n}종목\n균등 B&H": pf_bh.value(),
+        f"{n}종목\n균등 B&H": equity_bh,
         profile_name:          port_val,
     }
 
@@ -518,13 +526,14 @@ def plot_mdd_comparison(
 
 
 def plot_yearly_stock_etf(
-    pf: vbt.Portfolio,
+    equity: pd.Series,
+    asset_values: pd.DataFrame,
     names_all: list,
     etf_name: str = "단기채",
 ) -> None:
     """연도별 주식 vs 단기채 수익 기여도"""
-    val        = pf.value()
-    asset_vals = pf.asset_value(group_by=False)
+    val        = equity
+    asset_vals = asset_values.copy()
     asset_vals.columns = names_all
 
     stock_names = [n for n in names_all if n != etf_name]
@@ -580,17 +589,16 @@ def plot_yearly_stock_etf(
 
 
 def plot_quarterly_returns(
-    pf: vbt.Portfolio,
-    pf_bh: vbt.Portfolio,
+    equity: pd.Series,
+    equity_bh: pd.Series,
     n: int = 5,
     benchmark_series: pd.Series = None,
     profile_name: str = "전략",
 ) -> None:
     """분기별 수익률 비교 바차트"""
-    val     = pf.value()
-    val_bh  = pf_bh.value()
+    val     = equity
     init    = val.iloc[0]
-    bh_norm = val_bh.reindex(val.index, method="ffill")
+    bh_norm = equity_bh.reindex(val.index, method="ffill")
     bh_norm = bh_norm / bh_norm.iloc[0] * init
 
     if benchmark_series is not None:
@@ -601,8 +609,8 @@ def plot_quarterly_returns(
         bm_norm  = bh_norm
         bm_label = "균등 B&H"
 
-    def _quarterly(equity: pd.Series) -> pd.Series:
-        return equity.resample("Q").last().pct_change().dropna()
+    def _quarterly(eq: pd.Series) -> pd.Series:
+        return eq.resample("Q").last().pct_change().dropna()
 
     qr    = _quarterly(val)
     qr_bh = _quarterly(bh_norm)
@@ -644,21 +652,21 @@ def plot_quarterly_returns(
 
 
 def plot_monthly_heatmap(
-    pf: vbt.Portfolio,
-    pf_bh: vbt.Portfolio,
+    equity: pd.Series,
+    equity_bh: pd.Series,
     n: int = 5,
     benchmark_series: pd.Series = None,
     profile_name: str = "전략",
 ) -> None:
     """월별 수익률 히트맵 (캘린더 뷰) — 전략 / B&H / KOSPI 비교"""
-    val    = pf.value()
-    val_bh = pf_bh.value().reindex(val.index, method="ffill")
+    val    = equity
+    val_bh = equity_bh.reindex(val.index, method="ffill")
     val_bh = val_bh / val_bh.iloc[0] * val.iloc[0]
 
     MONTH_LABELS = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월","연간"]
 
-    def _pivot(equity: pd.Series) -> pd.DataFrame:
-        mr    = equity.resample("M").last().pct_change().dropna()
+    def _pivot(eq: pd.Series) -> pd.DataFrame:
+        mr    = eq.resample("M").last().pct_change().dropna()
         pivot = pd.DataFrame({
             "ret":   (mr * 100).values,
             "year":  mr.index.year,

@@ -7,17 +7,22 @@ import koreanize_matplotlib
 
 
 def plot_walkforward_portfolio_comparison(
-    pf,
-    pf_bh,
+    equity: pd.Series,
+    equity_bh: pd.Series,
     wf_info: dict,
     benchmark_series: pd.Series = None,
     profile_name: str = "위험중립형",
 ) -> None:
-    """WF 구간별 파라미터 + 전체 자산곡선 비교"""
-    val    = pf.value()
-    val_bh = pf_bh.value()
-    init   = val.iloc[0]
-    bh_norm = val_bh.reindex(val.index, method="ffill")
+    """WF 구간별 파라미터 + 전체 자산곡선 비교
+
+    Parameters
+    ----------
+    equity    : 전략 포트폴리오 가치 곡선
+    equity_bh : B&H 포트폴리오 가치 곡선
+    """
+    val     = equity
+    init    = val.iloc[0]
+    bh_norm = equity_bh.reindex(val.index, method="ffill")
     bh_norm = bh_norm / bh_norm.iloc[0] * init
 
     if benchmark_series is not None:

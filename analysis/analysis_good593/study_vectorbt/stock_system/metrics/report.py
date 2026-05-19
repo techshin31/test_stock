@@ -2,7 +2,6 @@
 
 import numpy as np
 import pandas as pd
-import vectorbt as vbt
 
 from .calc import calc_metrics, _calc_equity_metrics
 
@@ -30,22 +29,26 @@ ABS_KEYS = {"cagr", "mdd", "mdd_duration", "calmar", "sortino", "win_rate"}
 
 
 def build_metrics_table(
-    pf: vbt.Portfolio,
+    equity: pd.Series,
     close_df: pd.DataFrame,
     profile,
     benchmark_series: pd.Series = None,
     etf_series: pd.Series = None,
-    pf_bh: vbt.Portfolio = None,
+    equity_bh: pd.Series = None,
 ) -> pd.DataFrame:
     """profile 목표/경보 기준으로 상태 포함 성과 테이블
 
+    Parameters
+    ----------
+    equity           : 전략 포트폴리오 가치 곡선 (backtest: pf.value(), trading: 잔고 시계열)
+    equity_bh        : B&H 포트폴리오 가치 곡선 (None이면 미표시)
+
     비교 대상 컬럼:
       etf_series 있음 → 단기채 100% 컬럼  (위험중립형)
-      pf_bh      있음 → B&H 컬럼          (적극투자형)
+      equity_bh  있음 → B&H 컬럼          (적극투자형)
     KOSPI 컬럼은 benchmark_series가 있으면 항상 표시.
     """
-    equity       = pf.value()
-    metrics      = calc_metrics(pf, close_df, benchmark_series)
+    metrics      = calc_metrics(equity, benchmark_series)
     target       = profile.METRICS_TARGET
     alert        = profile.METRICS_ALERT
     profile_name = getattr(profile, "__name__", "").split(".")[-1]
@@ -59,8 +62,8 @@ def build_metrics_table(
     cmp_m, cmp_label = {}, None
     if etf_series is not None:
         cmp_m, cmp_label = _align_metrics(etf_series), "단기채 100%"
-    elif pf_bh is not None:
-        cmp_m, cmp_label = _calc_equity_metrics(pf_bh.value()), "B&H"
+    elif equity_bh is not None:
+        cmp_m, cmp_label = _calc_equity_metrics(equity_bh), "B&H"
 
     bm_m = _align_metrics(benchmark_series) if benchmark_series is not None else {}
 
@@ -120,8 +123,8 @@ def build_metrics_table(
 
 
 def build_period_stats_table(
-    pf: vbt.Portfolio,
-    pf_bh: vbt.Portfolio,
+    equity: pd.Series,
+    equity_bh: pd.Series,
     benchmark_series: pd.Series = None,
     freq: str = "Y",
     profile_name: str = "전략",
@@ -130,16 +133,18 @@ def build_period_stats_table(
 
     Parameters
     ----------
-    freq : 'Y' 연도별 | 'Q' 분기별 | 'M' 월별
+    equity    : 전략 포트폴리오 가치 곡선
+    equity_bh : B&H 포트폴리오 가치 곡선
+    freq      : 'Y' 연도별 | 'Q' 분기별 | 'M' 월별
     """
     _resample = {"Y": "A", "Q": "Q", "M": "M"}[freq]
 
-    val    = pf.value()
-    val_bh = pf_bh.value().reindex(val.index, method="ffill")
+    val    = equity
+    val_bh = equity_bh.reindex(val.index, method="ffill")
     val_bh = val_bh / val_bh.iloc[0] * val.iloc[0]
 
-    def _ret(equity: pd.Series) -> pd.Series:
-        return equity.resample(_resample).last().pct_change().dropna() * 100
+    def _ret(eq: pd.Series) -> pd.Series:
+        return eq.resample(_resample).last().pct_change().dropna() * 100
 
     cols: dict = {f"{profile_name}(%)": _ret(val), "B&H(%)": _ret(val_bh)}
 
