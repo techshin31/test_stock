@@ -13,6 +13,7 @@ from .data import load_data
 def get_today_signal(
     params_path: str = "best_params.json",
     lookback_days: int = 200,
+    rotation_state_path: str = None,
 ) -> dict:
     """오늘 목표 비중 dict 반환
 
@@ -41,4 +42,10 @@ def get_today_signal(
         kospi=data["kospi"],
         use_adx_mode=use_adx_mode,
     )
+
+    if rotation_state_path and Path(rotation_state_path).exists():
+        from ..rotation import RotationManager, apply_rotation_to_signal
+        manager = RotationManager.from_json(rotation_state_path)
+        signal  = apply_rotation_to_signal(manager, signal, pd.Timestamp.today())
+
     return signal

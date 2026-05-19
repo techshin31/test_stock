@@ -11,7 +11,8 @@ import numpy as np
 import pandas as pd
 import vectorbt as vbt
 
-from ..portfolio import add_cash_etf, build_size_df
+from ..portfolio import add_cash_etf
+from ..rotation import RotationManager, build_rotated_size_df
 
 
 # ── 백테스트 실행 (내부용) ────────────────────────────────────────────────────
@@ -89,6 +90,7 @@ def _walk_forward_portfolio(
     min_momentum: float = 0.0,
     kospi: pd.Series = None,
     cash_etf: pd.Series = None,
+    rotation_plans: list = None,
 ) -> tuple:
     """IS 12개월 학습 → OOS test_months 적용 슬라이딩 WF (종목별 독립 그리드 서치)
 
@@ -102,6 +104,7 @@ def _walk_forward_portfolio(
     keys   = list(param_grid.keys())
     combos = list(itertools.product(*param_grid.values()))
     default_params = {k: vals[len(vals) // 2] for k, vals in param_grid.items()}
+    manager        = RotationManager()
 
     windows      = []
     period_start = idx[0]
@@ -121,6 +124,15 @@ def _walk_forward_portfolio(
             period_start += pd.DateOffset(months=test_months)
             continue
 
+        # ── 0. rotation 적용 ──────────────────────────────────────────────────
+        if rotation_plans:
+            for plan in rotation_plans:
+                if period_start <= pd.Timestamp(plan.review_date) < train_end:
+                    manager.apply_plan(plan, idx)
+
+        sell_only    = set(manager.get_sell_only())
+        active_names = [n for n in names if n not in sell_only]
+
         tr_close = close_df[train_mask]
         tr_high  = high_df[train_mask]
         tr_low   = low_df[train_mask]
@@ -128,7 +140,7 @@ def _walk_forward_portfolio(
         # ── 1. 학습: 종목별 독립 그리드 서치 ──────────────────────────────────
         per_stock_params = {}
 
-        for name in names:
+        for name in active_names:
             best_score_s  = -np.inf
             best_params_s = None
 
@@ -169,7 +181,8 @@ def _walk_forward_portfolio(
         wu_mask      = (idx >= warmup_start) & (idx < test_end)
 
         try:
-            sz_wu, _ = build_size_df(
+            sz_wu, _ = build_rotated_size_df(
+                manager,
                 profile,
                 close_df[wu_mask], high_df[wu_mask], low_df[wu_mask],
                 per_stock_params=per_stock_params,
@@ -181,6 +194,13 @@ def _walk_forward_portfolio(
         except Exception:
             period_start += pd.DateOffset(months=test_months)
             continue
+
+        # ── 3. 테스트 구간 내 강제 청산 완료된 종목 정리 ──────────────────────
+        test_end_dt = close_df[test_mask].index[-1]
+        for name in list(manager.get_sell_only()):
+            deadline = manager.get_force_close_date(name)
+            if deadline is not None and deadline <= test_end_dt:
+                manager.complete_exit(name)
 
         windows.append({
             "train_start": period_start,
