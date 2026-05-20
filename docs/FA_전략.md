@@ -1105,3 +1105,43 @@ v1 목표는 다음이다.
 ```
 
 이 세 가지가 검증되면 그 다음에 리밸런싱, 종목 선택, vectorBT 백테스트로 연결한다.
+
+---
+
+## 15. 기존 `overall_score`와 신규 `fa_score` 구분
+
+현재 검증 노트북에 보이는 `overall_score`는 이 문서에서 새로 정의한 분기 FA 공식 점수가 아니다.
+
+`overall_score`는 기존 WICS-DART 연간 섹터 랭킹 파이프라인의 산출물이다. 원천 파일은 `etl/wics_dart/output/company_sector_rankings_2021_2025.csv`이고, 생성 파이프라인은 `etl/wics_dart/pipeline/build_sector_rankings.py`의 `build_rankings()`다. 실제 계산 위치는 `etl/wics_dart/core/scoring.py`의 `apply_sector_weighted_score()`다.
+
+계산 흐름은 다음과 같다.
+
+```text
+master_table + event_features
+→ build_sector_rankings.py
+→ build_rankings()
+→ score_group()
+→ apply_sector_weighted_score()
+→ overall_score
+```
+
+`apply_sector_weighted_score()`는 기존 하위 점수인 `growth_score`, `profitability_score`, `stability_score` 및 섹터별 보조 점수를 `SECTOR_WEIGHT_CONFIG` 가중치로 합산해 `overall_score`를 만든다. 이 점수는 0~1 범위의 연간 섹터 상대평가 점수다.
+
+따라서 역할을 아래처럼 분리한다.
+
+| 변수 | 출처 | 의미 | 운영상 역할 |
+| --- | --- | --- | --- |
+| `overall_score` | 기존 `company_sector_rankings_2021_2025.csv`, `apply_sector_weighted_score()` | 0~1 범위의 연간 WICS 섹터 상대평가 임시 종합점수 | 현재 노트북에서 검증 화면 구조를 잡기 위한 임시 대체값. 운영 자동화에서는 사용하지 않음 |
+| `fa_score` | 신규 `company_quarter_fa`와 분기 점수 산식 | 0~100 범위의 분기별 하방 방어 FA 전략 공식 최종 점수 | 자동화, 검증, 리밸런싱 입력에 사용할 목표 점수 |
+
+즉 `overall_score`는 “어디선가 튀어나온 새 전략 변수”가 아니라 기존 코드의 산출 컬럼이다. 새 전략 구현 단계에서는 `overall_score`를 공식 점수로 끌고 가지 않고, `fa_score = level_score + change_score - risk_penalty`를 기준으로 교체한다.
+
+정리하면 다음 원칙을 따른다.
+
+```text
+문서와 노트북에서 overall_score를 보면:
+기존 연간 랭킹 임시 점수로만 해석한다.
+
+운영 자동화와 리밸런싱 입력에서 사용할 점수는:
+fa_score만 사용한다.
+```
