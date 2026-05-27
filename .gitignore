@@ -1,5 +1,6 @@
 .venv 
 .env 
+api/.token_cache.json
 
 __pycache__
 *.pyc 
