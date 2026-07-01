@@ -1,0 +1,45 @@
+[project]
+name = "quantpilot"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    "beautifulsoup4==4.12.3",
+    "dotenv-python>=0.0.1",
+    "exchange-calendars>=4.11.1",
+    "finance-datareader>=0.9.0",
+    "html5lib==1.1",
+    "ipykernel==6.29.3",
+    "ipywidgets==8.1.2",
+    "jupyter==1.0.0",
+    "koreanize-matplotlib==0.1.1",
+    "lxml==5.1.0",
+    "matplotlib==3.8.4",
+    "mypy-extensions==1.0.0",
+    "notebook==6.5.6",
+    "numba==0.56.4",
+    "numpy==1.23.5",
+    "pandas==1.5.3",
+    "plotly==5.18.0",
+    "cryptography>=42.0.0",
+    "psycopg[binary,pool]==3.3.1",
+    "pytrends>=4.9.2",
+    "python-dateutil==2.9.0",
+    "python-dotenv>=1.2.2",
+    "pytz==2024.1",
+    "requests==2.31.0",
+    "scipy==1.10.1",
+    "seaborn==0.13.2",
+    "tqdm==4.66.2",
+    "vectorbt==0.26.2",
+    "websockets>=16.0",
+    "widgetsnbextension==4.0.10",
+    "xlrd>=2.0.1",
+    "yfinance==0.2.66",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]

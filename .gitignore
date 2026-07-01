@@ -1,0 +1,10 @@
+
+__pycache__ 
+*.pyc
+*.pyo
+
+.venv 
+
+.env
+.token_cache.json
+database
