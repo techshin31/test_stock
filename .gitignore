@@ -1,9 +1,0 @@
-.venv 
-.env 
-api/.token_cache.json
-
-__pycache__
-*.pyc 
-docs_cache
-
-.DS_Store
