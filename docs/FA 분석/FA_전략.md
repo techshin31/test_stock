@@ -945,7 +945,7 @@ fa_automation_config
 | `score_distribution_threshold`    | 과거 정상 분기의 점수 분포        | 섹터별 `fa_score` 평균, 표준편차, 분위수                                                        | 점수 쏠림과 변별력 검증                         |
 | `score_change_threshold`          | 전분기 대비 변화 허용 범위        | `fa_score`, `level_score`, `change_score`, `risk_penalty` 전분기 차이                    | 비정상 급변 탐지                             |
 | `fallback_policy`                 | 하방 방어 운영 원칙            | `pass`, `warning`, `fail` 판정 결과                                                     | `hold_previous`, `quarantine` 등 기본 행동 |
-| `warning_fallback_policy`         | 경고 발생 시 하방 방어 정책        | `warning` 판정 결과와 rule severity                                                     | 마지막 정상 결과 유지, 격리, 건너뛰기 등            |
+| `warning_fallback_policy`         | 경고 발생 시 하방 방어 정책       | `warning` 판정 결과와 rule severity                                                      | 마지막 정상 결과 유지, 격리, 건너뛰기 등              |
 | `output_paths`                    | 산출물 저장 규칙              | 분기별 CSV, Markdown, 로그 경로                                                            | 재실행성과 추적성 확보                          |
 
 

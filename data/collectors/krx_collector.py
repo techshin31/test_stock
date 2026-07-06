@@ -37,15 +37,43 @@ def fetch_krx_market_map(trade_date: str | None = None) -> dict[str, str]:
     return result
 
 
-def fetch_krx_suspended_codes(trade_date: str | None = None) -> set[str]:
-    """거래정지·관리종목 종목코드 세트를 반환한다.
+import requests
+from bs4 import BeautifulSoup
 
-    FinanceDataReader는 거래정지 목록을 제공하지 않으므로 빈 세트를 반환한다.
-    status_code는 ACTIVE/DELISTED 두 값만 사용되며 SUSPENDED 판별은 생략된다.
+def fetch_krx_suspended_codes(trade_date: str | None = None) -> set[str]:
+    """네이버 금융을 크롤링하여 거래정지 및 관리종목 종목코드 세트를 반환한다.
 
     Returns
     -------
     set[str]
-        항상 빈 세트.
+        거래정지 또는 관리종목 코드 6자리 세트
     """
-    return set()
+    bad_codes = set()
+    
+    # 1. 거래정지 종목
+    halt_url = "https://finance.naver.com/sise/trading_halt.naver"
+    try:
+        res = requests.get(halt_url, timeout=10)
+        soup = BeautifulSoup(res.content, "html.parser")
+        for a in soup.find_all("a", href=True):
+            if "/item/main.naver?code=" in a["href"]:
+                code = a["href"].split("code=")[1][:6]
+                if code.isdigit():
+                    bad_codes.add(code)
+    except Exception as e:
+        print(f"[WARN] 거래정지 종목 수집 실패: {e}")
+        
+    # 2. 관리종목
+    mgmt_url = "https://finance.naver.com/sise/management.naver"
+    try:
+        res = requests.get(mgmt_url, timeout=10)
+        soup = BeautifulSoup(res.content, "html.parser")
+        for a in soup.find_all("a", href=True):
+            if "/item/main.naver?code=" in a["href"]:
+                code = a["href"].split("code=")[1][:6]
+                if code.isdigit():
+                    bad_codes.add(code)
+    except Exception as e:
+        print(f"[WARN] 관리종목 수집 실패: {e}")
+        
+    return bad_codes

@@ -37,6 +37,8 @@ dependencies = [
     "widgetsnbextension==4.0.10",
     "xlrd>=2.0.1",
     "yfinance==0.2.66",
+    "pykrx>=1.0.51",
+    "setuptools<70",
 ]
 
 [dependency-groups]

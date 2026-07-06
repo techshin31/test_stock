@@ -70,6 +70,23 @@ BOND_ANNUAL_RATES: dict[int, float] = {
 
 DEFAULT_BOND_ANNUAL_RATE = 0.030
 
+def get_kospi_top_n(n: int = 200) -> dict[str, str]:
+    """FinanceDataReader를 이용해 코스피 시가총액 상위 N개 종목(Yahoo 티커 맵핑)을 가져온다."""
+    try:
+        import FinanceDataReader as fdr
+        df = fdr.StockListing('KOSPI')
+        # Marcap(시가총액) 기준으로 내림차순 정렬 후 상위 n개 추출
+        top_n = df.sort_values(by='Marcap', ascending=False).head(n)
+        
+        pool = {}
+        for _, row in top_n.iterrows():
+            ticker = f"{row['Code']}.KS"
+            pool[ticker] = row['Name']
+        return pool
+    except Exception as e:
+        print(f"FinanceDataReader 로딩 중 에러 발생: {e}")
+        return KOSPI_LARGE_CAP_POOL
+
 # ── 개별 함수 ──────────────────────────────────────────────────────────────────
 
 def _split_ticker(ticker: str) -> tuple[str, Market]:

@@ -14,7 +14,7 @@ services:
       POSTGRES_DB: quantpilot_db          # 기본으로 생성할 데이터베이스 이름
 
     ports:
-      - "5432:5432"                      # 호스트 포트:컨테이너 포트 (기본 PostgreSQL 포트 5432)
+      - "5433:5432"                      # 호스트 포트:컨테이너 포트 (기본 PostgreSQL 포트 5432)
       
     volumes:
       # PostgreSQL 데이터 영속화 (컨테이너 재시작 시에도 데이터 유지)
