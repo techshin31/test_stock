@@ -33,3 +33,9 @@ ValueError: too many values to unpack (expected 3)
     target_weight = last_signal['target_position']
 IndexError: invalid index to scalar variable.
 
+2026-07-07 09:27:55,729 [INFO] 
+=== [실행 결과 요약] ===
+2026-07-07 09:27:55,729 [INFO] ✅ <b>금일 매매 내역 없음</b>
+기존 포지션을 유지하거나 신규 진입 시그널이 없습니다.
+2026-07-07 09:27:55,729 [INFO] ======================
+
