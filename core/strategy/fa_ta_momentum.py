@@ -22,7 +22,6 @@ import pandas as pd
 from .base  import AbstractStrategy, InvestmentType, DefensiveAssetType
 from .state import StrategyState
 from ..constant.types import MarketRegime
-from ..signal.exit.regime import check_downtrend_exit
 
 class FaTaMomentumStrategy(AbstractStrategy):
     """FA/TA 혼합 중기 모멘텀 전략"""
@@ -111,8 +110,7 @@ class FaTaMomentumStrategy(AbstractStrategy):
             curr_ma = ma_arr[i]
             curr_ma_fast = ma_fast_arr[i]
             curr_mom = mom_arr[i]
-            
-            downtrend_exit = check_downtrend_exit(regime)
+            downtrend_exit = (regime == MarketRegime.DOWNTREND.name)
             
             # [매도 1] DOWNTREND
             if downtrend_exit:
@@ -144,8 +142,13 @@ class FaTaMomentumStrategy(AbstractStrategy):
                               (pd.notnull(curr_mom) and curr_mom > 0)
                     
                     if cond_fa and cond_ta:
-                        new_target = self.ENTRY_SIZE
-                        signal_reason = "FA_TA_MOMENTUM_ENTRY"
+                        # [고무줄 모드] 모멘텀 비례 다이나믹 베팅 (10% ~ 40%)
+                        # 상승 강도(curr_mom) 0%~20% 구간을 0.1~0.4 비중으로 선형 매핑
+                        mom_clamped = min(max(curr_mom, 0.0), 0.20)
+                        dynamic_weight = 0.10 + (mom_clamped / 0.20) * 0.30
+                        new_target = round(dynamic_weight, 2)
+                        
+                        signal_reason = f"DYNAMIC_ENTRY_{int(new_target*100)}%"
                         _state.open_entry1(d)
             
             if new_target is not None:

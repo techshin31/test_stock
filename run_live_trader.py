@@ -28,6 +28,7 @@ def main():
     parser = argparse.ArgumentParser(description="FA+TA Momentum Live Trader")
     parser.add_argument("--mock", action="store_true", help="모의투자 계좌 사용")
     parser.add_argument("--dry-run", action="store_true", help="주문 실행 없이 시그널만 계산")
+    parser.add_argument("--premarket", action="store_true", help="장 시작 전 FA 필터링(관심종목 추출) 1회 실행")
     args = parser.parse_args()
     
     bot = TelegramBot()
@@ -35,6 +36,8 @@ def main():
     try:
         if args.dry_run:
             bot.send_message("🚀 <b>[DRY RUN] 실전 매매 스크립트 가동</b>\n주문을 실행하지 않고 시그널만 분석합니다.")
+        elif args.premarket:
+            bot.send_message(f"🚀 <b>장 시작 전 준비 스크립트 가동</b>\n오늘의 FA/TA 타겟 유니버스를 필터링합니다.")
         else:
             mode = "모의투자" if args.mock else "실전투자"
             bot.send_message(f"🚀 <b>[{mode}] 실전 매매 스크립트 가동</b>\nFA+TA 모멘텀 배치 작업을 시작합니다.")
@@ -51,7 +54,14 @@ def main():
                     print(f" -> {o['type']} {o['ticker']} 수량: {o['qty']}")
             trader._execute_orders = mock_execute
             
-        orders = trader.run_daily_batch()
+        if args.premarket:
+            trader.run_premarket_batch()
+            orders = None
+            msg = "✅ <b>프리마켓(8시 30분) 준비 완료!</b>\nFA 데이터 필터링을 성공적으로 마치고 관심 종목을 저장했습니다."
+            bot.send_message(msg)
+            return
+        else:
+            orders = trader.run_daily_batch()
         
         # 결과 메시지 조립
         if not orders:

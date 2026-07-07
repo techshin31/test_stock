@@ -62,9 +62,6 @@ import pandas as pd
 from .state import StrategyState
 
 from core.constant.types                 import MarketRegime, Tickers
-from core.indicator.trend.ma             import calc_ma
-from core.indicator.volatility.atr       import calc_atr
-from core.indicator.volatility.bollinger import calc_bollinger
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -256,28 +253,6 @@ class AbstractStrategy(ABC):
 
     # ── 공통 유틸리티 (서브클래스 내부 사용) ──────────────────────────────────
 
-    def _calc_indicators(
-        self,
-        ohlcv:     pd.DataFrame,
-        regime_df: pd.DataFrame,
-    ) -> tuple:
-        """지표 사전 계산.
-
-        Returns
-        -------
-        tuple: (atr, upper_bb, lower_bb, ma_s, ma_m, ma10)
-        """
-        close = ohlcv["close"]
-        high  = ohlcv["high"]
-        low   = ohlcv["low"]
-
-        atr                   = calc_atr(high, low, close, self._ATR_PERIOD)
-        upper_bb, _, lower_bb = calc_bollinger(close, self._BB_WINDOW, self._BB_STD)
-        ma_s                  = regime_df["ma_s"]   # MA20 (calc_regime 결과 재사용)
-        ma_m                  = regime_df["ma_m"]   # MA60
-        ma10                  = calc_ma(close, self._MA10_WINDOW)
-
-        return atr, upper_bb, lower_bb, ma_s, ma_m, ma10
 
     def _init_state(
         self,

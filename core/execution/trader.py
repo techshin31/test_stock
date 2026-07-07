@@ -1,3 +1,4 @@
+import logging
 import pandas as pd
 from typing import Dict, List
 import datetime
@@ -29,29 +30,77 @@ class LiveTrader:
         }
         self.strategy = FaTaMomentumStrategy(strategy_params)
         
+    def run_premarket_batch(self):
+        logging.info(f"[{datetime.datetime.now()}] 프리마켓 FA 필터링 시작")
+        universe = get_kospi_top_n(200)
+        tickers = list(universe.keys())
+        end_date = datetime.datetime.now().strftime('%Y-%m-%d')
+        start_date = (datetime.datetime.now() - datetime.timedelta(days=200)).strftime('%Y-%m-%d')
+        
+        ohlcv_store = download_multiple_stocks(tickers, start=start_date, end=end_date, show_progress=False)
+        ohlcv_store = enrich_ohlcv_with_fa(self.db, ohlcv_store, end_date)
+        
+        import numpy as np
+        fa_candidates = []
+        for ticker, df in ohlcv_store.items():
+            if df.empty or 'per_proxy' not in df.columns or 'roe' not in df.columns: continue
+            last_row = df.iloc[-1]
+            per = last_row.get('per_proxy', np.nan)
+            roe = last_row.get('roe', np.nan)
+            if pd.notnull(per) and pd.notnull(roe) and 0 < per < self.strategy.PER_THRESHOLD_BUY and roe > self.strategy.ROE_MIN:
+                fa_candidates.append(ticker)
+        
+        import json, os
+        os.makedirs("logs", exist_ok=True)
+        with open("logs/fa_candidates.json", "w", encoding="utf-8") as f:
+            json.dump(fa_candidates, f)
+        logging.info(f"프리마켓 FA 필터링 완료. 관심 종목 {len(fa_candidates)}개 저장.")
+        return fa_candidates
+
     def run_daily_batch(self):
-        print(f"[{datetime.datetime.now()}] 실전 매매 배치 시작")
+        logging.info(f"[{datetime.datetime.now()}] 실전 매매 배치 시작 (Intraday)")
         
         # 1. 잔고 조회
         balance_info = self.broker.get_balance()
         cash = balance_info['cash']
         positions = balance_info['positions']
-        print(f"현재 예수금: {cash:,.0f}원")
-        print(f"보유 종목: {list(positions.keys())}")
+        logging.info(f"현재 예수금: {cash:,.0f}원")
+        logging.info(f"보유 종목: {list(positions.keys())}")
         
         # 총 자산 (예수금 + 평가금액)
         total_eval = cash + sum(p['qty'] * p['current_price'] for p in positions.values())
-        print(f"총 자산 추정치: {total_eval:,.0f}원")
+        logging.info(f"총 자산 추정치: {total_eval:,.0f}원")
+        
+        # 대시보드 표시용 상태 저장 (전광판 모드용)
+        import json, os
+        os.makedirs("logs", exist_ok=True)
+        dashboard_state = {
+            "updated_at": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "cash": cash,
+            "total_eval": total_eval,
+            "positions": list(positions.keys())
+        }
+        with open("logs/dashboard_state.json", "w", encoding="utf-8") as f:
+            json.dump(dashboard_state, f, ensure_ascii=False, indent=2)
+            
+        # ponytail: append to csv for timeseries tracking
+        with open("logs/asset_timeseries.csv", "a", encoding="utf-8") as f:
+            f.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')},{total_eval}\n")
         
         # 2. 데이터 로드 (최근 150일)
         end_date = datetime.datetime.now().strftime('%Y-%m-%d')
         start_date = (datetime.datetime.now() - datetime.timedelta(days=200)).strftime('%Y-%m-%d')
         
-        print("[데이터 로드] KOSPI 200 유니버스 가져오기...")
-        universe = get_kospi_top_n(200)
-        tickers = list(universe.keys())
+        import json
+        try:
+            with open("logs/fa_candidates.json", "r", encoding="utf-8") as f:
+                fa_candidates = json.load(f)
+        except:
+            fa_candidates = list(get_kospi_top_n(200).keys())
+            
+        tickers = list(set(fa_candidates + list(positions.keys())))
         
-        print(f"[데이터 로드] OHLCV 및 FA 데이터 병합 중 ({start_date} ~ {end_date})...")
+        logging.info(f"[데이터 로드] 관심 종목 + 보유 종목 ({len(tickers)}개) 초고속 병합 중...")
         ohlcv_store = download_multiple_stocks(tickers, start=start_date, end=end_date, show_progress=False)
         ohlcv_store = enrich_ohlcv_with_fa(self.db, ohlcv_store, end_date)
         
