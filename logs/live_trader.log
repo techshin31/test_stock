@@ -1,0 +1,35 @@
+2026-07-07 09:17:34,087 [ERROR] Traceback (most recent call last):
+  File "C:\dev\project\Service_Stock_Analysis\run_live_trader.py", line 36, in main
+    if args.dry-run:
+AttributeError: 'Namespace' object has no attribute 'dry'
+
+2026-07-07 09:17:49,753 [ERROR] Traceback (most recent call last):
+  File "C:\dev\project\Service_Stock_Analysis\run_live_trader.py", line 44, in main
+    trader = LiveTrader(mock=args.mock)
+  File "C:\dev\project\Service_Stock_Analysis\core\execution\trader.py", line 12, in __init__
+    self.broker = KisBroker(mock=mock)
+  File "C:\dev\project\Service_Stock_Analysis\core\broker\kis_api.py", line 18, in __init__
+    raise ValueError(f"한국투자증권 API 키가 환경 변수에 없습니다 ({prefix}KEY, {prefix}SECRET, {prefix}ACC_NO)")
+ValueError: 한국투자증권 API 키가 환경 변수에 없습니다 (KIS_MOCK_KEY, KIS_MOCK_SECRET, KIS_MOCK_ACC_NO)
+
+2026-07-07 09:18:17,647 [ERROR] Traceback (most recent call last):
+  File "C:\dev\project\Service_Stock_Analysis\run_live_trader.py", line 44, in main
+    trader = LiveTrader(mock=args.mock)
+  File "C:\dev\project\Service_Stock_Analysis\core\execution\trader.py", line 23, in __init__
+    self.strategy = FaTaMomentumStrategy(
+TypeError: FaTaMomentumStrategy.__init__() got an unexpected keyword argument 'entry_size'
+
+2026-07-07 09:21:31,855 [ERROR] Traceback (most recent call last):
+  File "C:\dev\project\Service_Stock_Analysis\run_live_trader.py", line 54, in main
+    orders = trader.run_daily_batch()
+  File "C:\dev\project\Service_Stock_Analysis\core\execution\trader.py", line 72, in run_daily_batch
+    signals, _, _ = self.strategy.make_signals(df, regime_df, state=None)
+ValueError: too many values to unpack (expected 3)
+
+2026-07-07 09:24:56,115 [ERROR] Traceback (most recent call last):
+  File "C:\dev\project\Service_Stock_Analysis\run_live_trader.py", line 54, in main
+    orders = trader.run_daily_batch()
+  File "C:\dev\project\Service_Stock_Analysis\core\execution\trader.py", line 76, in run_daily_batch
+    target_weight = last_signal['target_position']
+IndexError: invalid index to scalar variable.
+
