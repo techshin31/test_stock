@@ -1,9 +1,12 @@
 import logging
+import json
+import os
 import pandas as pd
+import numpy as np
 from typing import Dict, List
 import datetime
-from data.loaders.kospi_data import get_kospi_top_n, download_multiple_stocks
-from data.loaders.fa_ta_loader import enrich_ohlcv_with_fa
+from data.loaders.kospi_data import get_kospi_top_n, download_multiple_stocks, download_kospi_index
+from data.loaders.fa_ta_loader import enrich_ohlcv_with_fa, FA_MODEL_VERSION
 from storage.postgres.connection import PostgreDB
 from core.strategy.fa_ta_momentum import FaTaMomentumStrategy
 from core.broker.kis_api import KisBroker
@@ -22,13 +25,15 @@ class LiveTrader:
         
         # 최적화된 파라미터 적용
         strategy_params = {
-            "entry_size": 0.2, # 최대 5종목 분산
-            "ma_window": 60,   # 60일선 돌파 모멘텀
-            "ma_fast": 10, 
-            "per_buy": 15.0,
-            "roe_min": 0.05
+            "entry_size": 0.2,      # 최대 5종목 분산
+            "ma_window": 60,        # 60일선 돌파 모멘텀
+            "ma_window_fast": 20,
+            "fa_score_min": 60.0,   # DB fa_score 진입 기준
+            "fa_score_exit": 40.0,  # fa_score 하락 시 매도 기준
+            "debt_ratio_max": 2.0,  # 부채비율 상한 (200%)
         }
         self.strategy = FaTaMomentumStrategy(strategy_params)
+        self.strategy_name = self.strategy.INVESTMENT_TYPE.name.lower()
         
     def run_premarket_batch(self):
         logging.info(f"[{datetime.datetime.now()}] 프리마켓 FA 필터링 시작")
@@ -40,17 +45,21 @@ class LiveTrader:
         ohlcv_store = download_multiple_stocks(tickers, start=start_date, end=end_date, show_progress=False)
         ohlcv_store = enrich_ohlcv_with_fa(self.db, ohlcv_store, end_date)
         
-        import numpy as np
         fa_candidates = []
         for ticker, df in ohlcv_store.items():
-            if df.empty or 'per_proxy' not in df.columns or 'roe' not in df.columns: continue
-            last_row = df.iloc[-1]
-            per = last_row.get('per_proxy', np.nan)
-            roe = last_row.get('roe', np.nan)
-            if pd.notnull(per) and pd.notnull(roe) and 0 < per < self.strategy.PER_THRESHOLD_BUY and roe > self.strategy.ROE_MIN:
+            if df.empty or 'fa_score' not in df.columns: continue
+            last = df.iloc[-1]
+            fa_score = last.get('fa_score', None)
+            is_eligible = last.get('is_eligible', False)
+            debt_ratio = last.get('debt_ratio', None)
+            # is_eligible 플래그 + fa_score >= 60 + 부채비율 200% 이하
+            if (
+                is_eligible and
+                fa_score is not None and float(fa_score) >= self.strategy.FA_SCORE_MIN and
+                (debt_ratio is None or float(debt_ratio) <= self.strategy.DEBT_RATIO_MAX)
+            ):
                 fa_candidates.append(ticker)
         
-        import json, os
         os.makedirs("logs", exist_ok=True)
         with open("logs/fa_candidates.json", "w", encoding="utf-8") as f:
             json.dump(fa_candidates, f)
@@ -71,6 +80,9 @@ class LiveTrader:
         with open("logs/dashboard_state.json", "w", encoding="utf-8") as f:
             json.dump(dashboard_state, f, ensure_ascii=False, indent=2)
             
+        # DB 동기화
+        self._sync_universe_to_db(fa_candidates, ohlcv_store)
+            
         return fa_candidates
 
     def run_daily_batch(self):
@@ -87,9 +99,12 @@ class LiveTrader:
         total_eval = cash + sum(p['qty'] * p['current_price'] for p in positions.values())
         logging.info(f"총 자산 추정치: {total_eval:,.0f}원")
         
-        # 대시보드 표시용 상태 업데이트 (전광판 모드용)
-        import json, os
-        os.makedirs("logs", exist_ok=True)
+        # DB 동기화
+        self._sync_balance_and_positions(balance_info, total_eval)
+        
+        # 대시보드 표시용 상태 업데이트
+        if not os.path.exists("logs"):
+            os.makedirs("logs", exist_ok=True)
         dashboard_state = {"timeline": []}
         if os.path.exists("logs/dashboard_state.json"):
             try:
@@ -113,7 +128,6 @@ class LiveTrader:
         end_date = datetime.datetime.now().strftime('%Y-%m-%d')
         start_date = (datetime.datetime.now() - datetime.timedelta(days=200)).strftime('%Y-%m-%d')
         
-        import json
         try:
             with open("logs/fa_candidates.json", "r", encoding="utf-8") as f:
                 fa_candidates = json.load(f)
@@ -125,18 +139,36 @@ class LiveTrader:
         logging.info(f"[데이터 로드] 관심 종목 + 보유 종목 ({len(tickers)}개) 초고속 병합 중...")
         ohlcv_store = download_multiple_stocks(tickers, start=start_date, end=end_date, show_progress=False)
         ohlcv_store = enrich_ohlcv_with_fa(self.db, ohlcv_store, end_date)
+        self.last_ohlcv_store = ohlcv_store
         
         # 3. 시그널 생성 및 타겟 비중 산출
         print("[시그널 생성] 전 종목 전략 평가 중...")
         target_positions = {}
         
+        # KOSPI 200MA 기준 시장 국면 판단 (루프 밖에서 1회만 계산)
+        # ponytail: download_kospi_index가 ^KS11 전용 함수, download_multiple_stocks는 .KS suffix 필요
+        try:
+            start_date_kospi = (datetime.datetime.now() - datetime.timedelta(days=320)).strftime('%Y-%m-%d')
+            kospi_close = download_kospi_index(start_date_kospi, end_date)
+            if len(kospi_close) >= 200:
+                ma200 = kospi_close.rolling(200).mean()
+                market_regime = "UPTREND" if kospi_close.iloc[-1] > ma200.iloc[-1] else "DOWNTREND"
+            elif len(kospi_close) >= 60:
+                ma200 = kospi_close.rolling(200, min_periods=60).mean()
+                market_regime = "UPTREND" if kospi_close.iloc[-1] > ma200.iloc[-1] else "DOWNTREND"
+            else:
+                market_regime = "SIDEWAYS"
+        except Exception as e:
+            logging.warning(f"KOSPI 지수 다운로드 실패: {e}. SIDEWAYS로 처리.")
+            market_regime = "SIDEWAYS"
+        logging.info(f"[시장 국면] KOSPI 200MA 기준 현재 Regime: {market_regime}")
+        
         for ticker, df in ohlcv_store.items():
             if df.empty or len(df) < 60:
                 continue
                 
-            # 가짜 regime_df (라이브러리 외부 의존성을 줄이기 위해 일단 횡보장으로 간주, 향후 시장 레짐 적용 가능)
             regime_df = pd.DataFrame(index=df.index)
-            regime_df["REGIME"] = "UPTREND" # 임시로 항상 UPTREND 가정 (또는 별도 지수 데이터로 판별 가능)
+            regime_df["REGIME"] = market_regime
             
             # 여기서 과거 포지션 상태를 유지해야 하지만, 당일 시그널만 보기 위해 초기 상태로 평가
             # 실제로는 이전에 매수한 종목인지 여부를 state에 반영해야 함
@@ -228,6 +260,27 @@ class LiveTrader:
             
             print(f"[주문 실행] {action} {ticker} 수량: {qty}주 (사유: {order['reason']})")
             
+            current_price = None
+            if hasattr(self, 'last_ohlcv_store') and ticker in self.last_ohlcv_store and not self.last_ohlcv_store[ticker].empty:
+                current_price = float(self.last_ohlcv_store[ticker].iloc[-1]['close'])
+            
+            # DB 주문 데이터 생성
+            from storage.postgres.repositories.order_repo import create_order, attach_broker_order_id, update_order_status
+            order_id = None
+            try:
+                order_id = create_order(self.db, {
+                    "symbol": ticker,
+                    "order_side_code": action,
+                    "strategy_name": self.strategy_name,
+                    "qty": qty,
+                    "price": current_price,
+                    "market_type_code": "KOSPI",
+                    "instrument_type_code": "STOCK",
+                    "order_type_code": "MARKET"
+                })
+            except Exception as e:
+                logging.error(f"[DB 에러] 주문 기록 생성 실패: {e}")
+                
             # API 호출
             try:
                 if action == "BUY":
@@ -235,5 +288,126 @@ class LiveTrader:
                 else:
                     resp = self.broker.place_market_sell(ticker, qty)
                 print(f" -> 결과: {resp}")
+                
+                # DB 주문 연동 업데이트
+                if resp and isinstance(resp, dict) and order_id:
+                    rt_cd = resp.get("rt_cd")
+                    output = resp.get("output", {})
+                    odno = output.get("ODNO") if isinstance(output, dict) else None
+                    
+                    if rt_cd == '0' and odno:
+                        attach_broker_order_id(self.db, order_id, odno, resp)
+                        # 시장가는 실시간 즉시 전량 체결로 간주
+                        update_order_status(self.db, order_id, "FILLED", filled_qty=qty, avg_fill_price=current_price, note="시장가 주문 접수 및 즉시 체결 완료")
+                    else:
+                        msg = resp.get("msg1", "주문 제출 거부됨")
+                        update_order_status(self.db, order_id, "REJECTED", note=msg)
             except Exception as e:
                 print(f" -> [에러] 주문 실패: {e}")
+                if order_id:
+                    try:
+                        update_order_status(self.db, order_id, "REJECTED", note=str(e))
+                    except: pass
+
+    def _sync_balance_and_positions(self, balance_info, total_eval):
+        cash = balance_info['cash']
+        positions = balance_info['positions']
+        stock_value = total_eval - cash
+        
+        # 1. balance_history 저장
+        from storage.postgres.repositories.balance_repo import insert_balance_history
+        try:
+            insert_balance_history(self.db, self.strategy_name, {
+                "cash": cash,
+                "stock_value": stock_value,
+                "total_value": total_eval,
+                "date": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            })
+            logging.info(f"[DB 동기화] balance_history 기록 완료")
+        except Exception as e:
+            logging.error(f"[DB 동기화 에러] balance_history 기록 실패: {e}")
+            
+        # 2. positions 테이블 저장
+        from storage.postgres.repositories.position_repo import upsert_position, zero_out_position, fetch_active_position_symbols
+        try:
+            db_symbols = fetch_active_position_symbols(self.db, self.strategy_name)
+            
+            for symbol, pos in positions.items():
+                upsert_position(self.db, self.strategy_name, symbol, {
+                    "qty": pos["qty"],
+                    "avg_cost": pos["avg_price"],
+                    "market_type_code": "KOSPI",
+                    "instrument_type_code": "STOCK"
+                })
+                
+            for db_symbol in db_symbols:
+                if db_symbol not in positions:
+                    zero_out_position(self.db, self.strategy_name, db_symbol)
+            logging.info(f"[DB 동기화] positions 테이블 갱신 완료")
+        except Exception as e:
+            logging.error(f"[DB 동기화 에러] positions 테이블 갱신 실패: {e}")
+
+    def _sync_universe_to_db(self, fa_candidates, ohlcv_store):
+        try:
+            strategy = self.db.fetch_one(
+                "SELECT id FROM strategies WHERE name = %s",
+                (self.strategy_name,)
+            )
+            if not strategy:
+                logging.error(f"[DB 에러] 전략 {self.strategy_name}을 찾을 수 없습니다.")
+                return
+            strategy_id = strategy["id"]
+            
+            current_rows = self.db.fetch_all(
+                "SELECT symbol FROM universe WHERE strategy_id = %s AND universe_status_code = 'ACTIVE'",
+                (strategy_id,)
+            )
+            active_symbols = {r["symbol"] for r in current_rows}
+            
+            today = datetime.date.today()
+            
+            for ticker in fa_candidates:
+                symbol = ticker.split('.')[0]
+                fa_score = None
+                if ohlcv_store and ticker in ohlcv_store and not ohlcv_store[ticker].empty:
+                    fa_score = ohlcv_store[ticker].iloc[-1].get('fa_score', None)
+                    if pd.notnull(fa_score):
+                        fa_score = float(fa_score)
+                    else:
+                        fa_score = None
+                
+                self.db.execute(
+                    """
+                    INSERT INTO universe (
+                        strategy_id, symbol, market_type_code, instrument_type_code,
+                        universe_status_code, fa_score, entry_date
+                    )
+                    VALUES (%s, %s, 'KOSPI', 'STOCK', 'ACTIVE', %s, %s)
+                    ON CONFLICT (strategy_id, symbol)
+                    DO UPDATE SET
+                        universe_status_code = 'ACTIVE',
+                        fa_score = COALESCE(EXCLUDED.fa_score, universe.fa_score),
+                        updated_at = NOW()
+                    """,
+                    (strategy_id, symbol, fa_score, today)
+                )
+                
+            balance_info = self.broker.get_balance()
+            held_symbols = set(balance_info.get('positions', {}).keys())
+            
+            candidates_symbols = {t.split('.')[0] for t in fa_candidates}
+            
+            for old_symbol in active_symbols:
+                if old_symbol not in candidates_symbols:
+                    new_status = 'SELL_ONLY' if old_symbol in held_symbols else 'REMOVED'
+                    self.db.execute(
+                        """
+                        UPDATE universe
+                        SET universe_status_code = %s, updated_at = NOW()
+                        WHERE strategy_id = %s AND symbol = %s
+                        """,
+                        (new_status, strategy_id, old_symbol)
+                    )
+            logging.info("[DB 동기화] universe 테이블 갱신 완료")
+        except Exception as e:
+            logging.error(f"[DB 동기화 에러] universe 테이블 갱신 실패: {e}")

@@ -3,7 +3,9 @@ from datetime import date
 from storage.postgres.connection import PostgreDB
 from storage.postgres.repositories.company_quarter_fa_repo import fetch_latest_company_fa_as_of
 
-def enrich_ohlcv_with_fa(db: PostgreDB, ohlcv_store: dict[str, pd.DataFrame], cutoff_date: date, model_version: str = "v1") -> dict[str, pd.DataFrame]:
+FA_MODEL_VERSION = "topdown-fa-v1.0.0"
+
+def enrich_ohlcv_with_fa(db: PostgreDB, ohlcv_store: dict[str, pd.DataFrame], cutoff_date: date, model_version: str = FA_MODEL_VERSION) -> dict[str, pd.DataFrame]:
     """
     ohlcv_store의 각 종목 OHLCV DataFrame에 company_quarter_fa의 재무 지표를 병합합니다.
     look-ahead bias를 방지하기 위해 available_date를 기준으로 병합(merge_asof)합니다.
@@ -13,7 +15,6 @@ def enrich_ohlcv_with_fa(db: PostgreDB, ohlcv_store: dict[str, pd.DataFrame], cu
         
     tickers_with_ks = list(ohlcv_store.keys())
     clean_tickers = [t.split('.')[0] for t in tickers_with_ks]
-    ticker_map = {t.split('.')[0]: t for t in tickers_with_ks}
     
     # 1. DB에서 조건에 맞는 FA 데이터 전체 조회
     # fetch_latest_company_fa_as_of()는 최신 1행만 반환하므로, 
@@ -21,7 +22,10 @@ def enrich_ohlcv_with_fa(db: PostgreDB, ohlcv_store: dict[str, pd.DataFrame], cu
     
     placeholders = ", ".join(["%s"] * len(clean_tickers))
     query = f"""
-        SELECT stock_code, available_date, per_proxy, roe, fa_score
+        SELECT stock_code, available_date,
+               fa_score, is_eligible,
+               per_proxy, pbr_proxy, roe,
+               debt_ratio, operating_income_growth_yoy
         FROM company_quarter_fa
         WHERE model_version = %s
           AND stock_code IN ({placeholders})

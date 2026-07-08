@@ -62,6 +62,9 @@ def main():
             return
         else:
             orders = trader.run_daily_batch()
+            # dry_run이 아닌 경우에만 실제 주문 제출
+            if not getattr(args, 'dry_run', False) and orders:
+                trader._execute_orders(orders)
         
         # 결과 메시지 조립
         if not orders:
