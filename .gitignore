@@ -12,3 +12,7 @@ __pycache__
 database
 logs/
 storage/postgres/database/  
+
+# Obsidian workspace
+.obsidian/workspace.json
+obsidian/.obsidian/workspace.json
