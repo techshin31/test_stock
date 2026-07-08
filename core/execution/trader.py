@@ -107,7 +107,7 @@ class LiveTrader:
         cash = balance_info['cash']
         positions = balance_info['positions']
         
-        # ponytail: 2026-07-09 하루만 장 초반(09:00 이후)에 포지션을 자동 청산(현금화)하는 일회성 트리거
+        # 2026-07-09 하루만 장 초반(09:00 이후)에 포지션을 자동 청산(현금화)하는 일회성 트리거
         today_str = datetime.date.today().strftime('%Y-%m-%d')
         flag_file = "logs/liquidated_20260709.flag"
         if today_str == "2026-07-09":
