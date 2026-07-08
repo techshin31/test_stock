@@ -55,6 +55,22 @@ class LiveTrader:
         with open("logs/fa_candidates.json", "w", encoding="utf-8") as f:
             json.dump(fa_candidates, f)
         logging.info(f"프리마켓 FA 필터링 완료. 관심 종목 {len(fa_candidates)}개 저장.")
+        
+        # 타임라인 업데이트
+        dashboard_state = {"timeline": []}
+        if os.path.exists("logs/dashboard_state.json"):
+            try:
+                with open("logs/dashboard_state.json", "r", encoding="utf-8") as f:
+                    dashboard_state = json.load(f)
+            except: pass
+        
+        timeline = dashboard_state.setdefault("timeline", [])
+        timeline.append(f"[{datetime.datetime.now().strftime('%H:%M')}] ☀️ 프리마켓 우량주(FA) {len(fa_candidates)}개 발굴 완료")
+        dashboard_state["timeline"] = timeline[-5:] # 최근 5개 유지
+        
+        with open("logs/dashboard_state.json", "w", encoding="utf-8") as f:
+            json.dump(dashboard_state, f, ensure_ascii=False, indent=2)
+            
         return fa_candidates
 
     def run_daily_batch(self):
@@ -71,15 +87,21 @@ class LiveTrader:
         total_eval = cash + sum(p['qty'] * p['current_price'] for p in positions.values())
         logging.info(f"총 자산 추정치: {total_eval:,.0f}원")
         
-        # 대시보드 표시용 상태 저장 (전광판 모드용)
+        # 대시보드 표시용 상태 업데이트 (전광판 모드용)
         import json, os
         os.makedirs("logs", exist_ok=True)
-        dashboard_state = {
-            "updated_at": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            "cash": cash,
-            "total_eval": total_eval,
-            "positions": list(positions.keys())
-        }
+        dashboard_state = {"timeline": []}
+        if os.path.exists("logs/dashboard_state.json"):
+            try:
+                with open("logs/dashboard_state.json", "r", encoding="utf-8") as f:
+                    dashboard_state = json.load(f)
+            except: pass
+            
+        dashboard_state["updated_at"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        dashboard_state["cash"] = cash
+        dashboard_state["total_eval"] = total_eval
+        dashboard_state["positions"] = list(positions.keys())
+        
         with open("logs/dashboard_state.json", "w", encoding="utf-8") as f:
             json.dump(dashboard_state, f, ensure_ascii=False, indent=2)
             
@@ -139,8 +161,24 @@ class LiveTrader:
         
         # 4. 주문 실행 (주식 수 계산 및 API 전송)
         orders = self._calculate_orders(total_eval, positions, target_positions, ohlcv_store)
-        self._execute_orders(orders)
+        # 타임라인 업데이트 (장중)
+        buy_count = sum(1 for o in orders if o['type'] == 'BUY')
+        sell_count = sum(1 for o in orders if o['type'] == 'SELL')
         
+        dashboard_state = {"timeline": []}
+        if os.path.exists("logs/dashboard_state.json"):
+            try:
+                with open("logs/dashboard_state.json", "r", encoding="utf-8") as f:
+                    dashboard_state = json.load(f)
+            except: pass
+            
+        timeline = dashboard_state.setdefault("timeline", [])
+        timeline.append(f"[{datetime.datetime.now().strftime('%H:%M')}] ⚡ 장중 매매 완료: 신규매수 {buy_count}건 / 손절·익절 {sell_count}건")
+        dashboard_state["timeline"] = timeline[-5:]
+        
+        with open("logs/dashboard_state.json", "w", encoding="utf-8") as f:
+            json.dump(dashboard_state, f, ensure_ascii=False, indent=2)
+            
         print(f"[{datetime.datetime.now()}] 배치 종료")
         return orders
         

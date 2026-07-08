@@ -35,13 +35,21 @@ def draw_dashboard(last_mode, next_run_time):
         
     print("-----------------------------------------------------------------------")
     print(f" 🎯 최근 실행된 작업: {last_run_mode if last_run_mode else '없음'}")
+    print(" 📋 [최근 작업 타임라인]")
+    if 'state' in locals() and state.get("timeline"):
+        for event in state["timeline"]:
+            print(f"    {event}")
+    else:
+        print("    (아직 기록된 타임라인이 없습니다)")
     
     now = datetime.datetime.now()
-    print(f" ⏳ 현재 시간: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"\n ⏳ 현재 시간: {now.strftime('%Y-%m-%d %H:%M:%S')}")
     
     if now.weekday() >= 5:
         print(" 🛑 주말은 휴장입니다. 편안한 휴일 보내세요!")
     else:
+        print(" - 평일 08:30 : 프리마켓 FA 종목 필터링")
+        print(" - 평일 09:00 ~ 15:20 : 매 분마다 장중 실전 매매 스캔")
         print(f" ⏭️ 다음 자동 실행 예정: {next_run_time}")
     
     print("=======================================================================")
@@ -55,9 +63,9 @@ def get_next_run_time(now):
     if now.hour < 8 or (now.hour == 8 and now.minute < 30):
         return "오늘 08:30 (프리마켓 필터링)"
     
-    # 장중 시간
-    if now.hour < 15:
-        return f"오늘 {now.hour + 1:02d}:00 (장중 매매 스캔)"
+    # 장중 시간 (09:00 ~ 15:20)
+    if (9 <= now.hour <= 14) or (now.hour == 15 and now.minute < 20):
+        return "1분 뒤 (장중 매 분마다 스캔 중...)"
         
     return "내일 08:30 (프리마켓 필터링)"
 
@@ -81,13 +89,17 @@ while True:
     
     # 평일만 동작
     if now.weekday() < 5:
+        # 1. 프리마켓 (08:30)
         if now.hour == 8 and now.minute == 30 and last_run_mark != "8:30":
             run_command(mode="premarket")
             last_run_mark = "8:30"
             
-        elif 9 <= now.hour <= 15 and now.minute == 0 and last_run_mark != str(now.hour):
-            run_command(mode="intraday")
-            last_run_mark = str(now.hour)
+        # 2. 장중 (09:00 ~ 15:20 매 분마다)
+        elif (9 <= now.hour <= 14) or (now.hour == 15 and now.minute <= 20):
+            current_time_str = f"{now.hour}:{now.minute}"
+            if last_run_mark != current_time_str:
+                run_command(mode="intraday")
+                last_run_mark = current_time_str
             
     # 대시보드 새로고침
     draw_dashboard(last_run_mode, get_next_run_time(now))
