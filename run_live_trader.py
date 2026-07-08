@@ -29,6 +29,7 @@ def main():
     parser.add_argument("--mock", action="store_true", help="모의투자 계좌 사용")
     parser.add_argument("--dry-run", action="store_true", help="주문 실행 없이 시그널만 계산")
     parser.add_argument("--premarket", action="store_true", help="장 시작 전 FA 필터링(관심종목 추출) 1회 실행")
+    parser.add_argument("--liquidate", action="store_true", help="보유 중인 모든 종목을 즉시 전량 시장가 매도하여 현금화")
     args = parser.parse_args()
     
     bot = TelegramBot()
@@ -38,6 +39,9 @@ def main():
             bot.send_message("🚀 <b>[DRY RUN] 실전 매매 스크립트 가동</b>\n주문을 실행하지 않고 시그널만 분석합니다.")
         elif args.premarket:
             bot.send_message(f"🚀 <b>장 시작 전 준비 스크립트 가동</b>\n오늘의 FA/TA 타겟 유니버스를 필터링합니다.")
+        elif args.liquidate:
+            mode = "모의투자" if args.mock else "실전투자"
+            bot.send_message(f"🚨 <b>[{mode}] 전체 포지션 청산 실행</b>\n보유 중인 모든 주식을 전량 시장가 매도합니다.")
         else:
             mode = "모의투자" if args.mock else "실전투자"
             bot.send_message(f"🚀 <b>[{mode}] 실전 매매 스크립트 가동</b>\nFA+TA 모멘텀 배치 작업을 시작합니다.")
@@ -53,6 +57,42 @@ def main():
                 for o in orders:
                     print(f" -> {o['type']} {o['ticker']} 수량: {o['qty']}")
             trader._execute_orders = mock_execute
+            
+        if args.liquidate:
+            balance_info = trader.broker.get_balance()
+            positions = balance_info.get('positions', {})
+            if not positions:
+                msg = "✅ 보유 중인 포지션이 없습니다."
+                logging.info(msg)
+                bot.send_message(msg)
+                return
+            
+            sell_orders = []
+            for ticker, pos in positions.items():
+                sell_orders.append({
+                    "type": "SELL",
+                    "ticker": ticker,
+                    "qty": pos['qty'],
+                    "reason": "USER_REQUESTED_LIQUIDATION"
+                })
+            
+            trader._execute_orders(sell_orders)
+            
+            # DB 동기화를 위해 잔고 다시 읽어서 zero out
+            # 잠시 대기 후 잔고 조회 (체결 반영 시간 고려)
+            if not getattr(args, 'dry_run', False):
+                import time
+                time.sleep(2)
+                balance_info = trader.broker.get_balance()
+                cash = balance_info['cash']
+                # 평가금액 재계산
+                total_eval = cash + sum(p['qty'] * p['current_price'] for p in balance_info['positions'].values())
+                trader._sync_balance_and_positions(balance_info, total_eval)
+                
+            msg = f"✅ <b>전체 포지션 청산 완료</b>\n{len(sell_orders)}개 종목을 전량 시장가 매도 주문 전송했습니다."
+            logging.info(msg)
+            bot.send_message(msg)
+            return
             
         if args.premarket:
             trader.run_premarket_batch()

@@ -27,7 +27,7 @@ tags:
 
 ```text
 fetch_strategy_params
-  -> RiskNeutralStrategy(params)
+  -> FaTaMomentumStrategy(params)
   -> signal_date = previous_krx_trading_day(plan_date)
   -> fetch_universe_for_date
   -> if empty and test: seed_test_universe
@@ -68,7 +68,7 @@ OHLCV는 yfinance로 조회한다.
 
 ## 신호 계산
 
-종목별로 `RiskNeutralStrategy.make_signals_with_metadata(..., state=None)`를 호출한다.
+종목별로 `FaTaMomentumStrategy.make_signals_with_metadata(..., state=None)`를 호출한다.
 
 중요 구현 선택:
 

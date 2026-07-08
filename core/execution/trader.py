@@ -45,9 +45,23 @@ class LiveTrader:
         ohlcv_store = download_multiple_stocks(tickers, start=start_date, end=end_date, show_progress=False)
         ohlcv_store = enrich_ohlcv_with_fa(self.db, ohlcv_store, end_date)
         
+        # 기업 위험 상태(매수 차단 종목) 조회
+        from storage.postgres.repositories.company_risk_repo import fetch_buy_blocked_stock_codes
+        try:
+            blocked_codes = fetch_buy_blocked_stock_codes(self.db, datetime.date.today())
+        except Exception as e:
+            logging.error(f"기업 위험 상태 조회 실패: {e}")
+            blocked_codes = set()
+
         fa_candidates = []
         for ticker, df in ohlcv_store.items():
             if df.empty or 'fa_score' not in df.columns: continue
+            
+            symbol = ticker.split('.')[0]
+            if symbol in blocked_codes:
+                logging.info(f"[{symbol}] 기업 위험 상태(BLOCK_BUY/SELL_ONLY)로 후보 제외")
+                continue
+                
             last = df.iloc[-1]
             fa_score = last.get('fa_score', None)
             is_eligible = last.get('is_eligible', False)
@@ -92,6 +106,47 @@ class LiveTrader:
         balance_info = self.broker.get_balance()
         cash = balance_info['cash']
         positions = balance_info['positions']
+        
+        # ponytail: 2026-07-09 하루만 장 초반(09:00 이후)에 포지션을 자동 청산(현금화)하는 일회성 트리거
+        today_str = datetime.date.today().strftime('%Y-%m-%d')
+        flag_file = "logs/liquidated_20260709.flag"
+        if today_str == "2026-07-09":
+            if not os.path.exists(flag_file):
+                now = datetime.datetime.now()
+                if now.hour >= 9:
+                    logging.info("[일회성 자동 청산] 2026-07-09 아침 전체 포지션 강제 현금화 실행!")
+                    sell_orders = []
+                    for ticker, pos in positions.items():
+                        sell_orders.append({
+                            "type": "SELL",
+                            "ticker": ticker,
+                            "qty": pos['qty'],
+                            "reason": "ONETIME_AUTO_LIQUIDATION_20260709"
+                        })
+                    if sell_orders:
+                        self._execute_orders(sell_orders)
+                        # 대기 후 잔고 재조회
+                        import time
+                        time.sleep(2)
+                        balance_info = self.broker.get_balance()
+                        cash = balance_info['cash']
+                        positions = balance_info['positions']
+                    
+                    # 플래그 작성하여 두 번 실행 방지
+                    try:
+                        with open(flag_file, "w") as f:
+                            f.write(f"Liquidated at {now}\n")
+                    except Exception as e:
+                        logging.error(f"청산 플래그 생성 실패: {e}")
+        else:
+            # 2026-07-09가 지난 다른 날에는 플래그 파일이 존재하면 자동으로 청소 삭제
+            if os.path.exists(flag_file):
+                try:
+                    os.remove(flag_file)
+                    logging.info("[일회성 자동 청산] 사용 완료된 청산 플래그 파일(.flag) 자동 청소 완료.")
+                except Exception as e:
+                    logging.error(f"청산 플래그 파일 삭제 실패: {e}")
+                    
         logging.info(f"현재 예수금: {cash:,.0f}원")
         logging.info(f"보유 종목: {list(positions.keys())}")
         
@@ -161,8 +216,14 @@ class LiveTrader:
         except Exception as e:
             logging.warning(f"KOSPI 지수 다운로드 실패: {e}. SIDEWAYS로 처리.")
             market_regime = "SIDEWAYS"
-        logging.info(f"[시장 국면] KOSPI 200MA 기준 현재 Regime: {market_regime}")
-        
+        # 기업 위험 상태(매수 차단 종목) 조회
+        from storage.postgres.repositories.company_risk_repo import fetch_buy_blocked_stock_codes
+        try:
+            blocked_codes = fetch_buy_blocked_stock_codes(self.db, datetime.date.today())
+        except Exception as e:
+            logging.error(f"기업 위험 상태 조회 실패: {e}")
+            blocked_codes = set()
+            
         for ticker, df in ohlcv_store.items():
             if df.empty or len(df) < 60:
                 continue
@@ -176,6 +237,11 @@ class LiveTrader:
             
             if not signals.empty:
                 target_weight = float(signals.iloc[-1])
+                symbol = ticker.split('.')[0]
+                
+                # 기업 위험 상태(BLOCK_BUY/SELL_ONLY)로 매수 차단된 종목 신규 진입 차단
+                if symbol in blocked_codes and ticker not in positions:
+                    target_weight = 0.0
                 
                 # 보유 중인 종목인데 타겟이 0.0이면 매도 (또는 보유 중지)
                 if ticker in positions and target_weight == 0.0:
