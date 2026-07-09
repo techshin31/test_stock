@@ -34,7 +34,7 @@ def draw_dashboard(last_mode, next_run_time):
         print(" [첫 매매 사이클 대기 중...]")
         
     print("-----------------------------------------------------------------------")
-    print(f" 🎯 최근 실행된 작업: {last_run_mode if last_run_mode else '없음'}")
+    print(f" 🎯 최근 실행된 작업: {last_mode if last_mode else '없음'}")
     print(" 📋 [최근 작업 타임라인]")
     if 'state' in locals() and state.get("timeline"):
         for event in state["timeline"]:

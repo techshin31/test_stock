@@ -1,5 +1,7 @@
 @echo off
-chcp 65001
-title FA/TA 모멘텀 라이브 스케줄러 (실시간 모니터링)
+chcp 65001 > nul
+set PYTHONUTF8=1
+set PYTHONPATH=%~dp0
+title FA/TA Live Trader Scheduler
 uv run python scheduler.py
 pause

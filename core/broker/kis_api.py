@@ -48,8 +48,10 @@ class KisBroker:
             
         # output2의 첫 번째 요소에 예수금 정보가 있음
         summary = resp["output2"][0]
-        # prvs_rcdv_amt: D+2 예상 예수금 (가용 현금)
-        cash = float(summary.get("prvs_rcdv_amt", 0))
+        # prvs_rcdl_excc_amt: D+2 결제 후 실제 가용 현금 (전량 매도 다음날도 정확히 반영됨)
+        # dnca_tot_amt는 당일 현금만 잡혀 D+2 대기분을 놓치므로 사용하지 않음
+        cash = float(summary.get("prvs_rcdl_excc_amt", 0))
+        total_asset = float(summary.get("tot_evlu_amt", 0))
         
         positions = {}
         if "output1" in resp:
@@ -66,21 +68,24 @@ class KisBroker:
                     
         return {
             "cash": cash,
+            "total_asset": total_asset,
             "positions": positions
         }
         
     def place_market_buy(self, ticker: str, qty: int):
         """시장가 매수"""
+        clean_ticker = ticker.split('.')[0]
         resp = self.broker.create_market_buy_order(
-            symbol=ticker,
+            symbol=clean_ticker,
             quantity=qty
         )
         return resp
         
     def place_market_sell(self, ticker: str, qty: int):
         """시장가 매도"""
+        clean_ticker = ticker.split('.')[0]
         resp = self.broker.create_market_sell_order(
-            symbol=ticker,
+            symbol=clean_ticker,
             quantity=qty
         )
         return resp

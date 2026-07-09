@@ -134,7 +134,7 @@ class FaTaMomentumStrategy(AbstractStrategy):
                 
             # [매수] FA 우량 판정 통과 + TA 골든크로스 + 모멘텀 양수
             elif new_target is None and _state.position == 0.0:
-                if regime == MarketRegime.UPTREND.name:
+                if regime in (MarketRegime.UPTREND.name, MarketRegime.SIDEWAYS.name):
                     # FA: DB에서 계산된 종합 점수와 부채비율 조건
                     cond_fa = (
                         is_eligible and

@@ -150,8 +150,9 @@ class LiveTrader:
         logging.info(f"현재 예수금: {cash:,.0f}원")
         logging.info(f"보유 종목: {list(positions.keys())}")
         
-        # 총 자산 (예수금 + 평가금액)
-        total_eval = cash + sum(p['qty'] * p['current_price'] for p in positions.values())
+        # 총 자산 — API의 tot_evlu_amt를 우선 사용 (D+2 결제분까지 정확히 포함)
+        # 없을 경우 예수금 + 평가금액 합산으로 대체
+        total_eval = balance_info.get("total_asset") or (cash + sum(p['qty'] * p['current_price'] for p in positions.values()))
         logging.info(f"총 자산 추정치: {total_eval:,.0f}원")
         
         # DB 동기화
@@ -236,6 +237,9 @@ class LiveTrader:
             signals = self.strategy.make_signals(df, regime_df, state=None)
             
             if not signals.empty:
+                # ponytail: 전략이 신규 매수/매도 시점에만 스파스하게 값을 채우고 평상시(유지일)에는 NaN을 내보내므로,
+                # ffill()을 사용하여 현재 시점의 활성 보유 비중을 정상적으로 복원시킵니다.
+                signals = signals.ffill().fillna(0.0)
                 target_weight = float(signals.iloc[-1])
                 symbol = ticker.split('.')[0]
                 
