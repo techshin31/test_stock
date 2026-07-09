@@ -259,7 +259,33 @@ class LiveTrader:
             if ticker not in target_positions:
                 target_positions[ticker] = self.strategy.ENTRY_SIZE # 기본 비중 유지
                 
-        print(f"[타겟 산출 완료] 타겟 포지션 수: {len(target_positions)}개")
+        # ponytail: 포트폴리오 총 비중 제한 (예수금 마이너스 및 미수거래 원천 방지)
+        # 기보유 종목 비중을 우선 유지한 상태에서, 신규 진입 종목들은 60일 모멘텀 순으로 정렬하여 
+        # 총 비중 합이 1.0 (100%)을 넘지 않도록 제한합니다.
+        total_allocated = 0.0
+        new_candidates = {}
+        for ticker, weight in list(target_positions.items()):
+            if weight <= 0.0:
+                continue
+            if ticker in positions:
+                total_allocated += weight
+            else:
+                try:
+                    df = ohlcv_store[ticker]
+                    mom = float(df['close'].pct_change(60).iloc[-1]) if len(df) >= 60 else 0.0
+                except:
+                    mom = 0.0
+                new_candidates[ticker] = {"weight": weight, "mom": mom}
+                
+        sorted_new = sorted(new_candidates.items(), key=lambda x: x[1]['mom'], reverse=True)
+        for ticker, info in sorted_new:
+            w = info['weight']
+            if total_allocated + w <= 1.05: # 105% 버퍼
+                total_allocated += w
+            else:
+                target_positions[ticker] = 0.0 # 예산 초과 종목 제외
+                
+        print(f"[타겟 산출 완료] 타겟 포지션 수: {len([t for t, w in target_positions.items() if w > 0.0])}개")
         
         # 4. 주문 실행 (주식 수 계산 및 API 전송)
         orders = self._calculate_orders(total_eval, positions, target_positions, ohlcv_store)
@@ -323,7 +349,10 @@ class LiveTrader:
         return orders
         
     def _execute_orders(self, orders):
+        import time
         for order in orders:
+            # ponytail: 한국투자증권 API의 모의투자 초당 거래제한(2 TPS)을 초과하지 않도록 0.6초 딜레이 부여
+            time.sleep(0.6)
             ticker = order['ticker']
             qty = order['qty']
             action = order['type']
