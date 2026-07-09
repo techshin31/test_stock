@@ -23,10 +23,12 @@ def draw_dashboard(last_mode, next_run_time):
             total = state.get("total_eval", 0)
             positions = state.get("positions", [])
             updated_at = state.get("updated_at", "-")
+            total_slippage = state.get("total_slippage", 0)
             
             print(f" 🕒 최근 업데이트: {updated_at}")
             print(f" 💰 총 자산 추정치: {total:,.0f} 원")
             print(f" 💵 현재 예수금:   {cash:,.0f} 원")
+            print(f" 📉 누적 슬리피지:   {total_slippage:,.0f} 원")
             print(f" 📊 보유 종목({len(positions)}): {', '.join(positions) if positions else '없음'}")
         except:
             print(" [데이터 로딩 중...]")

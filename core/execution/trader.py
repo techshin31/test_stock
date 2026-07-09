@@ -107,46 +107,7 @@ class LiveTrader:
         cash = balance_info['cash']
         positions = balance_info['positions']
         
-        # 2026-07-09 하루만 장 초반(09:00 이후)에 포지션을 자동 청산(현금화)하는 일회성 트리거
-        today_str = datetime.date.today().strftime('%Y-%m-%d')
-        flag_file = "logs/liquidated_20260709.flag"
-        if today_str == "2026-07-09":
-            if not os.path.exists(flag_file):
-                now = datetime.datetime.now()
-                if now.hour >= 9:
-                    logging.info("[일회성 자동 청산] 2026-07-09 아침 전체 포지션 강제 현금화 실행!")
-                    sell_orders = []
-                    for ticker, pos in positions.items():
-                        sell_orders.append({
-                            "type": "SELL",
-                            "ticker": ticker,
-                            "qty": pos['qty'],
-                            "reason": "ONETIME_AUTO_LIQUIDATION_20260709"
-                        })
-                    if sell_orders:
-                        self._execute_orders(sell_orders)
-                        # 대기 후 잔고 재조회
-                        import time
-                        time.sleep(2)
-                        balance_info = self.broker.get_balance()
-                        cash = balance_info['cash']
-                        positions = balance_info['positions']
-                    
-                    # 플래그 작성하여 두 번 실행 방지
-                    try:
-                        with open(flag_file, "w") as f:
-                            f.write(f"Liquidated at {now}\n")
-                    except Exception as e:
-                        logging.error(f"청산 플래그 생성 실패: {e}")
-        else:
-            # 2026-07-09가 지난 다른 날에는 플래그 파일이 존재하면 자동으로 청소 삭제
-            if os.path.exists(flag_file):
-                try:
-                    os.remove(flag_file)
-                    logging.info("[일회성 자동 청산] 사용 완료된 청산 플래그 파일(.flag) 자동 청소 완료.")
-                except Exception as e:
-                    logging.error(f"청산 플래그 파일 삭제 실패: {e}")
-                    
+
         logging.info(f"현재 예수금: {cash:,.0f}원")
         logging.info(f"보유 종목: {list(positions.keys())}")
         
@@ -168,10 +129,18 @@ class LiveTrader:
                     dashboard_state = json.load(f)
             except: pass
             
+        # 누적 슬리피지 합산 조회
+        try:
+            row = self.db.fetch_one("SELECT SUM(slippage) as total FROM executions")
+            total_slippage = float(row['total'] or 0.0) if row else 0.0
+        except:
+            total_slippage = 0.0
+            
         dashboard_state["updated_at"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         dashboard_state["cash"] = cash
         dashboard_state["total_eval"] = total_eval
         dashboard_state["positions"] = list(positions.keys())
+        dashboard_state["total_slippage"] = total_slippage
         
         with open("logs/dashboard_state.json", "w", encoding="utf-8") as f:
             json.dump(dashboard_state, f, ensure_ascii=False, indent=2)
@@ -377,6 +346,10 @@ class LiveTrader:
         
     def _execute_orders(self, orders):
         import time
+        from core.constant.types import StockCap
+        from core.constant.values import SlippageParam
+        from storage.postgres.repositories.execution_repo import insert_execution
+        
         for order in orders:
             # ponytail: 한국투자증권 API의 모의투자 초당 거래제한(2 TPS)을 초과하지 않도록 0.6초 딜레이 부여
             time.sleep(0.6)
@@ -389,6 +362,21 @@ class LiveTrader:
             current_price = None
             if hasattr(self, 'last_ohlcv_store') and ticker in self.last_ohlcv_store and not self.last_ohlcv_store[ticker].empty:
                 current_price = float(self.last_ohlcv_store[ticker].iloc[-1]['close'])
+                
+            if not current_price or current_price <= 0:
+                current_price = 50000.0 # 비상용 기본가
+                
+            # 슬리피지 및 체결 단가 계산
+            cap = StockCap.LARGE # 기본 대형주 기준 (0.02% 슬리피지율)
+            slippage_rate = SlippageParam.total_slippage_rate(cap)
+            
+            slippage_unit = current_price * slippage_rate
+            if action == "BUY":
+                avg_fill_price = current_price + slippage_unit
+            else:
+                avg_fill_price = current_price - slippage_unit
+                
+            slippage_val = round(slippage_unit * qty, 4)
             
             # DB 주문 데이터 생성
             from storage.postgres.repositories.order_repo import create_order, attach_broker_order_id, update_order_status
@@ -424,7 +412,41 @@ class LiveTrader:
                     if rt_cd == '0' and odno:
                         attach_broker_order_id(self.db, order_id, odno, resp)
                         # 시장가는 실시간 즉시 전량 체결로 간주
-                        update_order_status(self.db, order_id, "FILLED", filled_qty=qty, avg_fill_price=current_price, note="시장가 주문 접수 및 즉시 체결 완료")
+                        update_order_status(self.db, order_id, "FILLED", filled_qty=qty, avg_fill_price=avg_fill_price, note="시장가 주문 접수 및 즉시 체결 완료")
+                        
+                        # executions 테이블에 체결 내역 기록
+                        amount = float(qty * avg_fill_price)
+                        exec_data = {
+                            "symbol": ticker.split('.')[0],
+                            "order_side_code": action,
+                            "qty": float(qty),
+                            "price": float(avg_fill_price),
+                            "amount": amount,
+                            "net_amount": amount,
+                            "market_type_code": "KOSPI",
+                            "instrument_type_code": "STOCK",
+                            "commission": 0.0,
+                            "tax": 0.0,
+                            "slippage": float(slippage_val)
+                        }
+                        try:
+                            insert_execution(self.db, order_id, exec_data)
+                            logging.info(f"[DB 동기화] 체결 데이터 기록 완료 (슬리피지: {slippage_val:,.0f}원)")
+                        except Exception as e:
+                            logging.error(f"[DB 에러] 체결 데이터 기록 실패: {e}")
+                            
+                        # logs/slippage.log 파일에 시계열 로그 누적 기록
+                        import datetime, os
+                        try:
+                            os.makedirs("logs", exist_ok=True)
+                            log_line = f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')},{ticker},{action},{qty},{current_price},{avg_fill_price:.2f},{slippage_val:.2f}\n"
+                            if not os.path.exists("logs/slippage.log"):
+                                with open("logs/slippage.log", "w", encoding="utf-8") as f:
+                                    f.write("timestamp,ticker,action,qty,expected_price,executed_price,slippage\n")
+                            with open("logs/slippage.log", "a", encoding="utf-8") as f:
+                                f.write(log_line)
+                        except Exception as e:
+                            logging.error(f"슬리피지 파일 로그 기록 실패: {e}")
                     else:
                         msg = resp.get("msg1", "주문 제출 거부됨")
                         update_order_status(self.db, order_id, "REJECTED", note=msg)
