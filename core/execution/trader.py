@@ -25,7 +25,7 @@ class LiveTrader:
         
         # 최적화된 파라미터 적용
         strategy_params = {
-            "entry_size": 0.2,      # 최대 5종목 분산
+            "entry_size": 0.18,     # 5종목 분산 (5 * 18% = 90% 비중, 10% 현금 유지)
             "ma_window": 60,        # 60일선 돌파 모멘텀
             "ma_window_fast": 20,
             "fa_score_min": 60.0,   # DB fa_score 진입 기준
@@ -259,31 +259,27 @@ class LiveTrader:
             if ticker not in target_positions:
                 target_positions[ticker] = self.strategy.ENTRY_SIZE # 기본 비중 유지
                 
-        # ponytail: 포트폴리오 총 비중 제한 (예수금 마이너스 및 미수거래 원천 방지)
-        # 기보유 종목 비중을 우선 유지한 상태에서, 신규 진입 종목들은 60일 모멘텀 순으로 정렬하여 
-        # 총 비중 합이 1.0 (100%)을 넘지 않도록 제한합니다.
-        total_allocated = 0.0
-        new_candidates = {}
-        for ticker, weight in list(target_positions.items()):
-            if weight <= 0.0:
-                continue
-            if ticker in positions:
-                total_allocated += weight
-            else:
-                try:
-                    df = ohlcv_store[ticker]
-                    mom = float(df['close'].pct_change(60).iloc[-1]) if len(df) >= 60 else 0.0
-                except:
-                    mom = 0.0
-                new_candidates[ticker] = {"weight": weight, "mom": mom}
-                
-        sorted_new = sorted(new_candidates.items(), key=lambda x: x[1]['mom'], reverse=True)
-        for ticker, info in sorted_new:
-            w = info['weight']
-            if total_allocated + w <= 1.05: # 105% 버퍼
-                total_allocated += w
-            else:
-                target_positions[ticker] = 0.0 # 예산 초과 종목 제외
+        # ponytail: 포트폴리오 다각화 및 리스크 분산 (예수금 마이너스/미수거래 방지)
+        # 1. 활성 타겟 종목(target_weight > 0.0) 필터링
+        active_targets = {t: w for t, w in target_positions.items() if w > 0.0}
+        total_w = sum(active_targets.values())
+        
+        # 2. 총합이 90% (0.90)가 되도록 비율을 조정(정규화)하여 예수금 10% 자동 보장
+        # 단, 개별 종목의 비중이 과도하게 커지는 것을 방지하기 위해 최대 20% (0.20) 한도를 씌웁니다.
+        if total_w > 0.0:
+            scale_factor = 0.90 / total_w
+            for ticker in list(target_positions.keys()):
+                if target_positions[ticker] > 0.0:
+                    # 정규화 후 개별 종목 최대 비중 20% 제한
+                    target_positions[ticker] = min(round(target_positions[ticker] * scale_factor, 4), 0.20)
+                    
+        # 3. 비중 조절 후 총합을 다시 체크하여 한도(0.90)에 맞춰 최종 조정
+        final_total = sum(w for t, w in target_positions.items() if w > 0.0)
+        if final_total > 0.90:
+            scale_factor_final = 0.90 / final_total
+            for ticker in list(target_positions.keys()):
+                if target_positions[ticker] > 0.0:
+                    target_positions[ticker] = round(target_positions[ticker] * scale_factor_final, 4)
                 
         print(f"[타겟 산출 완료] 타겟 포지션 수: {len([t for t, w in target_positions.items() if w > 0.0])}개")
         
@@ -311,12 +307,19 @@ class LiveTrader:
         return orders
         
     def _calculate_orders(self, total_eval, current_positions, target_positions, ohlcv_store):
-        """현재 비중과 타겟 비중을 비교하여 실제 매수/매도할 주식 수 계산"""
+        """현재 비중과 타겟 비중을 비교하여 실제 매수/매도할 주식 수 계산 (부분 매수/매도 포함 리밸런싱)"""
         orders = []
         
-        # 1. 매도 주문 먼저 계산 (현금 확보)
+        # 1. 매도 주문 계산 (현금 확보를 위해 먼저 실행)
         for ticker, pos in current_positions.items():
             target_weight = target_positions.get(ticker, 0.0)
+            current_price = ohlcv_store[ticker].iloc[-1]['close'] if ticker in ohlcv_store and not ohlcv_store[ticker].empty else pos['current_price']
+            if current_price <= 0:
+                continue
+                
+            current_value = pos['qty'] * current_price
+            target_value = total_eval * target_weight
+            
             if target_weight == 0.0:
                 # 전량 매도
                 orders.append({
@@ -325,25 +328,49 @@ class LiveTrader:
                     "qty": pos['qty'],
                     "reason": "DOWNTREND or OVERVALUED or MOMENTUM_LOSS"
                 })
-                
+            elif current_value > target_value * 1.10: # 10% 이상 초과 시 부분 매도
+                sell_qty = int((current_value - target_value) // current_price)
+                if sell_qty > 0:
+                    orders.append({
+                        "type": "SELL",
+                        "ticker": ticker,
+                        "qty": sell_qty,
+                        "reason": f"REBALANCE_WEIGHT_REDUCTION_FROM_{int(current_value/total_eval*100)}%_TO_{int(target_weight*100)}%"
+                    })
+                    
         # 2. 매수 주문 계산
         for ticker, weight in target_positions.items():
-            if weight > 0.0 and ticker not in current_positions:
-                if ticker not in ohlcv_store or ohlcv_store[ticker].empty:
-                    continue
-                current_price = ohlcv_store[ticker].iloc[-1]['close']
-                if current_price <= 0:
-                    continue
-                    
-                target_amount = total_eval * weight
-                target_qty = int(target_amount // current_price)
+            if weight <= 0.0:
+                continue
+            if ticker not in ohlcv_store or ohlcv_store[ticker].empty:
+                continue
+            current_price = ohlcv_store[ticker].iloc[-1]['close']
+            if current_price <= 0:
+                continue
                 
+            target_value = total_eval * weight
+            
+            if ticker in current_positions:
+                pos = current_positions[ticker]
+                current_value = pos['qty'] * current_price
+                if current_value < target_value * 0.90: # 10% 이상 부족 시 부분 매수
+                    buy_qty = int((target_value - current_value) // current_price)
+                    if buy_qty > 0:
+                        orders.append({
+                            "type": "BUY",
+                            "ticker": ticker,
+                            "qty": buy_qty,
+                            "reason": f"REBALANCE_WEIGHT_INCREASE_TO_{int(weight*100)}%"
+                        })
+            else:
+                # 신규 진입
+                target_qty = int(target_value // current_price)
                 if target_qty > 0:
                     orders.append({
                         "type": "BUY",
                         "ticker": ticker,
                         "qty": target_qty,
-                        "reason": "FA+TA MOMENTUM ENTRY"
+                        "reason": f"FA+TA MOMENTUM ENTRY_{int(weight*100)}%"
                     })
                     
         return orders

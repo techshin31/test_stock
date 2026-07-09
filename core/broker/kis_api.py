@@ -56,9 +56,10 @@ class KisBroker:
         positions = {}
         if "output1" in resp:
             for item in resp["output1"]:
-                ticker = item.get("pdno")
+                symbol = item.get("pdno")
                 qty = int(item.get("hldg_qty", 0))
                 if qty > 0:
+                    ticker = f"{symbol}.KS"
                     positions[ticker] = {
                         "qty": qty,
                         "avg_price": float(item.get("pchs_avg_pric", 0)),
