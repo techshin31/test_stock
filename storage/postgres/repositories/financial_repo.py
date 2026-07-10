@@ -96,11 +96,18 @@ def fetch_financial_statements(
     """단일 종목·연도의 재무제표 전체를 반환한다."""
     return db.fetch_all(
         """
-        SELECT * FROM financial_statements
-        WHERE stock_code = %s
-          AND bsns_year  = %s
-          AND fs_div     = %s
-          AND reprt_code = %s
+        WITH latest_receipt AS (
+            SELECT source_rcept_no
+            FROM financial_statements
+            WHERE stock_code = %s AND bsns_year = %s
+              AND fs_div = %s AND reprt_code = %s
+              AND source_rcept_no NOT LIKE 'LEGACY:%%'
+            ORDER BY available_date DESC, revision_no DESC,
+                     source_rcept_no DESC, id DESC
+            LIMIT 1
+        )
+        SELECT f.* FROM financial_statements f
+        WHERE f.source_rcept_no = (SELECT source_rcept_no FROM latest_receipt)
         ORDER BY sj_div, id
         """,
         (stock_code, bsns_year, fs_div, reprt_code),
@@ -196,26 +203,84 @@ def upsert_fa_metrics(db: PostgreDB, records: list[dict]) -> int:
         )
         for r in records
     ]
-    db.execute_many(
-        """
-        INSERT INTO fa_metrics (
-            stock_code, bsns_year, fs_div, fiscal_year_end,
-            roe, roa, operating_margin, debt_ratio, current_ratio, fcf
+    history_params = [
+        (
+            r["stock_code"], int(r["bsns_year"]), r.get("fs_div", "CFS"),
+            r.get("source_rcept_no") or f"LEGACY:{r['stock_code']}:{r['bsns_year']}",
+            r.get("available_date") or r.get("fiscal_year_end") or date.today(),
+            r.get("model_version", "annual-fa-v2.0.0"), r.get("fiscal_year_end"),
+            r.get("roe"), r.get("roa"), r.get("operating_margin"),
+            r.get("debt_ratio"), r.get("current_ratio"), r.get("fcf"),
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (stock_code, bsns_year, fs_div) DO UPDATE SET
-            fiscal_year_end  = COALESCE(EXCLUDED.fiscal_year_end, fa_metrics.fiscal_year_end),
-            roe              = EXCLUDED.roe,
-            roa              = EXCLUDED.roa,
-            operating_margin = EXCLUDED.operating_margin,
-            debt_ratio       = EXCLUDED.debt_ratio,
-            current_ratio    = EXCLUDED.current_ratio,
-            fcf              = EXCLUDED.fcf,
-            calculated_at    = NOW()
-        """,
-        params_list,
-    )
+        for r in records
+    ]
+    ensure_fa_metrics_history_table(db)
+    with db.transaction() as conn:
+        with conn.cursor() as cur:
+            cur.executemany(
+                """
+                INSERT INTO fa_metrics (
+                    stock_code, bsns_year, fs_div, fiscal_year_end,
+                    roe, roa, operating_margin, debt_ratio, current_ratio, fcf
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (stock_code, bsns_year, fs_div) DO UPDATE SET
+                    fiscal_year_end=COALESCE(EXCLUDED.fiscal_year_end,fa_metrics.fiscal_year_end),
+                    roe=EXCLUDED.roe, roa=EXCLUDED.roa,
+                    operating_margin=EXCLUDED.operating_margin,
+                    debt_ratio=EXCLUDED.debt_ratio,
+                    current_ratio=EXCLUDED.current_ratio,
+                    fcf=EXCLUDED.fcf, calculated_at=NOW()
+                """,
+                params_list,
+            )
+            cur.executemany(
+                """
+                INSERT INTO fa_metrics_history (
+                    stock_code, bsns_year, fs_div, source_rcept_no, available_date,
+                    model_version, fiscal_year_end, roe, roa, operating_margin,
+                    debt_ratio, current_ratio, fcf
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (stock_code, source_rcept_no, fs_div, model_version)
+                DO UPDATE SET
+                    bsns_year=EXCLUDED.bsns_year,
+                    available_date=EXCLUDED.available_date,
+                    fiscal_year_end=EXCLUDED.fiscal_year_end,
+                    roe=EXCLUDED.roe, roa=EXCLUDED.roa,
+                    operating_margin=EXCLUDED.operating_margin,
+                    debt_ratio=EXCLUDED.debt_ratio,
+                    current_ratio=EXCLUDED.current_ratio,
+                    fcf=EXCLUDED.fcf, calculated_at=NOW()
+                """,
+                history_params,
+            )
     return len(params_list)
+
+
+def ensure_fa_metrics_history_table(db: PostgreDB) -> None:
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS fa_metrics_history (
+            id BIGSERIAL PRIMARY KEY,
+            stock_code VARCHAR(10) NOT NULL REFERENCES companies(stock_code),
+            bsns_year SMALLINT NOT NULL,
+            fs_div VARCHAR(5) NOT NULL DEFAULT 'CFS',
+            source_rcept_no VARCHAR(32) NOT NULL,
+            available_date DATE NOT NULL,
+            model_version VARCHAR(50) NOT NULL,
+            fiscal_year_end DATE,
+            roe NUMERIC(10,6), roa NUMERIC(10,6),
+            operating_margin NUMERIC(10,6), debt_ratio NUMERIC(10,6),
+            current_ratio NUMERIC(10,6), fcf NUMERIC(20,0),
+            calculated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE(stock_code, source_rcept_no, fs_div, model_version)
+        )
+        """
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_fa_metrics_history_asof "
+        "ON fa_metrics_history(stock_code, available_date DESC, model_version)"
+    )
 
 
 def fetch_fa_metrics(

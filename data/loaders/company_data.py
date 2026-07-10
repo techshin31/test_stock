@@ -39,13 +39,11 @@ from storage.postgres.repositories.wics_repo import fetch_distinct_stock_codes
 from storage.postgres.repositories.dart_event_repo import (
     fetch_dart_events,
     fetch_event_date_bounds,
-    fetch_latest_event_date,
     fetch_latest_regular_report,
     upsert_dart_events,
 )
 from storage.postgres.repositories.financial_repo import (
     fetch_collected_receipts,
-    fetch_collected_years,
     fetch_financial_statements,
     fetch_latest_fa_metrics,
     upsert_fa_metrics,
@@ -295,7 +293,20 @@ def collect_financial_statements(
                 receipt = fetch_latest_regular_report(
                     db, stock_code, subtype, period_label
                 )
-                if not receipt or receipt["rcept_no"] in collected_receipts:
+                if not receipt:
+                    continue
+
+                if receipt["rcept_no"] in collected_receipts:
+                    # 원본 적재 후 지표 계산만 실패한 경우에도 다음 실행에서 복구한다.
+                    if reprt_code == "11011":
+                        fs_rows = fetch_financial_statements(
+                            db, stock_code, year, fs_div, reprt_code
+                        )
+                        metrics = calc_fa_metrics_from_db_rows(
+                            fs_rows, stock_code, year, fs_div, acc_mt=acc_mt
+                        )
+                        if metrics:
+                            upsert_fa_metrics(db, [metrics])
                     continue
 
                 report = {
@@ -459,6 +470,36 @@ def load_fa_metrics_df(
     df = df.set_index("stock_code")
     metric_cols = ["roe", "roa", "operating_margin", "debt_ratio", "current_ratio", "fcf"]
     return df[[c for c in metric_cols if c in df.columns]]
+
+
+def rebuild_annual_fa_metrics(db: PostgreDB, *, batch_size: int = 200) -> int:
+    """최신 정정공시 기준으로 연간 FA 캐시와 버전 원장을 재생성한다."""
+    groups = db.fetch_all(
+        """
+        SELECT DISTINCT stock_code, bsns_year, fs_div
+        FROM financial_statements
+        WHERE reprt_code = '11011'
+          AND source_rcept_no NOT LIKE 'LEGACY:%%'
+        ORDER BY stock_code, bsns_year, fs_div
+        """
+    )
+    pending = []
+    rebuilt = 0
+    for group in groups:
+        rows = fetch_financial_statements(
+            db, group["stock_code"], group["bsns_year"], group["fs_div"], "11011"
+        )
+        metric = calc_fa_metrics_from_db_rows(
+            rows, group["stock_code"], group["bsns_year"], group["fs_div"]
+        )
+        if metric:
+            pending.append(metric)
+        if len(pending) >= batch_size:
+            rebuilt += upsert_fa_metrics(db, pending)
+            pending.clear()
+    if pending:
+        rebuilt += upsert_fa_metrics(db, pending)
+    return rebuilt
 
 
 def load_dart_events_df(

@@ -25,6 +25,7 @@ from .execution_repo import (
     fetch_executions_by_date,
     fetch_executions_by_order,
     fetch_execution_qty_by_order,
+    fetch_execution_totals_by_order,
     insert_execution,
 )
 from .fa_analysis_repo import (
@@ -45,14 +46,17 @@ from .financial_repo import (
     upsert_financial_statements,
 )
 from .order_repo import (
+    DuplicateOrderError,
     attach_broker_order_id,
     create_order,
     fetch_open_orders_by_plan,
     fetch_order_by_broker_id,
+    mark_order_submitted,
     record_order_status_history,
     update_order_status,
 )
 from .position_repo import (
+    delete_position,
     fetch_active_position_symbols,
     fetch_positions,
     upsert_position,
@@ -138,11 +142,14 @@ __all__ = [
     "fetch_open_orders_by_plan",
     "fetch_order_by_broker_id",
     "record_order_status_history",
+    "mark_order_submitted",
+    "DuplicateOrderError",
     # positions
     "upsert_position",
     "fetch_positions",
     "fetch_active_position_symbols",
     "zero_out_position",
+    "delete_position",
     # readiness
     "fetch_schema_columns",
     "fetch_macro_signal_coverage",
@@ -169,6 +176,7 @@ __all__ = [
     "fetch_executions_by_date",
     "fetch_executions_by_order",
     "fetch_execution_qty_by_order",
+    "fetch_execution_totals_by_order",
     # universe
     "fetch_active_universe",
     "fetch_universe_for_date",

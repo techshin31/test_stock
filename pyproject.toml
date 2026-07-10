@@ -39,6 +39,7 @@ dependencies = [
     "yfinance==0.2.66",
     "pykrx>=1.0.51",
     "setuptools<70",
+    "mojito2==0.1.6",
 ]
 
 [dependency-groups]

@@ -25,6 +25,8 @@ def test_fa_ta_momentum_strategy_signals():
         "fa_score": [75.0] * 20,
         "is_eligible": [True] * 20,
         "debt_ratio": [1.2] * 20,
+        "score_confidence": [0.9] * 20,
+        "fa_is_stale": [False] * 20,
     }, index=dates)
     
     regime_df = pd.DataFrame({"REGIME": ["UPTREND"] * 20}, index=dates)
@@ -54,7 +56,12 @@ def test_fa_ta_momentum_strategy_signals():
 def test_live_trader_calculate_orders(monkeypatch):
     # Mock KisBroker and PostgreDB to avoid connections during init
     monkeypatch.setattr("core.execution.trader.KisBroker", lambda *args, **kwargs: None)
-    monkeypatch.setattr("core.execution.trader.PostgreDB", lambda *args, **kwargs: None)
+    class FakeDB:
+        def fetch_all(self, *args, **kwargs):
+            return []
+
+    monkeypatch.setattr("core.execution.trader.PostgreDB", lambda *args, **kwargs: FakeDB())
+    monkeypatch.setenv("POSTGRES_PASSWORD", "test-only")
     
     trader = LiveTrader(mock=True)
     

@@ -26,15 +26,15 @@ if "%choice%"=="1" (
 ) else if "%choice%"=="3" (
     echo.
     echo [실전 매매 실행 중...] 장중 주가(TA)를 확인하고 즉시 매매합니다. (실제 계좌 연동 주의!)
-    uv run python run_live_trader.py
+    uv run python run_live_trader.py --live
 ) else if "%choice%"=="4" (
     echo.
     echo [실전 전량 청산 중...] 보유 중인 모든 실전 주식을 시장가로 매도합니다!
-    uv run python run_live_trader.py --liquidate
+    uv run python run_live_trader.py --live --liquidate --confirm-liquidate LIQUIDATE
 ) else if "%choice%"=="5" (
     echo.
     echo [모의 전량 청산 중...] 보유 중인 모든 모의 주식을 시장가로 매도합니다!
-    uv run python run_live_trader.py --mock --liquidate
+    uv run python run_live_trader.py --mock --liquidate --confirm-liquidate LIQUIDATE
 ) else (
     echo 잘못된 입력입니다. 종료합니다.
 )

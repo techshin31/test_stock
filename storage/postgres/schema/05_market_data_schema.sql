@@ -237,6 +237,30 @@ COMMENT ON COLUMN fa_metrics.current_ratio    IS '유동비율 = 유동자산 / 
 COMMENT ON COLUMN fa_metrics.fcf              IS '잉여현금흐름 = 영업활동현금흐름 - 자본적지출';
 COMMENT ON COLUMN fa_metrics.calculated_at    IS 'FA 지표 계산 일시';
 
+-- 정정공시·모델 버전별 시점 원장. fa_metrics는 최신값 조회용 캐시로 유지한다.
+CREATE TABLE IF NOT EXISTS fa_metrics_history (
+    id               BIGSERIAL PRIMARY KEY,
+    stock_code       VARCHAR(10) NOT NULL REFERENCES companies(stock_code),
+    bsns_year        SMALLINT NOT NULL,
+    fs_div           VARCHAR(5) NOT NULL DEFAULT 'CFS',
+    source_rcept_no  VARCHAR(32) NOT NULL,
+    available_date   DATE NOT NULL,
+    model_version    VARCHAR(50) NOT NULL,
+    fiscal_year_end  DATE,
+    roe              NUMERIC(10, 6),
+    roa              NUMERIC(10, 6),
+    operating_margin NUMERIC(10, 6),
+    debt_ratio       NUMERIC(10, 6),
+    current_ratio    NUMERIC(10, 6),
+    fcf              NUMERIC(20, 0),
+    calculated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_fa_metrics_history
+        UNIQUE (stock_code, source_rcept_no, fs_div, model_version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_fa_metrics_history_asof
+    ON fa_metrics_history(stock_code, available_date DESC, model_version);
+
 
 -- ============================================================
 -- 4. DART 공시 이벤트 (dart_events)

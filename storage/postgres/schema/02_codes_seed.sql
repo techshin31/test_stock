@@ -92,6 +92,7 @@ INSERT INTO codes VALUES
     ('MACRO_SIGNAL_CODE', 'US2Y',          '미국 2년물 국채금리',             '^IRX',             11, TRUE),
     ('MACRO_SIGNAL_CODE', 'GPR',           '지정학적 리스크 지수',            'GPR_MONTHLY',      12, TRUE),
     ('MACRO_SIGNAL_CODE', 'ISM_PMI',       'ISM 제조업 PMI (50 기준선)',      'NAPMPMI',          13, TRUE),
+    ('MACRO_SIGNAL_CODE', 'US_MFG_IP',     '미국 제조업 산업생산지수',        'IPMAN',            13, TRUE),
     ('MACRO_SIGNAL_CODE', 'SEMIPROD',      '반도체 및 전자부품 산업생산지수', 'IPGMFGS',          14, TRUE),
     ('MACRO_SIGNAL_CODE', 'GTREND_KPOP',   'Google Trends K-pop 글로벌 검색', 'K-pop',            15, TRUE),
     ('MACRO_SIGNAL_CODE', 'GTREND_KDRAMA', 'Google Trends Korean drama 검색', 'Korean drama',     16, TRUE),

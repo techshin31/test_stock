@@ -278,9 +278,9 @@ def publish_fa_run(
                 "sell_only_symbols": (),
                 "already_published": True,
             }
-        if run["status_code"] not in {"PASS", "WARNING"}:
+        if run["status_code"] != "PASS":
             raise ValueError(
-                f"only PASS or WARNING run can publish: {run['status_code']}"
+                f"only PASS run can publish: {run['status_code']}"
             )
 
         effective_date: date = run["effective_date"]

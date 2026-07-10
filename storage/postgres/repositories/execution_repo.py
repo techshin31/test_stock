@@ -142,3 +142,17 @@ def fetch_execution_qty_by_order(
         (order_id,),
     )
     return int(row["qty"] or 0)
+
+
+def fetch_execution_totals_by_order(db: PostgreDB, order_id: str) -> dict:
+    """이미 저장된 누적 체결 수량과 금액을 반환한다."""
+    row = db.fetch_one(
+        """
+        SELECT COALESCE(SUM(qty), 0) AS qty,
+               COALESCE(SUM(amount), 0) AS amount
+        FROM executions
+        WHERE order_id = %s
+        """,
+        (order_id,),
+    )
+    return {"qty": float(row["qty"] or 0), "amount": float(row["amount"] or 0)}

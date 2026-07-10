@@ -93,6 +93,24 @@ def zero_out_position(
     )
 
 
+def delete_position(
+    db: PostgreDB,
+    strategy_name: str,
+    symbol: str,
+) -> None:
+    """브로커 동기화 캐시에서 잘못된 레거시 종목코드 행을 삭제한다."""
+    db.execute(
+        """
+        DELETE FROM positions p
+        USING strategies s
+        WHERE p.strategy_id = s.id
+          AND s.name = %s
+          AND p.symbol = %s
+        """,
+        (strategy_name, symbol),
+    )
+
+
 def fetch_positions(
     db: PostgreDB,
     strategy_name: str,

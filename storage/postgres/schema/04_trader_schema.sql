@@ -145,6 +145,7 @@ CREATE TABLE orders (
     submitted_at    TIMESTAMPTZ,
     filled_at       TIMESTAMPTZ,
     cancelled_at    TIMESTAMPTZ,
+    idempotency_key VARCHAR(255),
     created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
@@ -154,6 +155,8 @@ CREATE INDEX idx_orders_order_status_code ON orders(order_status_code);
 CREATE INDEX idx_orders_strategy_id       ON orders(strategy_id);
 CREATE INDEX idx_orders_plan_id           ON orders(plan_id);
 CREATE INDEX idx_orders_created_at        ON orders(created_at);
+CREATE UNIQUE INDEX uq_orders_idempotency_key ON orders(idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
 
 COMMENT ON TABLE  orders                  IS '매수/매도 주문 전체 이력';
 COMMENT ON COLUMN orders.id               IS '주문 고유 ID (UUID)';
@@ -176,6 +179,7 @@ COMMENT ON COLUMN orders.note             IS '비고 (수동 메모 등)';
 COMMENT ON COLUMN orders.submitted_at     IS '증권사에 주문 제출된 시각';
 COMMENT ON COLUMN orders.filled_at        IS '완전 체결된 시각';
 COMMENT ON COLUMN orders.cancelled_at     IS '취소된 시각';
+COMMENT ON COLUMN orders.idempotency_key  IS '중복 주문 방지를 위한 거래일·전략·종목·방향 기반 멱등성 키';
 COMMENT ON COLUMN orders.created_at       IS '주문 생성 일시';
 COMMENT ON COLUMN orders.updated_at       IS '최종 수정 일시';
 
@@ -272,6 +276,10 @@ CREATE TABLE positions (
     updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     UNIQUE (strategy_id, symbol, instrument_type_code)
 );
+
+ALTER TABLE positions DROP CONSTRAINT IF EXISTS ck_positions_normalized_symbol;
+ALTER TABLE positions ADD CONSTRAINT ck_positions_normalized_symbol
+    CHECK (symbol ~ '^[0-9]{6}$');
 
 CREATE INDEX idx_positions_symbol      ON positions(symbol);
 CREATE INDEX idx_positions_strategy_id ON positions(strategy_id);

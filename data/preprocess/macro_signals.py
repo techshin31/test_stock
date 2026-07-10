@@ -17,7 +17,7 @@ from data.loaders.hallyu_indicators import (
     download_gtrend_kpop,
     download_kr_tourist,
 )
-from data.loaders.manufacturing_indicators import download_ism_pmi, download_semiprod
+from data.loaders.manufacturing_indicators import download_semiprod, download_us_mfg_ip
 from data.loaders.rates import download_cpi, download_tnx, download_us2y
 from data.loaders.risk_indicators import download_bdry, download_gpr, download_sox, download_vix
 from storage.postgres.connection import PostgreDB
@@ -40,7 +40,7 @@ _SIGNAL_META: dict[str, tuple[str, str, str]] = {
     "usdkrw": ("USDKRW", "FX",        "DAILY"),
     "us2y":   ("US2Y",   "RATES",     "DAILY"),
     "gpr":    ("GPR",    "RISK",      "MONTHLY"),
-    "ism_pmi": ("ISM_PMI", "MANUFACTURING", "MONTHLY"),
+    "us_mfg_ip": ("US_MFG_IP", "MANUFACTURING", "MONTHLY"),
     "semiprod": ("SEMIPROD", "MANUFACTURING", "MONTHLY"),
     "gtrend_kpop": ("GTREND_KPOP", "HALLYU", "MONTHLY"),
     "gtrend_kdrama": ("GTREND_KDRAMA", "HALLYU", "MONTHLY"),
@@ -63,7 +63,7 @@ _LOADERS = {
     "gpr":    download_gpr,
     "gtrend_kpop": download_gtrend_kpop,
     "gtrend_kdrama": download_gtrend_kdrama,
-    "ism_pmi": download_ism_pmi,
+    "us_mfg_ip": download_us_mfg_ip,
 }
 
 _CONTRACT_BY_CODE = {contract.code: contract for contract in MACRO_SIGNALS}
@@ -215,7 +215,7 @@ def collect_and_save(
 
     loaders_runtime: dict[str, Callable[[str, Optional[str]], pd.Series]] = {
         **_LOADERS,
-        "ism_pmi": lambda s, e: download_ism_pmi(s, e, fred_api_key),
+        "us_mfg_ip": lambda s, e: download_us_mfg_ip(s, e, fred_api_key),
         "semiprod": lambda s, e: download_semiprod(s, e, fred_api_key),
         "kr_tourist": lambda s, e: download_kr_tourist(s, e, kto_api_key),
     }

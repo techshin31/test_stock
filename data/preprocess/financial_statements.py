@@ -150,11 +150,18 @@ def calc_fa_metrics_from_db_rows(
     cf  = df[df["sj_div"] == "CF"].copy()
 
     metrics = calc_fa_metrics(bs, is_, cf)
-    fiscal_year_end = _calc_fiscal_year_end(bsns_year, acc_mt) if acc_mt else None
+    if acc_mt:
+        fiscal_year_end = _calc_fiscal_year_end(bsns_year, acc_mt)
+    else:
+        period_end = rows[0].get("period_end")
+        fiscal_year_end = pd.Timestamp(period_end).date() if period_end else None
     return {
         "stock_code":      stock_code,
         "bsns_year":       bsns_year,
         "fs_div":          fs_div,
         "fiscal_year_end": fiscal_year_end,
+        "source_rcept_no": rows[0].get("source_rcept_no"),
+        "available_date":  rows[0].get("available_date"),
+        "model_version":   "annual-fa-v2.0.0",
         **metrics,
     }

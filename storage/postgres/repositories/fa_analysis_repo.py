@@ -192,29 +192,36 @@ def get_or_create_analysis_run(
         if existing is not None:
             return existing, False
 
-    version_row = db.fetch_one(
-        """
-        SELECT COALESCE(MAX(run_version), 0) + 1 AS next_version
-        FROM fa_analysis_runs
-        WHERE strategy_id = %s AND analysis_month = %s
-        """,
-        (strategy_id, analysis_month),
-    )
-    run_version = int(version_row["next_version"])
-    row = db.fetch_one(
-        """
-        INSERT INTO fa_analysis_runs (
-            strategy_id, analysis_month, cutoff_date, effective_date,
-            run_version, model_version, status_code, input_hash
-        )
-        VALUES (%s, %s, %s, %s, %s, %s, 'RUNNING', %s)
-        RETURNING *
-        """,
-        (
-            strategy_id, analysis_month, cutoff_date, effective_date,
-            run_version, model_version, input_hash,
-        ),
-    )
+    # 전략 행 잠금으로 동일 월 동시 실행의 MAX+1 경쟁 조건을 직렬화한다.
+    with db.transaction() as conn:
+        strategy = conn.execute(
+            "SELECT id FROM strategies WHERE id = %s FOR UPDATE", (strategy_id,)
+        ).fetchone()
+        if strategy is None:
+            raise ValueError(f"strategy not found: {strategy_id}")
+        version_row = conn.execute(
+            """
+            SELECT COALESCE(MAX(run_version), 0) + 1 AS next_version
+            FROM fa_analysis_runs
+            WHERE strategy_id = %s AND analysis_month = %s
+            """,
+            (strategy_id, analysis_month),
+        ).fetchone()
+        run_version = int(version_row["next_version"])
+        row = conn.execute(
+            """
+            INSERT INTO fa_analysis_runs (
+                strategy_id, analysis_month, cutoff_date, effective_date,
+                run_version, model_version, status_code, input_hash
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, 'RUNNING', %s)
+            RETURNING *
+            """,
+            (
+                strategy_id, analysis_month, cutoff_date, effective_date,
+                run_version, model_version, input_hash,
+            ),
+        ).fetchone()
     return row, True
 
 

@@ -38,6 +38,12 @@ class FaTaMomentumStrategy(AbstractStrategy):
     
     def __init__(self, params: dict) -> None:
         self.BENCHMARK = params.get("benchmark", "KOSPI")
+        self.TARGET_CAGR = params.get("target_cagr", 0.10)
+        self.WARNING_CAGR = params.get("warning_cagr", 0.05)
+        self.TARGET_MDD = params.get("target_mdd", -0.25)
+        self.WARNING_MDD = params.get("warning_mdd", -0.35)
+        self.TARGET_MDD_DURATION = params.get("target_mdd_duration", 24)
+        self.WARNING_MDD_DURATION = params.get("warning_mdd_duration", 36)
         self.ENTRY_SIZE = params.get("entry_size", 0.2)
         self.FA_SCORE_MIN = params.get("fa_score_min", 60.0)        # 진입 최소 FA 종합 점수
         self.FA_SCORE_EXIT = params.get("fa_score_exit", 40.0)      # 재무 악화 매도 기준
@@ -47,6 +53,87 @@ class FaTaMomentumStrategy(AbstractStrategy):
 
     def make_defensive_signals(self, regime_df: pd.DataFrame) -> pd.Series:
         return pd.Series(0.0, index=regime_df.index, dtype=float)
+
+    def evaluate_latest(
+        self,
+        ohlcv: pd.DataFrame,
+        regime: str,
+        *,
+        current_position: float = 0.0,
+    ) -> tuple[float, dict]:
+        """완결된 최신 봉과 실제 계좌 포지션으로 오늘의 목표 비중을 계산한다.
+
+        라이브 운용에서 과거 전체 상태를 다시 시뮬레이션하지 않도록 별도 경로를
+        제공한다. 지표는 충분한 과거 데이터로 계산하되 의사결정은 마지막 행에서만
+        수행한다.
+        """
+        required = max(self.MA_WINDOW, self.MA_WINDOW_FAST)
+        if ohlcv.empty or len(ohlcv) <= required:
+            raise ValueError(f"TA 계산에 최소 {required + 1}개 완결 봉이 필요합니다.")
+
+        close = ohlcv["close"].astype(float)
+        ma = close.rolling(self.MA_WINDOW, min_periods=self.MA_WINDOW).mean()
+        ma_fast = close.rolling(
+            self.MA_WINDOW_FAST, min_periods=self.MA_WINDOW_FAST
+        ).mean()
+        momentum = close.pct_change(self.MA_WINDOW)
+        last = ohlcv.iloc[-1]
+        fa_score = last.get("fa_score")
+        is_eligible = bool(last.get("is_eligible", False))
+        debt_ratio = last.get("debt_ratio")
+        score_confidence = last.get("score_confidence")
+        curr_close = float(close.iloc[-1])
+        curr_ma = float(ma.iloc[-1])
+        curr_ma_fast = float(ma_fast.iloc[-1])
+        curr_momentum = float(momentum.iloc[-1])
+        reason = "HOLD"
+        target = max(float(current_position), 0.0)
+
+        if regime in (MarketRegime.DOWNTREND.name, MarketRegime.TRANSITION.name):
+            target, reason = 0.0, f"MARKET_{regime}"
+        elif current_position > 0:
+            if pd.notnull(fa_score) and float(fa_score) < self.FA_SCORE_EXIT:
+                target, reason = 0.0, "FA_SCORE_DETERIORATED"
+            elif curr_ma_fast < curr_ma:
+                target, reason = 0.0, "TA_MOMENTUM_LOSS"
+        else:
+            valid_fa = (
+                is_eligible
+                and pd.notnull(fa_score)
+                and float(fa_score) >= self.FA_SCORE_MIN
+                and pd.notnull(debt_ratio)
+                and float(debt_ratio) <= self.DEBT_RATIO_MAX
+                and pd.notnull(score_confidence)
+                and float(score_confidence) >= 0.50
+            )
+            valid_ta = (
+                curr_close > curr_ma
+                and curr_ma_fast > curr_ma
+                and curr_momentum > 0
+            )
+            if regime in (MarketRegime.UPTREND.name, MarketRegime.SIDEWAYS.name):
+                if valid_fa and valid_ta:
+                    strength = min(max(curr_momentum, 0.0), 0.20)
+                    target = round(0.10 + (strength / 0.20) * 0.30, 4)
+                    reason = "FA_TA_ENTRY"
+                else:
+                    target, reason = 0.0, "ENTRY_CONDITIONS_NOT_MET"
+
+        metadata = {
+            "regime": regime,
+            "target_position": target,
+            "signal_reason": reason,
+            "fa_score": None if pd.isna(fa_score) else float(fa_score),
+            "score_confidence": (
+                None if pd.isna(score_confidence) else float(score_confidence)
+            ),
+            "debt_ratio": None if pd.isna(debt_ratio) else float(debt_ratio),
+            "close": curr_close,
+            "ma": curr_ma,
+            "ma_fast": curr_ma_fast,
+            "momentum": curr_momentum,
+        }
+        return target, metadata
 
     def make_signals(
         self,
@@ -89,6 +176,8 @@ class FaTaMomentumStrategy(AbstractStrategy):
         fa_score_col = ohlcv["fa_score"].to_numpy() if "fa_score" in ohlcv.columns else np.full(len(dates), np.nan)
         is_eligible_col = ohlcv["is_eligible"].to_numpy() if "is_eligible" in ohlcv.columns else np.full(len(dates), False)
         debt_ratio_col = ohlcv["debt_ratio"].to_numpy() if "debt_ratio" in ohlcv.columns else np.full(len(dates), np.nan)
+        confidence_col = ohlcv["score_confidence"].to_numpy() if "score_confidence" in ohlcv.columns else np.full(len(dates), np.nan)
+        stale_col = ohlcv["fa_is_stale"].to_numpy() if "fa_is_stale" in ohlcv.columns else np.full(len(dates), True)
         
         close_arr = close.to_numpy()
         ma_arr = ma.to_numpy()
@@ -106,6 +195,8 @@ class FaTaMomentumStrategy(AbstractStrategy):
             fa_score = fa_score_col[i]
             is_eligible = bool(is_eligible_col[i]) if pd.notnull(is_eligible_col[i]) else False
             debt_ratio = debt_ratio_col[i]
+            score_confidence = confidence_col[i]
+            fa_is_stale = bool(stale_col[i]) if pd.notnull(stale_col[i]) else True
             
             # TA 지표
             curr_close = close_arr[i]
@@ -139,7 +230,9 @@ class FaTaMomentumStrategy(AbstractStrategy):
                     cond_fa = (
                         is_eligible and
                         pd.notnull(fa_score) and fa_score >= self.FA_SCORE_MIN and
-                        (pd.isnull(debt_ratio) or float(debt_ratio) <= self.DEBT_RATIO_MAX)
+                        pd.notnull(debt_ratio) and float(debt_ratio) <= self.DEBT_RATIO_MAX and
+                        pd.notnull(score_confidence) and float(score_confidence) >= 0.50 and
+                        not fa_is_stale
                     )
                     
                     # 골든크로스(정배열) + 60일 모멘텀 양수
@@ -169,6 +262,8 @@ class FaTaMomentumStrategy(AbstractStrategy):
                     "fa_score": fa_score,
                     "is_eligible": is_eligible,
                     "debt_ratio": debt_ratio,
+                    "score_confidence": score_confidence,
+                    "fa_is_stale": fa_is_stale,
                     "close_ma": curr_ma,
                     "momentum": curr_mom,
                 })

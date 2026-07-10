@@ -6,6 +6,10 @@ import psycopg
 from ..connection import PostgreDB
 
 
+class DuplicateOrderError(RuntimeError):
+    """동일한 멱등성 키의 주문이 이미 존재한다."""
+
+
 def ensure_order_status_history_table(db: PostgreDB) -> None:
     """기존 개발 DB에도 주문 상태 이력 테이블을 준비한다."""
     db.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
@@ -34,6 +38,11 @@ def ensure_order_status_history_table(db: PostgreDB) -> None:
     )
     db.execute(
         "CREATE INDEX IF NOT EXISTS idx_order_status_history_created_at ON order_status_history(created_at)"
+    )
+    db.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(255)")
+    db.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_idempotency_key "
+        "ON orders(idempotency_key) WHERE idempotency_key IS NOT NULL"
     )
 
 
@@ -185,8 +194,10 @@ def create_order(db: PostgreDB, data: dict) -> str:
                 qty,
                 price,
                 order_status_code,
-                submitted_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'SUBMITTED', NOW())
+                submitted_at,
+                idempotency_key
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDING', NULL, %s)
+            ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
             RETURNING id::text
             """,
             (
@@ -199,18 +210,34 @@ def create_order(db: PostgreDB, data: dict) -> str:
                 data.get("order_type_code", "MARKET"),
                 qty,
                 price,
+                data.get("idempotency_key"),
             ),
         ).fetchone()
+        if row is None:
+            raise DuplicateOrderError(
+                f"duplicate idempotency key: {data.get('idempotency_key')}"
+            )
         _insert_history_row(
             conn,
             row["id"],
-            "SUBMITTED",
+            "PENDING",
             event_type="CREATE",
             filled_qty=0,
             remaining_qty=qty,
-            message="local order row created",
+            message="local order intent created before broker submission",
         )
     return row["id"]
+
+
+def mark_order_submitted(db: PostgreDB, order_id: str) -> None:
+    """브로커 API 호출 직전에 로컬 주문을 SUBMITTED로 전환한다."""
+    update_order_status(
+        db,
+        order_id,
+        "SUBMITTED",
+        event_type="BROKER_REQUEST",
+        note="broker order request started",
+    )
 
 
 def attach_broker_order_id(

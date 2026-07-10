@@ -1,92 +1,333 @@
+import datetime as dt
 import os
-from dotenv import load_dotenv
+from typing import Any
+
 import mojito
+import requests
+from dotenv import load_dotenv
+
+
+class BrokerResponseError(RuntimeError):
+    """KIS가 실패 응답 또는 불완전한 데이터를 반환했을 때 발생한다."""
+
+
+def normalize_symbol(ticker: str) -> str:
+    """내부/DB 저장용 6자리 종목코드로 정규화한다."""
+    return str(ticker).strip().upper().split(".", 1)[0]
+
+
+def to_yahoo_ticker(symbol: str) -> str:
+    return f"{normalize_symbol(symbol)}.KS"
+
+
+def _env_true(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
 
 class KisBroker:
-    """한국투자증권(KIS) REST API Wrapper (mojito2 활용)"""
-    def __init__(self, mock=True):
+    """한국투자증권(KIS) REST API wrapper.
+
+    실계좌는 ``mock=False``, ``KIS_ENV=real``, ``ALLOW_LIVE_ORDER=true``가
+    모두 충족될 때만 초기화된다. 기본값은 항상 모의투자다.
+    """
+
+    def __init__(self, mock: bool = True):
         load_dotenv()
-        
-        # 사용자의 .env 변수명 사용
         self.key = os.getenv("KIS_APP_KEY")
         self.secret = os.getenv("KIS_APP_SECRET")
         acc_no_front = os.getenv("KIS_DOMESTIC_STOCK_ACCOUNT_NO")
         acc_no_back = os.getenv("KIS_DOMESTIC_STOCK_ACCOUNT_PRODUCT_CODE", "01")
-        
+
         if not self.key or not self.secret or not acc_no_front:
-            raise ValueError("한국투자증권 API 키가 환경 변수에 없습니다 (KIS_APP_KEY, KIS_APP_SECRET, KIS_DOMESTIC_STOCK_ACCOUNT_NO)")
-            
+            raise ValueError(
+                "한국투자증권 API 키가 환경 변수에 없습니다 "
+                "(KIS_APP_KEY, KIS_APP_SECRET, KIS_DOMESTIC_STOCK_ACCOUNT_NO)"
+            )
+
+        self.is_mock = bool(mock)
+        kis_env = os.getenv("KIS_ENV", "paper").strip().lower()
+        if not self.is_mock:
+            if kis_env != "real":
+                raise PermissionError("실전투자는 KIS_ENV=real을 명시해야 합니다.")
+            if not _env_true("ALLOW_LIVE_ORDER"):
+                raise PermissionError(
+                    "실주문이 잠겨 있습니다. 의도한 경우에만 ALLOW_LIVE_ORDER=true를 설정하세요."
+                )
+
         self.acc_no = f"{acc_no_front}-{acc_no_back}"
-        
-        # mock 여부는 환경변수 KIS_ENV=paper 인지로 우선 판단
-        env_mock = os.getenv("KIS_ENV", "").lower() == "paper"
-        is_mock = env_mock if env_mock else mock
-        
+        self.masked_account = f"***{acc_no_front[-4:]}-{acc_no_back}"
         self.broker = mojito.KoreaInvestment(
             api_key=self.key,
             api_secret=self.secret,
             acc_no=self.acc_no,
-            mock=is_mock
+            mock=self.is_mock,
         )
-        
-    def get_balance(self):
-        """예수금 및 보유 종목 조회
-        Returns:
-            dict: {
-                "cash": float, # 가용 현금
-                "positions": { 
-                    "005930": {"qty": 10, "avg_price": 70000, "current_price": 75000, "profit_rate": 7.14},
-                    ...
-                }
-            }
-        """
-        resp = self.broker.fetch_balance()
-        if "output2" not in resp or not resp["output2"]:
-            # 에러 또는 응답 형식 문제
-            print(f"[ERROR] 잔고 조회 실패: {resp}")
-            return {"cash": 0.0, "positions": {}}
-            
-        # output2의 첫 번째 요소에 예수금 정보가 있음
-        summary = resp["output2"][0]
-        # prvs_rcdl_excc_amt: D+2 결제 후 실제 가용 현금 (전량 매도 다음날도 정확히 반영됨)
-        # dnca_tot_amt는 당일 현금만 잡혀 D+2 대기분을 놓치므로 사용하지 않음
-        cash = float(summary.get("prvs_rcdl_excc_amt", 0))
-        total_asset = float(summary.get("tot_evlu_amt", 0))
-        
+
+    @staticmethod
+    def _require_success(resp: Any, operation: str) -> dict:
+        if not isinstance(resp, dict):
+            raise BrokerResponseError(f"{operation}: 응답 형식이 dict가 아닙니다.")
+        if "rt_cd" in resp and str(resp.get("rt_cd")) != "0":
+            raise BrokerResponseError(
+                f"{operation} 실패: {resp.get('msg1') or resp.get('msg_cd') or 'unknown error'}"
+            )
+        return resp
+
+    def get_balance(self) -> dict:
+        """검증된 예수금과 보유 종목을 반환한다. 오류 시 빈 잔고로 대체하지 않는다."""
+        output1: list[dict] = []
+        output2: list[dict] = []
+        fk100 = ""
+        nk100 = ""
+
+        while True:
+            resp = self._require_success(
+                self._fetch_balance_page(fk100, nk100), "잔고 조회"
+            )
+            if not isinstance(resp.get("output1"), list) or not isinstance(resp.get("output2"), list):
+                raise BrokerResponseError("잔고 조회: output1/output2가 누락되었습니다.")
+            output1.extend(resp["output1"])
+            output2.extend(resp["output2"])
+            if resp.get("tr_cont") != "M":
+                break
+            fk100 = resp.get("ctx_area_fk100", "")
+            nk100 = resp.get("ctx_area_nk100", "")
+
+        if not output2:
+            raise BrokerResponseError("잔고 조회: 계좌 요약이 비어 있습니다.")
+
+        summary = output2[0]
+        required = ("prvs_rcdl_excc_amt", "dnca_tot_amt", "tot_evlu_amt")
+        if any(key not in summary for key in required):
+            raise BrokerResponseError("잔고 조회: 필수 계좌 요약 필드가 누락되었습니다.")
+
+        try:
+            cash = float(summary["prvs_rcdl_excc_amt"])
+            today_cash = float(summary["dnca_tot_amt"])
+            total_asset = float(summary["tot_evlu_amt"])
+        except (TypeError, ValueError) as exc:
+            raise BrokerResponseError("잔고 조회: 계좌 금액을 숫자로 변환할 수 없습니다.") from exc
+
         positions = {}
-        if "output1" in resp:
-            for item in resp["output1"]:
-                symbol = item.get("pdno")
-                qty = int(item.get("hldg_qty", 0))
-                if qty > 0:
-                    ticker = f"{symbol}.KS"
-                    positions[ticker] = {
-                        "qty": qty,
-                        "avg_price": float(item.get("pchs_avg_pric", 0)),
-                        "current_price": float(item.get("prpr", 0)),
-                        "profit_rate": float(item.get("evlu_pfls_rt", 0))
-                    }
-                    
+        for item in output1:
+            try:
+                symbol = normalize_symbol(item.get("pdno", ""))
+                qty = int(item.get("hldg_qty", 0) or 0)
+                if not symbol or qty <= 0:
+                    continue
+                positions[to_yahoo_ticker(symbol)] = {
+                    "qty": qty,
+                    "avg_price": float(item.get("pchs_avg_pric", 0) or 0),
+                    "current_price": float(item.get("prpr", 0) or 0),
+                    "profit_rate": float(item.get("evlu_pfls_rt", 0) or 0),
+                }
+            except (TypeError, ValueError) as exc:
+                raise BrokerResponseError(f"잔고 조회: {item.get('pdno')} 포지션 값이 잘못되었습니다.") from exc
+
         return {
             "cash": cash,
+            "today_cash": today_cash,
             "total_asset": total_asset,
-            "positions": positions
+            "positions": positions,
+            "as_of": dt.datetime.now(dt.timezone.utc),
         }
-        
-    def place_market_buy(self, ticker: str, qty: int):
-        """시장가 매수"""
-        clean_ticker = ticker.split('.')[0]
-        resp = self.broker.create_market_buy_order(
-            symbol=clean_ticker,
-            quantity=qty
-        )
-        return resp
-        
-    def place_market_sell(self, ticker: str, qty: int):
-        """시장가 매도"""
-        clean_ticker = ticker.split('.')[0]
-        resp = self.broker.create_market_sell_order(
-            symbol=clean_ticker,
-            quantity=qty
-        )
-        return resp
+
+    def _fetch_balance_page(self, fk100: str, nk100: str) -> dict:
+        headers = {
+            "content-type": "application/json",
+            "authorization": self.broker.access_token,
+            "appKey": self.key,
+            "appSecret": self.secret,
+            "tr_id": "VTTC8434R" if self.is_mock else "TTTC8434R",
+        }
+        params = {
+            "CANO": self.broker.acc_no_prefix,
+            "ACNT_PRDT_CD": self.broker.acc_no_postfix,
+            "AFHR_FLPR_YN": "N", "OFL_YN": "N", "INQR_DVSN": "01",
+            "UNPR_DVSN": "01", "FUND_STTL_ICLD_YN": "N",
+            "FNCG_AMT_AUTO_RDPT_YN": "N", "PRCS_DVSN": "01",
+            "CTX_AREA_FK100": fk100, "CTX_AREA_NK100": nk100,
+        }
+        try:
+            response = requests.get(
+                f"{self.broker.base_url}/uapi/domestic-stock/v1/trading/inquire-balance",
+                headers=headers, params=params, timeout=10,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except (requests.RequestException, ValueError) as exc:
+            raise BrokerResponseError(f"잔고 조회 통신 실패: {exc}") from exc
+        payload["tr_cont"] = response.headers.get("tr_cont", "")
+        return payload
+
+    def get_current_price(self, ticker: str) -> float:
+        headers = {
+            "content-type": "application/json",
+            "authorization": self.broker.access_token,
+            "appKey": self.key,
+            "appSecret": self.secret,
+            "tr_id": "FHKST01010100",
+        }
+        params = {"fid_cond_mrkt_div_code": "J", "fid_input_iscd": normalize_symbol(ticker)}
+        try:
+            response = requests.get(
+                f"{self.broker.base_url}/uapi/domestic-stock/v1/quotations/inquire-price",
+                headers=headers, params=params, timeout=10,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except (requests.RequestException, ValueError) as exc:
+            raise BrokerResponseError(f"현재가 조회 통신 실패: {exc}") from exc
+        resp = self._require_success(payload, "현재가 조회")
+        output = resp.get("output")
+        if not isinstance(output, dict):
+            raise BrokerResponseError("현재가 조회: output이 누락되었습니다.")
+        try:
+            price = float(output.get("stck_prpr", 0) or 0)
+        except (TypeError, ValueError) as exc:
+            raise BrokerResponseError("현재가 조회: 현재가가 숫자가 아닙니다.") from exc
+        if price <= 0:
+            raise BrokerResponseError("현재가 조회: 현재가가 0 이하입니다.")
+        return price
+
+    def place_market_buy(self, ticker: str, qty: int) -> dict:
+        return self._place_market_order("buy", ticker, qty)
+
+    def place_market_sell(self, ticker: str, qty: int) -> dict:
+        return self._place_market_order("sell", ticker, qty)
+
+    def _place_market_order(self, side: str, ticker: str, qty: int) -> dict:
+        """명시적 HTTP timeout을 적용해 국내주식 시장가 주문을 제출한다."""
+        if qty <= 0:
+            raise ValueError("주문 수량은 1주 이상이어야 합니다.")
+        data = {
+            "CANO": self.broker.acc_no_prefix,
+            "ACNT_PRDT_CD": self.broker.acc_no_postfix,
+            "PDNO": normalize_symbol(ticker),
+            "ORD_DVSN": "01",
+            "ORD_QTY": str(qty),
+            "ORD_UNPR": "0",
+        }
+        try:
+            hash_response = requests.post(
+                f"{self.broker.base_url}/uapi/hashkey",
+                headers={
+                    "content-type": "application/json",
+                    "appKey": self.key,
+                    "appSecret": self.secret,
+                },
+                json=data,
+                timeout=10,
+            )
+            hash_response.raise_for_status()
+            hashkey = hash_response.json().get("HASH")
+            if not hashkey:
+                raise BrokerResponseError("주문 해시키 발급 응답에 HASH가 없습니다.")
+
+            if self.is_mock:
+                tr_id = "VTTC0802U" if side == "buy" else "VTTC0801U"
+            else:
+                tr_id = "TTTC0802U" if side == "buy" else "TTTC0801U"
+            response = requests.post(
+                f"{self.broker.base_url}/uapi/domestic-stock/v1/trading/order-cash",
+                headers={
+                    "content-type": "application/json",
+                    "authorization": self.broker.access_token,
+                    "appKey": self.key,
+                    "appSecret": self.secret,
+                    "tr_id": tr_id,
+                    "custtype": "P",
+                    "hashkey": hashkey,
+                },
+                json=data,
+                timeout=10,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except BrokerResponseError:
+            raise
+        except (requests.RequestException, ValueError) as exc:
+            # timeout/연결 종료는 서버 접수 여부를 단정할 수 없다.
+            raise RuntimeError(f"시장가 주문 통신 결과 불명: {exc}") from exc
+        return self._require_success(payload, "시장가 매수" if side == "buy" else "시장가 매도")
+
+    def fetch_daily_orders(self, target_date: dt.date | None = None) -> list[dict]:
+        """KIS 일별 주문/체결 조회 원문 행을 반환한다."""
+        target_date = target_date or dt.date.today()
+        path = "uapi/domestic-stock/v1/trading/inquire-daily-ccld"
+        url = f"{self.broker.base_url}/{path}"
+        headers = {
+            "content-type": "application/json",
+            "authorization": self.broker.access_token,
+            "appKey": self.key,
+            "appSecret": self.secret,
+            "tr_id": "VTTC8001R" if self.is_mock else "TTTC8001R",
+            "custtype": "P",
+        }
+        ymd = target_date.strftime("%Y%m%d")
+        params = {
+            "CANO": self.broker.acc_no_prefix,
+            "ACNT_PRDT_CD": self.broker.acc_no_postfix,
+            "INQR_STRT_DT": ymd,
+            "INQR_END_DT": ymd,
+            "SLL_BUY_DVSN_CD": "00",
+            "INQR_DVSN": "00",
+            "PDNO": "",
+            "CCLD_DVSN": "00",
+            "ORD_GNO_BRNO": "",
+            "ODNO": "",
+            "INQR_DVSN_3": "00",
+            "INQR_DVSN_1": "",
+            "CTX_AREA_FK100": "",
+            "CTX_AREA_NK100": "",
+        }
+        rows = []
+        for _ in range(20):
+            try:
+                response = requests.get(url, headers=headers, params=params, timeout=10)
+                response.raise_for_status()
+                payload = response.json()
+            except (requests.RequestException, ValueError) as exc:
+                raise BrokerResponseError(f"주문 체결 조회 통신 실패: {exc}") from exc
+            payload = self._require_success(payload, "주문 체결 조회")
+            page_rows = payload.get("output1", [])
+            if not isinstance(page_rows, list):
+                raise BrokerResponseError("주문 체결 조회: output1 형식이 잘못되었습니다.")
+            rows.extend(page_rows)
+            if response.headers.get("tr_cont") != "M":
+                return rows
+            params["CTX_AREA_FK100"] = payload.get("ctx_area_fk100", "")
+            params["CTX_AREA_NK100"] = payload.get("ctx_area_nk100", "")
+        raise BrokerResponseError("주문 체결 조회 페이지 수가 안전 한도를 초과했습니다.")
+
+    def get_order_status(self, broker_order_id: str, target_date: dt.date | None = None) -> dict:
+        """주문번호의 누적 체결 상태를 정규화한다."""
+        order_id = str(broker_order_id).lstrip("0") or "0"
+        for row in self.fetch_daily_orders(target_date):
+            row_id = str(row.get("odno", row.get("ODNO", ""))).lstrip("0") or "0"
+            if row_id != order_id:
+                continue
+            ordered = int(row.get("ord_qty", 0) or 0)
+            filled = int(row.get("tot_ccld_qty", 0) or 0)
+            remaining = int(row.get("rmn_qty", max(ordered - filled, 0)) or 0)
+            total_amount = float(row.get("tot_ccld_amt", 0) or 0)
+            avg_price = float(row.get("avg_prvs", 0) or 0)
+            cancelled = str(row.get("cncl_yn", "N")).upper() == "Y"
+            if cancelled:
+                status = "CANCELLED"
+            elif filled >= ordered and ordered > 0:
+                status = "FILLED"
+            elif filled > 0:
+                status = "PARTIAL"
+            else:
+                status = "ACCEPTED"
+            return {
+                "status": status,
+                "ordered_qty": ordered,
+                "filled_qty": filled,
+                "remaining_qty": remaining,
+                "avg_fill_price": avg_price,
+                "total_fill_amount": total_amount,
+                "raw": row,
+            }
+        raise BrokerResponseError(f"주문 체결 조회에서 주문번호 {broker_order_id}를 찾지 못했습니다.")

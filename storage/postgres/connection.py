@@ -1,6 +1,5 @@
 from contextlib import contextmanager
 
-import psycopg
 from psycopg_pool import ConnectionPool
 from psycopg.rows import dict_row
 
@@ -72,11 +71,12 @@ class PostgreDB(metaclass=Singleton):
 
     def execute_many(self, query: str, params_list: list[tuple]) -> None:
         """
-        배치 INSERT / UPDATE
+        배치 INSERT / UPDATE. 전체 배치를 하나의 트랜잭션으로 처리한다.
         """
         with self.pool.connection() as conn:
-            with conn.cursor() as cur:
-                cur.executemany(query, params_list)
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    cur.executemany(query, params_list)
 
     @contextmanager
     def transaction(self):

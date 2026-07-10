@@ -1,6 +1,33 @@
 # QuantPilot
 주식 트레이딩 시스템
 
+## 실거래 안전 실행
+
+현재 라이브 러너와 스케줄러는 기본적으로 모의투자 계좌를 사용합니다.
+
+```shell
+# 모의투자 1회 실행 (기본값)
+uv run python run_live_trader.py --mock
+
+# 모의투자 스케줄러
+uv run python scheduler.py
+
+# 실전투자: 세 조건을 모두 명시해야 시작됨
+# KIS_ENV=real
+# ALLOW_LIVE_ORDER=true
+uv run python run_live_trader.py --live
+uv run python scheduler.py --live
+
+# 전체 청산은 별도 확인 문자열까지 필요
+uv run python run_live_trader.py --live --liquidate --confirm-liquidate LIQUIDATE
+```
+
+주문 전 KIS 현재가와 전략 기준가의 편차를 확인하며 기본 허용치는 2%입니다.
+`MAX_PRICE_DEVIATION`, `BUY_CASH_BUFFER`, `MAX_ORDER_ATTEMPTS`, `KIS_FILL_POLL_ATTEMPTS`,
+`KIS_FILL_POLL_INTERVAL` 환경변수로 운영 기준을 조정할 수 있습니다. 브로커
+접수 응답은 체결로 간주하지 않으며, KIS 주문·체결 조회 결과만 체결 원장에
+저장합니다.
+
 ---
 ### 개발 환경 구축 
 ```shell
@@ -76,22 +103,27 @@ python -m apps.backtester run --output-dir reports/my_test
 - `metrics.json` — 성과지표 전체
 - `figures/*.png` — 자산곡선, 드로우다운, 월별수익률 등 차트
 
-#### apps/trader — 자동매매
+#### 자동매매
 ```shell
-# 환경변수 설정 — apps/trader/.env 에 KIS_APP_KEY, KIS_APP_SECRET, KIS_DOMESTIC_STOCK_ACCOUNT_NO, POSTGRES_* 입력
+# 장전 FA/TA 후보 생성 및 universe 동기화(모의투자)
+uv run python run_live_trader.py --mock --premarket
 
-# 장전 (08:30) — 포지션 동기화 → 전략 계산 → trade_plans 저장
-python -m apps.trader planner
+# 모의투자 일일 배치
+uv run python run_live_trader.py --mock
 
-# 장중 (09:00~15:20) — trade_plans 조회 → 주문 실행
-python -m apps.trader executor
+# 데이터 준비도와 발행본 정합성 감사
+uv run python -m apps.worker audit
+```
 
-# 장마감 (15:40) — 체결 reconcile, 포지션 재동기화, Slack 알림
-python -m apps.trader reconciler
+장전 후보는 현재 전략의 `PUBLISHED`/`PASS` FA 발행본만 사용합니다. 전략 규칙은
+[`docs/FA_TA_STRATEGY.md`](docs/FA_TA_STRATEGY.md)를 참고하세요.
 
-# 테스트 모드 (시간 대기 없이 즉시 실행, 모의투자)
-python -m apps.trader planner --test
-# 주의: executor --test 는 무한 루프이므로 반드시 시간 제한 또는 Ctrl+C 로 종료
+#### 월간 FA 분석 및 발행
+```shell
+$env:STRATEGY_NAME='aggressive'
+uv run python -m apps.worker analyze all \
+  --analysis-month 2026-07 --cutoff 2026-07-09 \
+  --effective-date 2026-07-10 --publish
 ```
 
 ---
@@ -102,7 +134,6 @@ QuantPilot/
 │
 ├── apps/                         # 실행 애플리케이션
 │   ├── backtester/               # 백테스트 CLI (pipeline.py → report.py)
-│   ├── trader/                   # 자동매매 실행기 (planner / executor / reconciler)
 │   └── worker/                   # 데이터 수집 워커 (collector/)
 │
 ├── core/                         # 핵심 비즈니스 로직
@@ -132,7 +163,8 @@ QuantPilot/
 │   │
 │   ├── portfolio/                # 포트폴리오 관리 (allocation, decision, momentum, rotation)
 │   ├── risk/                     # 리스크 관리 (cost.py)
-│   ├── trade/                    # 증권사 API 래퍼 (kis_broker.py, execution.py, gate.py)
+│   ├── broker/                   # KIS API 및 실거래 안전 게이트
+│   ├── execution/                # 주문 계획, reconcile, 포지션 동기화
 │   ├── backtest/                 # 백테스팅 엔진 (engine.py, config.py, result.py)
 │   ├── analytics/                # 성과 분석 (metrics, drawdown, attribution, visualization)
 │   └── utils/                    # 유틸리티 (date_utils.py, trading_calendar.py, parsing.py)
