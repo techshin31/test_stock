@@ -40,7 +40,7 @@ DB에는 `strategies` 테이블에 `risk_neutral` 전략 파라미터가 미리 
 3. 단기채 ETF 방어자산 수익률 생성, `BacktestConfig` 구성 후 `core.backtest.engine.run_backtest()` 실행.
 
 `--universe-source fa-published`는 `fa_analysis_runs.status_code=PUBLISHED`인 실행만
-읽어 각 `effective_date`의 선택 종목(최대 10개)을 교체 계획으로 변환한다. 백테스트 시작일
+읽어 각 `effective_date`의 선택 종목(개수 제한 없음)을 교체 계획으로 변환한다. 백테스트 시작일
 이전 PUBLISHED 유니버스가 없거나 입력 사용 가능일이 cutoff를 넘으면 실행하지 않는다.
 4. `calc_performance()`로 성과 계산, 단기채 100%/KOSPI B&H 자산 곡선과 `summarize_compare_assets()`로 비교.
 

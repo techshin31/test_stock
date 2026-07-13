@@ -4,12 +4,21 @@ import json
 import os
 import subprocess
 import time
+import traceback
 from pathlib import Path
 
 from core.utils.trading_calendar import is_krx_trading_day
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+def log_error(message: str, mode: str) -> None:
+    scheduler_log = PROJECT_ROOT / "logs" / mode.lower() / "scheduler.log"
+    scheduler_log.parent.mkdir(parents=True, exist_ok=True)
+    with scheduler_log.open("a", encoding="utf-8") as log_file:
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_file.write(f"[{timestamp}] {message}\n")
+        log_file.write(traceback.format_exc())
+        log_file.write("\n")
 
 
 def clear_screen():
@@ -20,13 +29,13 @@ def is_trading_day(now: datetime.datetime) -> bool:
     return is_krx_trading_day(now.date().isoformat())
 
 
-def draw_dashboard(last_mode, next_run_time):
+def draw_dashboard(last_mode, next_run_time, execution_mode):
     clear_screen()
     print("=======================================================================")
     print(" 🚀 FA/TA 모멘텀 라이브 트레이더 [전광판 모드]")
     print("=======================================================================")
     state = {}
-    state_file = PROJECT_ROOT / "logs" / "dashboard_state.json"
+    state_file = PROJECT_ROOT / "logs" / execution_mode.lower() / "dashboard_state.json"
     if state_file.exists():
         try:
             state = json.loads(state_file.read_text(encoding="utf-8"))
@@ -42,6 +51,19 @@ def draw_dashboard(last_mode, next_run_time):
             print(f" [대시보드 데이터 오류: {exc}]")
     else:
         print(" [첫 매매 사이클 대기 중...]")
+
+    report_file = PROJECT_ROOT / "logs" / execution_mode.lower() / "reports" / "latest.json"
+    if report_file.exists():
+        try:
+            report = json.loads(report_file.read_text(encoding="utf-8"))
+            perf = report.get("performance", {})
+            print(
+                f" 건강 상태: {report.get('health', '-')} | "
+                f"일일 {float(perf.get('daily_return', 0)):.2%} | "
+                f"누적 {float(perf.get('cumulative_return', 0)):.2%}"
+            )
+        except (OSError, ValueError, TypeError):
+            print(" [일일 보고서 읽기 실패]")
 
     print("-----------------------------------------------------------------------")
     print(f" 🎯 최근 실행된 작업: {last_mode or '없음'}")
@@ -70,9 +92,12 @@ def get_next_run_time(now):
     return "다음 KRX 거래일 08:30"
 
 
-def run_command(mode="intraday", live=False):
+def run_command(mode="intraday", live=False, dry_run=True, simulate=False):
     print(f"\n[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] 작업 시작 ({mode})")
-    cmd = ["uv", "run", "python", "run_live_trader.py", "--live" if live else "--mock"]
+    broker_flag = "--live" if live else "--simulate" if simulate else "--mock"
+    cmd = ["uv", "run", "python", "run_live_trader.py", broker_flag]
+    if dry_run and mode != "premarket":
+        cmd.append("--dry-run")
     if mode == "premarket":
         cmd.append("--premarket")
     result = subprocess.run(
@@ -87,7 +112,23 @@ def run_command(mode="intraday", live=False):
         raise RuntimeError(f"{mode} 하위 프로세스 실패(returncode={result.returncode})")
 
 
-def check_and_run_cold_start(live=False, now=None):
+def run_simulation_report(report_date):
+    result = subprocess.run(
+        [
+            "uv", "run", "python", "-m", "core.execution.simulation_report",
+            "--date", report_date.isoformat(),
+        ],
+        cwd=PROJECT_ROOT,
+        env=dict(os.environ, PYTHONPATH=str(PROJECT_ROOT), PYTHONUTF8="1"),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=5 * 60,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("simulation daily health report failed")
+
+
+def check_and_run_cold_start(live=False, dry_run=True, simulate=False, now=None):
     now = now or datetime.datetime.now()
     if not is_trading_day(now):
         return None
@@ -97,35 +138,66 @@ def check_and_run_cold_start(live=False, now=None):
         state_file.stat().st_mtime
     ).date() == now.date()
     if after_premarket and not is_fresh:
-        run_command(mode="premarket", live=live)
+        run_command(mode="premarket", live=live, dry_run=dry_run, simulate=simulate)
         return "8:30"
     return None
 
 
 def main():
     parser = argparse.ArgumentParser(description="QuantPilot 거래 스케줄러")
-    parser.add_argument("--live", action="store_true", help="실계좌 실행(실주문 이중 잠금 필요)")
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument("--live", action="store_true", help="실계좌 실행(실주문 이중 잠금 필요)")
+    mode_group.add_argument("--paper", action="store_true", help="KIS 모의투자 주문 실행")
+    mode_group.add_argument("--simulate", action="store_true", help="로컬 가상 계좌 주문 실행")
+    mode_group.add_argument("--dry-run", action="store_true", help="주문 없이 매매 계획만 반복 계산(기본값)")
     args = parser.parse_args()
+    dry_run = args.dry_run or not (args.live or args.paper or args.simulate)
+    execution_mode = (
+        "DRY_RUN" if dry_run else "SIMULATE" if args.simulate
+        else "REAL" if args.live else "PAPER"
+    )
+    report_run_date = None
 
-    last_run_mark = check_and_run_cold_start(live=args.live)
-    last_run_mode = "premarket" if last_run_mark else None
+    try:
+        last_run_mark = check_and_run_cold_start(live=args.live, dry_run=dry_run, simulate=args.simulate)
+        last_run_mode = "premarket" if last_run_mark else None
+        cold_start_pending = False
+    except Exception as exc:
+        log_error(f"cold-start premarket failed: {exc}", execution_mode)
+        last_run_mark = None
+        last_run_mode = f"ERROR: {exc} (10초 후 재시도)"
+        cold_start_pending = True
     while True:
         now = datetime.datetime.now()
         try:
+            if cold_start_pending:
+                last_run_mark = check_and_run_cold_start(live=args.live, dry_run=dry_run, simulate=args.simulate)
+                last_run_mode = "premarket" if last_run_mark else last_run_mode
+                cold_start_pending = False
             if is_trading_day(now):
                 if now.hour == 8 and now.minute == 30 and last_run_mark != "8:30":
                     last_run_mark = "8:30"
-                    run_command(mode="premarket", live=args.live)
+                    run_command(mode="premarket", live=args.live, dry_run=dry_run, simulate=args.simulate)
                     last_run_mode = "premarket"
                 elif (9 <= now.hour <= 14) or (now.hour == 15 and now.minute <= 20):
                     current_mark = f"{now.hour}:{now.minute}"
                     if last_run_mark != current_mark:
                         last_run_mark = current_mark
-                        run_command(mode="intraday", live=args.live)
+                        run_command(mode="intraday", live=args.live, dry_run=dry_run, simulate=args.simulate)
                         last_run_mode = "intraday"
+                if (
+                    args.simulate
+                    and (now.hour > 15 or (now.hour == 15 and now.minute >= 21))
+                    and report_run_date != now.date()
+                ):
+                    run_simulation_report(now.date())
+                    report_run_date = now.date()
+                    last_run_mode = "simulation_report"
         except Exception as exc:
-            last_run_mode = f"ERROR: {exc}"
-        draw_dashboard(last_run_mode, get_next_run_time(now))
+            log_error(f"scheduled job failed: {exc}", execution_mode)
+            retry_note = " (10초 후 재시도)" if cold_start_pending else ""
+            last_run_mode = f"ERROR: {exc}{retry_note}"
+        draw_dashboard(last_run_mode, get_next_run_time(now), execution_mode)
         time.sleep(10)
 
 

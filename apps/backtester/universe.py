@@ -9,9 +9,6 @@ from data.loaders.kospi_data import KOSPI_LARGE_CAP_POOL
 from storage.postgres.connection import PostgreDB
 from storage.postgres.repositories.fa_analysis_repo import fetch_published_fa_selections
 
-MAX_FA_UNIVERSE_SIZE = 10
-
-
 def default_rotation_dates(
     start_date: date,
     end_date: date,
@@ -127,20 +124,11 @@ def build_fa_published_universe(
         raise ValueError("no PUBLISHED FA universe exists on or before backtest start")
     initial_date = max(eligible_initial_dates)
     initial_universe = sorted(selections[initial_date])
-    if len(initial_universe) > MAX_FA_UNIVERSE_SIZE:
-        raise ValueError(
-            f"PUBLISHED FA initial universe exceeds {MAX_FA_UNIVERSE_SIZE} companies"
-        )
-
     current = set(initial_universe)
     all_tickers = set(current)
     plans: list[RotationPlan] = []
     for effective_date in sorted(item for item in selections if start_date < item <= end_date):
         selected = selections[effective_date]
-        if len(selected) > MAX_FA_UNIVERSE_SIZE:
-            raise ValueError(
-                f"PUBLISHED FA universe exceeds {MAX_FA_UNIVERSE_SIZE} companies: {effective_date}"
-            )
         exits = sorted(current - selected)
         entries = sorted(selected - current)
         if exits or entries:

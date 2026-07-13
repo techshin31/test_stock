@@ -217,26 +217,10 @@ def _mark_candidate(row: dict, source_code: str, rank: int) -> None:
 
 
 def _assign_candidate_pool(rows: list[dict], config: AnalyzerConfig) -> None:
-    scoring = config.scoring
-    up_ranked = sorted(
-        rows,
-        key=lambda row: (-row["up_benefit_score"], row["industry_code"]),
-    )
-    for rank, row in enumerate(up_ranked[:scoring.candidate_up_count], 1):
-        _mark_candidate(row, "UP", rank)
-
-    down_ranked = sorted(
-        rows,
-        key=lambda row: (-row["down_hedge_score"], row["industry_code"]),
-    )
-    down_count = 0
-    for row in down_ranked:
-        if down_count == scoring.candidate_down_count:
-            break
-        if row["is_candidate"]:
-            continue
-        down_count += 1
-        _mark_candidate(row, "DOWN", down_count)
+    del config
+    ranked = sorted(rows, key=lambda row: (-row["sector_score"], row["industry_code"]))
+    for rank, row in enumerate(ranked, 1):
+        _mark_candidate(row, "ALL_ELIGIBLE", rank)
 
 
 
@@ -420,11 +404,9 @@ def score_and_select_sectors(
     selected: list[dict] = []
 
     def _select(row: dict) -> bool:
-        if len(selected) == config.scoring.final_industry_count:
-            return False
-        if row["eligible_large_count"] < config.scoring.companies_per_industry:
+        if row["eligible_large_count"] < 1:
             row["reason_code"] = "INSUFFICIENT_LARGE"
-            row["reason"] = "eligible LARGE companies are fewer than two"
+            row["reason"] = "no eligible LARGE company passed the quality filters"
             return False
         selected.append(row)
         return True
@@ -435,25 +417,6 @@ def score_and_select_sectors(
     )
     for row in candidate_rows:
         _select(row)
-        if len(selected) == config.scoring.final_industry_count:
-            break
-
-    fallback_rank = 0
-    if len(selected) < config.scoring.final_industry_count:
-        fallback_rows = sorted(
-            [row for row in rows if not row["is_candidate"]],
-            key=lambda row: (-row["sector_score"], row["industry_code"]),
-        )
-        for row in fallback_rows:
-            if len(selected) == config.scoring.final_industry_count:
-                break
-            previous_reason = row.get("reason_code")
-            if _select(row):
-                fallback_rank += 1
-                _mark_candidate(row, "FALLBACK", fallback_rank)
-            elif previous_reason is None:
-                row.pop("reason_code", None)
-                row.pop("reason", None)
 
     for rank, row in enumerate(selected, 1):
         row["is_selected"] = True
@@ -463,14 +426,14 @@ def score_and_select_sectors(
     for row in rows:
         if (
             row["is_candidate"]
-            and row["eligible_large_count"] < config.scoring.companies_per_industry
+            and row["eligible_large_count"] < 1
             and "reason_code" not in row
         ):
             row["reason_code"] = "INSUFFICIENT_LARGE"
-            row["reason"] = "eligible LARGE companies are fewer than two"
+            row["reason"] = "no eligible LARGE company passed the quality filters"
         if "reason_code" not in row:
-            row["reason_code"] = "LOW_SCORE"
-            row["reason"] = "ranked below the final selection cutoff"
+            row["reason_code"] = "NOT_ELIGIBLE"
+            row["reason"] = "industry did not pass the quality filters"
     return sorted(rows, key=lambda row: row["industry_code"])
 
 

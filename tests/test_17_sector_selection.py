@@ -120,20 +120,19 @@ def test_sector_candidates_and_selection_are_deterministic_and_diversified():
     assert first == second
     assert sum(row["is_candidate"] for row in first) == 6
     candidates = [row for row in first if row["is_candidate"]]
-    assert sum(row["candidate_source_code"] == "UP" for row in candidates) == 5
-    assert sum(row["candidate_source_code"] == "DOWN" for row in candidates) == 1
+    assert all(row["candidate_source_code"] == "ALL_ELIGIBLE" for row in candidates)
     assert all(row["candidate_rank"] is not None for row in candidates)
     selected = [row for row in first if row["is_selected"]]
-    assert len(selected) == 5
+    assert len(selected) == 6
     assert all(row["is_candidate"] for row in selected)
 
 
-def test_industry_with_fewer_than_two_eligible_large_companies_is_excluded():
+def test_industry_with_one_eligible_large_company_is_selected():
     results = score_and_select_sectors(*_inputs(), load_config())
     energy = next(row for row in results if row["industry_code"] == "G1010")
     assert energy["is_candidate"]
-    assert not energy["is_selected"]
-    assert energy["reason_code"] == "INSUFFICIENT_LARGE"
+    assert energy["is_selected"]
+    assert energy["reason_code"] == "SELECTED"
 
 
 def test_company_risk_block_reduces_sector_eligible_large_count():

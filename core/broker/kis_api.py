@@ -261,7 +261,7 @@ class KisBroker:
             "authorization": self.broker.access_token,
             "appKey": self.key,
             "appSecret": self.secret,
-            "tr_id": "VTTC8001R" if self.is_mock else "TTTC8001R",
+            "tr_id": "VTTC0081R" if self.is_mock else "TTTC0081R",
             "custtype": "P",
         }
         ymd = target_date.strftime("%Y%m%d")
@@ -280,6 +280,7 @@ class KisBroker:
             "INQR_DVSN_1": "",
             "CTX_AREA_FK100": "",
             "CTX_AREA_NK100": "",
+            "EXCG_ID_DVSN_CD": "ALL",
         }
         rows = []
         for _ in range(20):

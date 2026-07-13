@@ -75,6 +75,10 @@ def _parse_args() -> argparse.Namespace:
     analyze_p.add_argument("--publish", action="store_true")
     analyze_p.add_argument("--force", action="store_true")
     analyze_p.add_argument("--no-progress", action="store_true")
+    analyze_p.add_argument(
+        "--reuse-quarter-scores", action="store_true",
+        help="역사 리플레이에서 기존 포인트인타임 분기 FA 점수를 재사용",
+    )
 
     subparsers.add_parser("audit", help="FA 시점 안전성과 운영 상태 감사")
 
@@ -253,6 +257,7 @@ def run_analyze(args: argparse.Namespace) -> None:
             effective_date=args.effective_date,
             publish=args.publish,
             force=args.force,
+            reuse_quarter_scores=args.reuse_quarter_scores,
         )
         context = run(db, request, load_analyzer_config(), show_progress=not args.no_progress)
         print()

@@ -34,16 +34,12 @@ def publish(
     now_kst: datetime | None = None,
 ) -> PublishResult:
     now = now_kst or datetime.now(KST)
-    expected_count = (
-        config.scoring.final_industry_count * config.scoring.companies_per_industry
-    )
     try:
         result = publish_fa_run(
             db,
             run_id,
             strategy_name=config.strategy_name,
             enabled_market_types=list(config.scoring.enabled_market_types),
-            expected_company_count=expected_count,
             publish_deadline_kst=config.scoring.publish_deadline_kst,
             force_exit_date=calc_force_exit_date(now.date(), 20),
             now_kst=now,

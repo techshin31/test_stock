@@ -1,0 +1,54 @@
+{
+  "metadata": {
+    "generated_at": "2026-07-13T11:17:35",
+    "methodology": "monthly point-in-time latest eligible FA scores; top 10 by FA score",
+    "exposure": 0.9,
+    "fa_minimum": 50.0,
+    "buy_cost_rate": 0.00115,
+    "sell_cost_rate": 0.00295,
+    "score_history_start": "2023-05-02",
+    "score_history_end": "2026-07-02",
+    "price_history_start": "2023-01-02",
+    "price_history_end": "2026-07-09",
+    "important_limitations": [
+      "Only two PUBLISHED aggressive FA runs exist, so historical candidates are reconstructed from point-in-time quarterly FA scores.",
+      "Sector selection and live TA entry timing are not replayed; this isolates allocation-method effects.",
+      "Monthly close-to-close returns and approximate transaction costs are used."
+    ]
+  },
+  "summary": {
+    "equal": {
+      "months": 38,
+      "total_return": 1.3489231371004107,
+      "cagr": 0.30953305407568266,
+      "annual_volatility": 0.214444702071025,
+      "sharpe_zero_rf": 1.371030189036455,
+      "max_drawdown": -0.130312696234415,
+      "average_monthly_turnover": 0.3789473684210526,
+      "total_cost_ratio": 0.028710000000000006,
+      "final_equity_multiple": 2.3489231371004107
+    },
+    "fa_direct": {
+      "months": 38,
+      "total_return": 1.3354179585330095,
+      "cagr": 0.3071507247623091,
+      "annual_volatility": 0.21405404292984334,
+      "sharpe_zero_rf": 1.3645446397960777,
+      "max_drawdown": -0.12958866069844666,
+      "average_monthly_turnover": 0.3801386413939991,
+      "total_cost_ratio": 0.02880280016459253,
+      "final_equity_multiple": 2.3354179585330095
+    },
+    "fa_excess": {
+      "months": 38,
+      "total_return": 1.3013087976981637,
+      "cagr": 0.301091568310208,
+      "annual_volatility": 0.2136514004754946,
+      "sharpe_zero_rf": 1.3446190008972776,
+      "max_drawdown": -0.12865795158794224,
+      "average_monthly_turnover": 0.38379322106997743,
+      "total_cost_ratio": 0.029087491921351245,
+      "final_equity_multiple": 2.3013087976981637
+    }
+  }
+}

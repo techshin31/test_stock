@@ -115,10 +115,6 @@ class FaV1Config:
     minimum_monthly_samples: int = 36
     minimum_abs_correlation: float = 0.15
     minimum_relationship_confidence: float = 0.50
-    candidate_up_count: int = 5
-    candidate_down_count: int = 3
-    final_industry_count: int = 5
-    companies_per_industry: int = 2
     allowed_company_size: str = "LARGE"
     minimum_company_fa_score: float = 50.0
     minimum_scoring_cohort_size: int = 10
@@ -143,10 +139,6 @@ class FaV1Config:
             raise ValueError("macro trend weights must sum to 1")
         if abs(sum(self.sector_score_weights) - 1.0) > 1e-9:
             raise ValueError("sector score weights must sum to 1")
-        if self.candidate_up_count + self.candidate_down_count != 8:
-            raise ValueError("v1 must produce exactly eight sector candidates")
-        if self.final_industry_count * self.companies_per_industry != 10:
-            raise ValueError("v1 must allow up to ten companies")
         if not 0 <= self.cohort_quality_threshold <= 100:
             raise ValueError("cohort_quality_threshold must be between 0 and 100")
         if self.cohort_quality_penalty_rate < 0:

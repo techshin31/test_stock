@@ -562,11 +562,8 @@ def select_companies(
         ))
         for rank, row in enumerate(eligible, 1):
             row["industry_rank"] = rank
-            row["is_selected"] = rank <= config.scoring.companies_per_industry
-            row["reason"] = (
-                "selected by FA score, confidence, liquidity, and stock code"
-                if row["is_selected"] else "ranked below the top two eligible companies"
-            )
+            row["is_selected"] = True
+            row["reason"] = "selected: passed all FA, confidence, risk, and market filters"
     return sorted(results, key=lambda row: (row["industry_code"], row["stock_code"]))
 
 

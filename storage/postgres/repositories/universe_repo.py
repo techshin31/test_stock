@@ -242,7 +242,6 @@ def publish_fa_run(
     *,
     strategy_name: str,
     enabled_market_types: list[str],
-    expected_company_count: int,
     publish_deadline_kst: time,
     force_exit_date: date,
     now_kst: datetime,
@@ -307,10 +306,6 @@ def publish_fa_run(
             """,
             (run_id,),
         ).fetchall()
-        if len(selected) > expected_company_count:
-            raise ValueError(
-                f"selected company count exceeds {expected_company_count}"
-            )
         invalid = [
             row["stock_code"] for row in selected
             if row["market_type_code"] not in enabled_market_types
@@ -342,6 +337,21 @@ def publish_fa_run(
                 f"selected companies are buy blocked: "
                 f"{sorted(row['stock_code'] for row in blocked)}"
             )
+
+        # A forced re-analysis may legitimately replace an earlier publication
+        # for the same effective date. Demote it inside this transaction before
+        # promoting the new run so the partial unique index is never violated.
+        conn.execute(
+            """
+            UPDATE fa_analysis_runs
+            SET status_code = 'PASS', published_at = NULL
+            WHERE strategy_id = %s
+              AND effective_date = %s
+              AND status_code = 'PUBLISHED'
+              AND id <> %s
+            """,
+            (run["strategy_id"], effective_date, run_id),
+        )
 
         sell_only = conn.execute(
             """

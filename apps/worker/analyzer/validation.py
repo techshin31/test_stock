@@ -99,26 +99,19 @@ def validate_run(
     selected_sectors = int(sector_counts.get("selected") or 0)
     checks.append(ResultCheck(
         "sector_selection",
-        0 <= selected_sectors <= config.scoring.final_industry_count,
-        f"selected={selected_sectors}, max={config.scoring.final_industry_count}",
+        selected_sectors >= 0,
+        f"selected={selected_sectors}, count_limit=none",
     ))
 
     company_rows = fetch_selected_companies_with_company_info(db, run_id)
     industry_counts: dict[str, int] = {}
     for row in company_rows:
         industry_counts[row["industry_code"]] = industry_counts.get(row["industry_code"], 0) + 1
-    max_companies = (
-        config.scoring.final_industry_count * config.scoring.companies_per_industry
-    )
-    company_shape_ok = (
-        len(company_rows) <= max_companies
-        and len(industry_counts) <= config.scoring.final_industry_count
-        and all(count <= config.scoring.companies_per_industry for count in industry_counts.values())
-    )
+    company_shape_ok = len(company_rows) == len({row["stock_code"] for row in company_rows})
     checks.append(ResultCheck(
         "company_selection",
         company_shape_ok,
-        f"count={len(company_rows)}, max={max_companies}, by_industry={industry_counts}",
+        f"count={len(company_rows)}, count_limit=none, by_industry={industry_counts}",
     ))
 
     invalid_companies = sorted(

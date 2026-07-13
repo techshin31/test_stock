@@ -48,9 +48,11 @@ def test_published_fa_history_rejects_lookahead_input():
         )
 
 
-def test_published_fa_history_rejects_more_than_ten_companies():
+def test_published_fa_history_allows_more_than_ten_companies():
     rows = _rows(date(2026, 6, 1), [f"{index:06d}" for index in range(11)])
-    with pytest.raises(ValueError, match="exceeds 10"):
-        build_fa_published_universe(
-            FakeDB(rows), "risk_neutral", date(2026, 6, 1), date(2026, 6, 30)
-        )
+    initial, plans, tickers = build_fa_published_universe(
+        FakeDB(rows), "risk_neutral", date(2026, 6, 1), date(2026, 6, 30)
+    )
+    assert len(initial) == 11
+    assert not plans
+    assert len(tickers) == 11

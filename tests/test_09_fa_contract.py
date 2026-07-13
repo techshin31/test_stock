@@ -19,8 +19,8 @@ from apps.worker.fa_contract import (
 
 def test_v1_config_has_required_output_counts_and_weights():
     DEFAULT_CONFIG.validate()
-    assert DEFAULT_CONFIG.candidate_up_count + DEFAULT_CONFIG.candidate_down_count == 8
-    assert DEFAULT_CONFIG.final_industry_count * DEFAULT_CONFIG.companies_per_industry == 10
+    assert not hasattr(DEFAULT_CONFIG, "candidate_up_count")
+    assert not hasattr(DEFAULT_CONFIG, "final_industry_count")
     assert sum(DEFAULT_CONFIG.sector_score_weights) == pytest.approx(1.0)
     assert DEFAULT_CONFIG.cohort_quality_threshold == 60.0
     assert DEFAULT_CONFIG.maximum_cohort_quality_penalty == 12.0

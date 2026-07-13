@@ -2,26 +2,35 @@ import argparse
 import traceback
 import logging
 import os
+from logging.handlers import RotatingFileHandler
 
 from core.execution.trader import LiveTrader
 from core.utils.telegram_bot import TelegramBot
 
-# 로그 디렉토리 생성 및 로거 설정
-os.makedirs("logs", exist_ok=True)
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[
-        logging.FileHandler("logs/live_trader.log", encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
+def configure_logging(mode: str) -> None:
+    log_dir = os.path.join("logs", mode.lower())
+    os.makedirs(log_dir, exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        handlers=[
+            RotatingFileHandler(
+                os.path.join(log_dir, "trader.log"),
+                maxBytes=5 * 1024 * 1024,
+                backupCount=5,
+                encoding="utf-8",
+            ),
+            logging.StreamHandler(),
+        ],
+        force=True,
+    )
 
 def main():
     parser = argparse.ArgumentParser(description="FA+TA Momentum Live Trader")
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument("--live", action="store_true", help="실계좌 사용(이중 잠금 필요)")
     mode_group.add_argument("--mock", action="store_true", help="모의투자 계좌 사용(기본값)")
+    mode_group.add_argument("--simulate", action="store_true", help="로컬 가상 계좌와 즉시 체결 엔진 사용")
     parser.add_argument("--dry-run", action="store_true", help="주문 실행 없이 시그널만 계산")
     parser.add_argument("--premarket", action="store_true", help="장 시작 전 FA 필터링(관심종목 추출) 1회 실행")
     parser.add_argument("--liquidate", action="store_true", help="보유 중인 모든 종목을 즉시 전량 시장가 매도하여 현금화")
@@ -30,6 +39,13 @@ def main():
         help="전체 청산 확인 문자열. --liquidate와 함께 LIQUIDATE를 입력해야 함",
     )
     args = parser.parse_args()
+    requested_mode = (
+        "DRY_RUN" if args.dry_run
+        else "SIMULATE" if args.simulate
+        else "REAL" if args.live
+        else "PAPER"
+    )
+    configure_logging(requested_mode)
     
     bot = TelegramBot()
     
@@ -47,10 +63,18 @@ def main():
             
         # 트레이더 초기화
         # 주의: dry_run이면 무조건 mock API를 바라보게 하거나 주문 전송 단계에서 막음
-        trader = LiveTrader(mock=not args.live)
+        trader = LiveTrader(
+            mock=not args.live, simulate=args.simulate, dry_run=args.dry_run
+        )
+        runtime_mode = (
+            "DRY_RUN" if args.dry_run
+            else "SIMULATE" if args.simulate
+            else "PAPER" if trader.broker.is_mock
+            else "REAL"
+        )
         logging.info(
             "[TRADER] mode=%s account=%s",
-            "PAPER" if trader.broker.is_mock else "REAL",
+            runtime_mode,
             trader.broker.masked_account,
         )
         
@@ -85,6 +109,7 @@ def main():
                 })
             
             results = trader._execute_orders(sell_orders)
+            trader.append_trade_history(results or [])
             if results is None:  # dry-run monkey patch
                 results = [{**order, "status": "DRY_RUN"} for order in sell_orders]
             
@@ -126,6 +151,9 @@ def main():
                 execution_results = trader._execute_orders(orders)
             else:
                 execution_results = orders or []
+            trader.update_intraday_dashboard(execution_results)
+            if not getattr(args, 'dry_run', False):
+                trader.append_trade_history(execution_results)
         
         # 결과 메시지 조립
         if not orders:

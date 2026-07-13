@@ -75,9 +75,8 @@ def test_live_ta_rejects_missing_or_low_confidence_fundamentals():
         assert target == 0.0
 
 
-def test_portfolio_limit_keeps_best_held_then_best_new_without_upscaling():
+def test_portfolio_limit_keeps_all_eligible_positions_without_upscaling():
     trader = object.__new__(LiveTrader)
-    trader.max_positions = 3
     targets = {f"{i:06d}.KS": 0.15 for i in range(6)}
     details = {
         ticker: {"fa_score": 60 + i, "momentum": i / 100}
@@ -87,9 +86,9 @@ def test_portfolio_limit_keeps_best_held_then_best_new_without_upscaling():
     limited = trader._apply_portfolio_limits(targets, details, positions)
 
     active = {ticker for ticker, weight in limited.items() if weight > 0}
-    assert active == {"000000.KS", "000001.KS", "000005.KS"}
-    assert all(limited[ticker] == 0.15 for ticker in active)
-    assert sum(limited.values()) == pytest.approx(0.45)
+    assert active == set(targets)
+    assert sum(limited.values()) == pytest.approx(0.90)
+    assert limited["000005.KS"] > limited["000000.KS"]
 
 
 class PublishedDB:

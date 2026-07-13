@@ -1,0 +1,50 @@
+{
+  "metadata": {
+    "generated_at": "2026-07-13T12:26:54",
+    "period_start": "2026-01-30",
+    "period_end": "2026-07-09",
+    "replay_runs": 7,
+    "replay_statuses": {
+      "PASS": 6,
+      "PUBLISHED": 1
+    },
+    "pass_only": true,
+    "methodology": "monthly historical FA macro-sector-company replay + daily KOSPI/TA entry-exit + 10% rebalance band",
+    "limitations": [
+      "Historical replay runs are research PASS/WARNING records, not retroactively PUBLISHED production records.",
+      "Execution uses daily closes and proportional weights rather than share-level fills."
+    ]
+  },
+  "summary": {
+    "equal": {
+      "trading_days": 107,
+      "total_return": 0.14166089187270003,
+      "cagr": 0.36618022190538224,
+      "annual_volatility": 0.4631306400682242,
+      "sharpe_zero_rf": 0.9070161251429788,
+      "max_drawdown": -0.21498412785662924,
+      "average_daily_turnover": 0.1043850792236878,
+      "total_cost_ratio": 0.022097299504177572
+    },
+    "fa_direct": {
+      "trading_days": 107,
+      "total_return": 0.15493595036245678,
+      "cagr": 0.4038885258800893,
+      "annual_volatility": 0.4601447726070363,
+      "sharpe_zero_rf": 0.9688225466844612,
+      "max_drawdown": -0.20302809817050926,
+      "average_daily_turnover": 0.10175671535255978,
+      "total_cost_ratio": 0.02151985948967959
+    },
+    "fa_excess": {
+      "trading_days": 107,
+      "total_return": 0.21111938267113772,
+      "cagr": 0.5700624962334819,
+      "annual_volatility": 0.4576414556107505,
+      "sharpe_zero_rf": 1.2156735968955916,
+      "max_drawdown": -0.16990471116196604,
+      "average_daily_turnover": 0.09525259059546205,
+      "total_cost_ratio": 0.020130556997480877
+    }
+  }
+}

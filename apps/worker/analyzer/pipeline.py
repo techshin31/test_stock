@@ -41,6 +41,7 @@ class AnalysisRequest:
     effective_date: date
     publish: bool = False
     force: bool = False
+    reuse_quarter_scores: bool = False
 
     def validate(self) -> None:
         if self.target not in ANALYZE_TARGET_STEPS:
@@ -65,6 +66,7 @@ def build_request(
     effective_date: str | date | None = None,
     publish: bool = False,
     force: bool = False,
+    reuse_quarter_scores: bool = False,
 ) -> AnalysisRequest:
     today = _today_kst()
     cutoff = date.fromisoformat(cutoff_date) if isinstance(cutoff_date, str) else cutoff_date
@@ -89,6 +91,7 @@ def build_request(
         effective_date=effective,
         publish=publish,
         force=force,
+        reuse_quarter_scores=reuse_quarter_scores,
     )
     request.validate()
     return request
@@ -107,6 +110,7 @@ def _analysis_input_hash(
         request.analysis_month.isoformat(),
         request.cutoff_date.isoformat(),
         request.effective_date.isoformat(),
+        str(request.reuse_quarter_scores),
     ))
     return hashlib.sha256(payload.encode("ascii")).hexdigest()
 
@@ -231,12 +235,20 @@ def run(
 
     # ── 분기 FA ────────────────────────────────────────────────────────────
     pbar.set_description("분기 FA")
-    quarter_rows = _run_stage(
-        db, context, 7,
-        lambda: refresh_quarterly_scores(db, request.cutoff_date, config),
+    quarter_rows = (
+        0
+        if request.reuse_quarter_scores
+        else _run_stage(
+            db, context, 7,
+            lambda: refresh_quarterly_scores(db, request.cutoff_date, config),
+        )
     )
     pbar.update(1)
-    _w(f"  분기 FA 스코어: {quarter_rows:,}건 갱신")
+    _w(
+        "  분기 FA 스코어: 기존 포인트인타임 점수 재사용"
+        if request.reuse_quarter_scores
+        else f"  분기 FA 스코어: {quarter_rows:,}건 갱신"
+    )
 
     # ── 매크로 분석 ────────────────────────────────────────────────────────
     pbar.set_description("매크로 분석")
@@ -289,7 +301,7 @@ def run(
         selected = sum(row["is_selected"] for row in sector_results)
         base_status = (
             RunStatus.PASS.value
-            if 0 <= selected <= config.scoring.final_industry_count
+            if selected >= 0
             else RunStatus.WARNING.value
         )
         status = _status_with_quality(
@@ -326,18 +338,8 @@ def run(
         _w(f"  {ind_code}: {', '.join(stocks)}")
 
     if request.target == "company":
-        selected_industries = {row["industry_code"] for row in selected_companies}
-        max_companies = (
-            config.scoring.final_industry_count * config.scoring.companies_per_industry
-        )
-        within_selection_limits = (
-            len(selected_companies) <= max_companies
-            and len(selected_industries) <= config.scoring.final_industry_count
-            and all(
-                sum(row["industry_code"] == code for row in selected_companies)
-                <= config.scoring.companies_per_industry
-                for code in selected_industries
-            )
+        within_selection_limits = len(selected_companies) == len(
+            {row["stock_code"] for row in selected_companies}
         )
         base_status = (
             RunStatus.PASS.value if within_selection_limits else RunStatus.WARNING.value

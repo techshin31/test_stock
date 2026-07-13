@@ -4,8 +4,10 @@ from contextlib import contextmanager
 import pytest
 
 from core.broker.kis_api import BrokerResponseError, KisBroker, normalize_symbol
+from core.broker.simulation import LocalSimulationBroker
 from core.execution.trader import LiveTrader
 from scheduler import is_trading_day
+import scheduler
 from storage.postgres.repositories.order_repo import DuplicateOrderError, create_order
 
 
@@ -136,6 +138,24 @@ def test_price_deviation_blocks_order_before_db_claim(monkeypatch):
     assert broker.place_calls == 0
 
 
+def test_price_deviation_does_not_block_risk_sell(monkeypatch):
+    broker = SafeBroker(price=90)
+    trader = _bare_trader(broker)
+    monkeypatch.setattr("storage.postgres.repositories.order_repo.create_order", lambda *a, **k: "local-id")
+    monkeypatch.setattr("storage.postgres.repositories.order_repo.mark_order_submitted", lambda *a, **k: None)
+    monkeypatch.setattr("storage.postgres.repositories.order_repo.attach_broker_order_id", lambda *a, **k: None)
+    monkeypatch.setattr("storage.postgres.repositories.order_repo.update_order_status", lambda *a, **k: None)
+    trader._record_broker_status = lambda *args: "ACCEPTED"
+
+    result = trader._execute_orders([
+        {"type": "SELL", "ticker": "005930.KS", "qty": 1,
+         "expected_price": 100, "reason": "MARKET_DOWNTREND", "idempotency_key": "sell-key"}
+    ])
+
+    assert result[0]["status"] == "ACCEPTED"
+    assert broker.place_calls == 1
+
+
 def test_broker_acceptance_is_not_treated_as_fill(monkeypatch):
     broker = SafeBroker()
     trader = _bare_trader(broker)
@@ -220,6 +240,34 @@ def test_scheduler_does_not_trade_on_weekends():
     assert is_trading_day(saturday) is False
 
 
+def test_scheduler_dry_run_adds_no_order_flag(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        scheduler.subprocess,
+        "run",
+        lambda cmd, **kwargs: captured.update(cmd=cmd) or type("R", (), {"returncode": 0})(),
+    )
+
+    scheduler.run_command(mode="intraday", live=False, dry_run=True)
+
+    assert "--mock" in captured["cmd"]
+    assert "--dry-run" in captured["cmd"]
+
+
+def test_scheduler_simulation_uses_local_broker_flag(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        scheduler.subprocess,
+        "run",
+        lambda cmd, **kwargs: captured.update(cmd=cmd) or type("R", (), {"returncode": 0})(),
+    )
+
+    scheduler.run_command(mode="intraday", dry_run=False, simulate=True)
+
+    assert "--simulate" in captured["cmd"]
+    assert "--dry-run" not in captured["cmd"]
+
+
 def test_unknown_order_recovery_requires_one_precise_match():
     local = {
         "symbol": "005930", "order_side_code": "BUY", "qty": 2,
@@ -232,3 +280,58 @@ def test_unknown_order_recovery_requires_one_precise_match():
     wrong_qty = {**matching, "odno": "000124", "ord_qty": "3"}
     assert LiveTrader._match_unknown_broker_order(local, [matching, wrong_qty], set()) == [matching]
     assert LiveTrader._match_unknown_broker_order(local, [matching], {"123"}) == []
+
+
+def test_unknown_order_reconciliation_waits_for_grace_period():
+    trader = object.__new__(LiveTrader)
+    trader.unknown_order_grace_seconds = 300
+    now = datetime.datetime(2026, 7, 13, 5, 20, tzinfo=datetime.timezone.utc)
+    assert trader._unknown_order_grace_elapsed(
+        {"created_at": now - datetime.timedelta(seconds=301)}, now
+    )
+    assert not trader._unknown_order_grace_elapsed(
+        {"created_at": now - datetime.timedelta(seconds=299)}, now
+    )
+
+
+def test_unresolved_order_circuit_breaker_blocks_trading():
+    trader = object.__new__(LiveTrader)
+    trader.db = type("DB", (), {"fetch_one": lambda *a, **k: {"count": 2}})()
+
+    with pytest.raises(RuntimeError, match="2 open orders"):
+        trader._assert_no_unresolved_orders()
+
+
+def test_paper_fill_can_be_inferred_from_balance_change():
+    broker = SafeBroker(price=100)
+    broker.get_balance = lambda: {
+        "positions": {"005930.KS": {"qty": 7}}, "cash": 0
+    }
+    trader = _bare_trader(broker)
+
+    status = trader._infer_paper_fill_from_balance(
+        "005930.KS", "SELL", 3, 100, {"005930.KS": {"qty": 10}}
+    )
+
+    assert status["status"] == "FILLED"
+    assert status["filled_qty"] == 3
+    assert status["raw"]["source"] == "PAPER_BALANCE_FALLBACK"
+
+
+def test_local_simulation_broker_persists_fills(tmp_path, monkeypatch):
+    monkeypatch.setenv("SIM_INITIAL_CASH", "1000000")
+    monkeypatch.setenv("SIM_SLIPPAGE_RATE", "0")
+    state_path = tmp_path / "sim.json"
+    broker = LocalSimulationBroker(state_path)
+    broker.set_market_price("005930.KS", 100)
+
+    buy = broker.place_market_buy("005930.KS", 10)
+    assert broker.get_order_status(buy["output"]["ODNO"])["status"] == "FILLED"
+    assert broker.get_balance()["positions"]["005930.KS"]["qty"] == 10
+
+    restarted = LocalSimulationBroker(state_path)
+    restarted.set_market_price("005930.KS", 110)
+    restarted.place_market_sell("005930.KS", 4)
+    balance = restarted.get_balance()
+    assert balance["positions"]["005930.KS"]["qty"] == 6
+    assert balance["cash"] > 999000

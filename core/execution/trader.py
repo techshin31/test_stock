@@ -5,16 +5,19 @@ import pandas as pd
 import datetime
 import hashlib
 from zoneinfo import ZoneInfo
+from pathlib import Path
 from data.loaders.kospi_data import download_multiple_stocks, download_kospi_index
 from data.loaders.fa_ta_loader import enrich_ohlcv_with_fa
+from apps.worker.fa_contract import DEFAULT_CONFIG as FA_CONTRACT
 from storage.postgres.connection import PostgreDB
 from core.strategy.fa_ta_momentum import FaTaMomentumStrategy
 from core.broker.kis_api import BrokerResponseError, KisBroker, normalize_symbol
+from core.broker.simulation import LocalSimulationBroker
 from core.utils.trading_calendar import previous_krx_trading_day
 
 class LiveTrader:
-    def __init__(self, mock=True):
-        self.broker = KisBroker(mock=mock)
+    def __init__(self, mock=True, simulate=False, dry_run=False):
+        self.broker = LocalSimulationBroker() if simulate else KisBroker(mock=mock)
         db_config = {
             'host': os.getenv('POSTGRES_HOST', 'localhost'),
             'port': int(os.getenv('POSTGRES_PORT', '5433')),
@@ -30,7 +33,9 @@ class LiveTrader:
         self.max_order_attempts = int(os.getenv("MAX_ORDER_ATTEMPTS", "2"))
         self.fill_poll_attempts = int(os.getenv("KIS_FILL_POLL_ATTEMPTS", "5"))
         self.fill_poll_interval = float(os.getenv("KIS_FILL_POLL_INTERVAL", "1"))
-        self.max_positions = int(os.getenv("MAX_POSITIONS", "5"))
+        self.unknown_order_grace_seconds = int(
+            os.getenv("KIS_UNKNOWN_ORDER_GRACE_SECONDS", "300")
+        )
         self.allow_warning_fa_run = os.getenv("ALLOW_WARNING_FA_RUN", "false").lower() == "true"
         if not 0 <= self.max_price_deviation <= 0.20:
             raise ValueError("MAX_PRICE_DEVIATION은 0~0.20 범위여야 합니다.")
@@ -40,20 +45,23 @@ class LiveTrader:
             raise ValueError("주문/체결 시도 횟수는 1 이상이어야 합니다.")
         if self.fill_poll_interval < 0:
             raise ValueError("KIS_FILL_POLL_INTERVAL은 0 이상이어야 합니다.")
-        if not 1 <= self.max_positions <= 20:
-            raise ValueError("MAX_POSITIONS는 1~20 범위여야 합니다.")
 
         # 최적화된 파라미터 적용
         strategy_params = {
             "entry_size": 0.18,     # 5종목 분산 (5 * 18% = 90% 비중, 10% 현금 유지)
             "ma_window": 60,        # 60일선 돌파 모멘텀
             "ma_window_fast": 20,
-            "fa_score_min": 60.0,   # DB fa_score 진입 기준
+            "fa_score_min": FA_CONTRACT.minimum_company_fa_score,
             "fa_score_exit": 40.0,  # fa_score 하락 시 매도 기준
             "debt_ratio_max": 2.0,  # 부채비율 상한 (200%)
         }
         self.strategy = FaTaMomentumStrategy(strategy_params)
         self.strategy_name = self.strategy.INVESTMENT_TYPE.name.lower()
+        self.execution_venue = (
+            "DRY_RUN" if dry_run else "SIMULATE" if simulate else "PAPER" if mock else "REAL"
+        )
+        self.log_dir = Path("logs") / self.execution_venue.lower()
+        self.log_dir.mkdir(parents=True, exist_ok=True)
 
     def run_premarket_batch(self):
         logging.info(f"[{datetime.datetime.now()}] 프리마켓 FA 필터링 시작")
@@ -109,10 +117,11 @@ class LiveTrader:
         logging.info(f"프리마켓 FA 필터링 완료. 관심 종목 {len(fa_candidates)}개 저장.")
         
         # 타임라인 업데이트
+        dashboard_path = self.log_dir / "dashboard_state.json"
         dashboard_state = {"timeline": []}
-        if os.path.exists("logs/dashboard_state.json"):
+        if dashboard_path.exists():
             try:
-                with open("logs/dashboard_state.json", "r", encoding="utf-8") as f:
+                with dashboard_path.open("r", encoding="utf-8") as f:
                     dashboard_state = json.load(f)
             except (OSError, ValueError, TypeError) as e:
                 logging.warning(f"대시보드 상태 로드 실패: {e}")
@@ -121,16 +130,9 @@ class LiveTrader:
         timeline.append(f"[{datetime.datetime.now().strftime('%H:%M')}] ☀️ 프리마켓 우량주(FA) {len(fa_candidates)}개 발굴 완료")
         dashboard_state["timeline"] = timeline[-5:] # 최근 5개 유지
         
-        with open("logs/dashboard_state.json", "w", encoding="utf-8") as f:
+        with dashboard_path.open("w", encoding="utf-8") as f:
             json.dump(dashboard_state, f, ensure_ascii=False, indent=2)
 
-        # DB 동기화
-        lineage = {
-            f"{row['stock_code']}.KS": row["fa_company_result_id"]
-            for row in published_candidates
-        }
-        self._sync_universe_to_db(fa_candidates, ohlcv_store, lineage=lineage)
-            
         return fa_candidates
 
     def run_daily_batch(self):
@@ -150,17 +152,20 @@ class LiveTrader:
         total_eval = balance_info.get("total_asset") or (cash + sum(p['qty'] * p['current_price'] for p in positions.values()))
         logging.info(f"총 자산 추정치: {total_eval:,.0f}원")
         
-        # DB 동기화
-        self._sync_balance_and_positions(balance_info, total_eval)
-        self._reconcile_open_orders()
+        # Local simulation state is isolated from operational order/position tables.
+        if not getattr(self.broker, "is_simulated", False):
+            self._sync_balance_and_positions(balance_info, total_eval)
+            self._reconcile_open_orders(positions)
+            self._assert_no_unresolved_orders()
         
         # 대시보드 표시용 상태 업데이트
         if not os.path.exists("logs"):
             os.makedirs("logs", exist_ok=True)
+        dashboard_path = self.log_dir / "dashboard_state.json"
         dashboard_state = {"timeline": []}
-        if os.path.exists("logs/dashboard_state.json"):
+        if dashboard_path.exists():
             try:
-                with open("logs/dashboard_state.json", "r", encoding="utf-8") as f:
+                with dashboard_path.open("r", encoding="utf-8") as f:
                     dashboard_state = json.load(f)
             except (OSError, ValueError, TypeError) as e:
                 logging.warning(f"대시보드 상태 로드 실패: {e}")
@@ -179,12 +184,11 @@ class LiveTrader:
         dashboard_state["positions"] = list(positions.keys())
         dashboard_state["total_slippage"] = total_slippage
         
-        with open("logs/dashboard_state.json", "w", encoding="utf-8") as f:
+        with dashboard_path.open("w", encoding="utf-8") as f:
             json.dump(dashboard_state, f, ensure_ascii=False, indent=2)
             
         # ponytail: append to csv for timeseries tracking
-        with open("logs/asset_timeseries.csv", "a", encoding="utf-8") as f:
-            f.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')},{total_eval}\n")
+        self._append_account_history(balance_info, total_eval)
         
         # 2. 데이터 로드 (최근 150일)
         signal_date = previous_krx_trading_day(datetime.date.today())
@@ -196,6 +200,12 @@ class LiveTrader:
                 candidate_payload = json.load(f)
             if candidate_payload.get("source") != "published_fa":
                 raise ValueError("legacy/unverified FA candidate file")
+            if candidate_payload.get("signal_date") != signal_date.isoformat():
+                raise ValueError(
+                    "FA candidate signal_date mismatch: "
+                    f"expected={signal_date.isoformat()}, "
+                    f"actual={candidate_payload.get('signal_date')}"
+                )
             fa_candidates = list(candidate_payload.get("tickers", []))
         except (OSError, ValueError, TypeError) as e:
             # 프리마켓 결과가 없으면 신규 매수를 허용하지 않고 보유 종목만 평가한다.
@@ -256,113 +266,230 @@ class LiveTrader:
         # 이미 보유 중인데 target_positions에 안 뜬 종목은 계속 홀딩 (target_weight == 기존 비중)
         for ticker in positions.keys():
             if ticker not in target_positions:
-                target_positions[ticker] = 0.0
-                target_details[ticker] = {"fa_score": 0.0, "momentum": -1.0}
+                pos = positions[ticker]
+                current_weight = (
+                    pos["qty"] * pos["current_price"] / total_eval
+                    if total_eval > 0 else 0.0
+                )
+                target_positions[ticker] = current_weight
+                target_details[ticker] = {
+                    "fa_score": 0.0,
+                    "momentum": -1.0,
+                    "signal_reason": "DATA_UNAVAILABLE_HOLD",
+                }
 
         target_positions = self._apply_portfolio_limits(
             target_positions, target_details, positions
+        )
+        self._write_decision_snapshot(
+            total_eval, positions, target_positions, target_details, market_regime
         )
                 
         print(f"[타겟 산출 완료] 타겟 포지션 수: {len([t for t, w in target_positions.items() if w > 0.0])}개")
         
         # 4. 주문 실행 (주식 수 계산 및 API 전송)
-        orders = self._calculate_orders(total_eval, positions, target_positions, ohlcv_store)
-        # 타임라인 업데이트 (장중)
-        buy_count = sum(1 for o in orders if o['type'] == 'BUY')
-        sell_count = sum(1 for o in orders if o['type'] == 'SELL')
-        
-        dashboard_state = {"timeline": []}
-        if os.path.exists("logs/dashboard_state.json"):
-            try:
-                with open("logs/dashboard_state.json", "r", encoding="utf-8") as f:
-                    dashboard_state = json.load(f)
-            except (OSError, ValueError, TypeError) as e:
-                logging.warning(f"대시보드 상태 로드 실패: {e}")
-            
-        timeline = dashboard_state.setdefault("timeline", [])
-        timeline.append(f"[{datetime.datetime.now().strftime('%H:%M')}] ⚡ 장중 매매 완료: 신규매수 {buy_count}건 / 손절·익절 {sell_count}건")
-        dashboard_state["timeline"] = timeline[-5:]
-        
-        with open("logs/dashboard_state.json", "w", encoding="utf-8") as f:
-            json.dump(dashboard_state, f, ensure_ascii=False, indent=2)
-            
+        orders = self._calculate_orders(
+            total_eval, positions, target_positions, ohlcv_store, target_details
+        )
         print(f"[{datetime.datetime.now()}] 배치 종료")
         return orders
 
-    def _apply_portfolio_limits(self, targets, details, positions):
-        """보유 우선·FA/모멘텀 순위·개별/총 비중 한도를 적용한다."""
-        result = dict(targets)
-        active = [ticker for ticker, weight in result.items() if weight > 0]
-        held = [ticker for ticker in active if ticker in positions]
-        new = [ticker for ticker in active if ticker not in positions]
+    def update_intraday_dashboard(self, execution_results):
+        """Record broker outcomes, not pre-execution order candidates."""
+        results = list(execution_results or [])
+        dashboard_path = self.log_dir / "dashboard_state.json"
+        dashboard_state = {"timeline": []}
+        if dashboard_path.exists():
+            try:
+                with dashboard_path.open("r", encoding="utf-8") as f:
+                    dashboard_state = json.load(f)
+            except (OSError, ValueError, TypeError) as exc:
+                logging.warning(f"대시보드 상태 로드 실패: {exc}")
 
-        def rank_key(ticker):
-            detail = details.get(ticker, {})
-            return (
-                float(detail.get("fa_score") or 0),
-                float(detail.get("momentum") or 0),
-                ticker,
+        if self.execution_venue == "DRY_RUN":
+            buy_count = sum(row.get("type") == "BUY" for row in results)
+            sell_count = sum(row.get("type") == "SELL" for row in results)
+            summary = f"모의계산: 매수후보 {buy_count}건 / 매도후보 {sell_count}건"
+        else:
+            filled = {"FILLED"}
+            open_statuses = {"PARTIAL", "ACCEPTED", "SUBMITTED", "UNKNOWN"}
+            skipped_statuses = {"SKIPPED", "REJECTED", "CANCELLED"}
+            buy_filled = sum(
+                row.get("type") == "BUY" and row.get("status") in filled
+                for row in results
+            )
+            sell_filled = sum(
+                row.get("type") == "SELL" and row.get("status") in filled
+                for row in results
+            )
+            open_count = sum(row.get("status") in open_statuses for row in results)
+            skipped_count = sum(row.get("status") in skipped_statuses for row in results)
+            summary = (
+                f"장중 결과: 매수체결 {buy_filled}건 / 매도체결 {sell_filled}건 / "
+                f"부분·대기 {open_count}건 / 건너뜀 {skipped_count}건"
             )
 
-        selected = sorted(held, key=rank_key, reverse=True)[:self.max_positions]
-        selected.extend(
-            sorted(new, key=rank_key, reverse=True)[: self.max_positions - len(selected)]
-        )
-        selected_set = set(selected)
-        for ticker in active:
-            if ticker not in selected_set:
-                result[ticker] = 0.0
-        for ticker in result:
-            if result[ticker] > 0:
-                result[ticker] = min(round(result[ticker], 4), 0.20)
-        total = sum(weight for weight in result.values() if weight > 0)
-        if total > 0.90:
-            scale = 0.90 / total
-            for ticker in result:
-                if result[ticker] > 0:
-                    result[ticker] = round(result[ticker] * scale, 4)
+        timeline = dashboard_state.setdefault("timeline", [])
+        timeline.append(f"[{datetime.datetime.now().strftime('%H:%M')}] ⚡ {summary}")
+        dashboard_state["timeline"] = timeline[-5:]
+        with dashboard_path.open("w", encoding="utf-8") as f:
+            json.dump(dashboard_state, f, ensure_ascii=False, indent=2)
+
+    def _write_decision_snapshot(
+        self, total_eval, positions, target_positions, target_details, market_regime
+    ):
+        rows = []
+        for ticker in sorted(set(positions) | set(target_positions)):
+            pos = positions.get(ticker, {})
+            current_weight = (
+                float(pos.get("qty", 0)) * float(pos.get("current_price", 0)) / total_eval
+                if total_eval > 0 else 0.0
+            )
+            detail = target_details.get(ticker, {})
+            rows.append({
+                "ticker": ticker,
+                "current_weight": round(current_weight, 6),
+                "target_weight": round(float(target_positions.get(ticker, 0.0)), 6),
+                "signal_reason": detail.get("signal_reason", "UNKNOWN"),
+                "fa_score": detail.get("fa_score"),
+                "momentum": detail.get("momentum"),
+                "selected": float(target_positions.get(ticker, 0.0)) > 0.0,
+            })
+        payload = {
+            "updated_at": datetime.datetime.now().isoformat(timespec="seconds"),
+            "mode": self.execution_venue,
+            "strategy": self.strategy_name,
+            "market_regime": market_regime,
+            "target_count": sum(row["selected"] for row in rows),
+            "decisions": rows,
+        }
+        state_path = self.log_dir / "decision_state.json"
+        temp_path = self.log_dir / "decision_state.json.tmp"
+        with temp_path.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2, default=str)
+        os.replace(temp_path, state_path)
+        with (self.log_dir / "decision_history.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
+
+    def _append_account_history(self, balance_info, total_eval):
+        path = self.log_dir / "account_history.csv"
+        if not path.exists():
+            path.write_text(
+                "timestamp,mode,cash,total_asset,position_count\n",
+                encoding="utf-8",
+            )
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(
+                f"{datetime.datetime.now().isoformat(timespec='seconds')},"
+                f"{self.execution_venue},{float(balance_info['cash']):.4f},"
+                f"{float(total_eval):.4f},{len(balance_info.get('positions', {}))}\n"
+            )
+
+    def append_trade_history(self, results):
+        if not results:
+            return
+        path = self.log_dir / "trade_history.jsonl"
+        timestamp = datetime.datetime.now().isoformat(timespec="seconds")
+        with path.open("a", encoding="utf-8") as handle:
+            for result in results:
+                payload = {
+                    "timestamp": timestamp,
+                    "mode": self.execution_venue,
+                    "strategy": self.strategy_name,
+                    **result,
+                }
+                handle.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
+
+    def _apply_portfolio_limits(self, targets, details, positions):
+        """Allocate 90% exposure by FA conviction above the entry threshold."""
+        result = dict(targets)
+        active = [ticker for ticker, weight in result.items() if weight > 0]
+        protected = {
+            ticker
+            for ticker in active
+            if details.get(ticker, {}).get("signal_reason") == "DATA_UNAVAILABLE_HOLD"
+        }
+        protected_total = sum(result[ticker] for ticker in protected)
+        allocatable = [ticker for ticker in active if ticker not in protected]
+        allocation_budget = max(0.90 - protected_total, 0.0)
+        fa_scores = {
+            ticker: max(
+                float(details.get(ticker, {}).get("fa_score") or 0.0)
+                - float(FA_CONTRACT.minimum_company_fa_score),
+                0.0,
+            )
+            for ticker in allocatable
+        }
+        score_total = sum(fa_scores.values())
+        if allocatable:
+            if score_total > 0:
+                raw_weights = {
+                    ticker: allocation_budget * fa_scores[ticker] / score_total
+                    for ticker in allocatable
+                }
+            else:
+                equal_weight = allocation_budget / len(allocatable)
+                raw_weights = {ticker: equal_weight for ticker in allocatable}
+            assigned = 0.0
+            ordered = sorted(allocatable)
+            for ticker in ordered[:-1]:
+                result[ticker] = round(raw_weights[ticker], 4)
+                assigned += result[ticker]
+            result[ordered[-1]] = round(max(allocation_budget - assigned, 0.0), 4)
         return result
         
-    def _calculate_orders(self, total_eval, current_positions, target_positions, ohlcv_store):
+    def _calculate_orders(
+        self,
+        total_eval,
+        current_positions,
+        target_positions,
+        ohlcv_store,
+        target_details=None,
+    ):
         """현재 비중과 타겟 비중을 비교하여 실제 매수/매도할 주식 수 계산 (부분 매수/매도 포함 리밸런싱)"""
         orders = []
+        target_details = target_details or {}
         
         # 상태 기반 중복 방지. 거부 주문은 제한 횟수 내에서만 재시도한다.
         today_str = datetime.datetime.now().strftime('%Y-%m-%d')
-        try:
-            rows = self.db.fetch_all(
-                """SELECT symbol, order_side_code, order_status_code
-                   FROM orders WHERE created_at::date = %s::date""",
-                (today_str,)
-            )
-        except Exception as e:
-            raise RuntimeError(f"당일 주문 이력 조회 실패로 주문 계산을 중단합니다: {e}") from e
+        if getattr(getattr(self, "broker", None), "is_simulated", False):
+            rows = []
+        else:
+            try:
+                rows = self.db.fetch_all(
+                    """SELECT symbol, order_side_code, order_status_code
+                       FROM orders WHERE created_at::date = %s::date""",
+                    (today_str,)
+                )
+            except Exception as e:
+                raise RuntimeError(f"당일 주문 이력 조회 실패로 주문 계산을 중단합니다: {e}") from e
 
         active_statuses = {'PENDING', 'SUBMITTED', 'ACCEPTED', 'PARTIAL', 'FILLED'}
         active_keys = {
             (normalize_symbol(r['symbol']), r['order_side_code'])
             for r in rows if r['order_status_code'] in active_statuses
         }
-        rejected_counts = {}
+        retry_counts = {}
         for row in rows:
-            if row['order_status_code'] == 'REJECTED':
+            if row['order_status_code'] in {'REJECTED', 'CANCELLED'}:
                 key = (normalize_symbol(row['symbol']), row['order_side_code'])
-                rejected_counts[key] = rejected_counts.get(key, 0) + 1
+                retry_counts[key] = retry_counts.get(key, 0) + 1
 
         def can_order(ticker, side):
             key = (normalize_symbol(ticker), side)
             if key in active_keys:
                 logging.info(f"[{ticker}] 오늘 활성/체결 {side} 주문이 존재하여 스킵합니다.")
                 return False
-            if rejected_counts.get(key, 0) >= self.max_order_attempts:
+            if retry_counts.get(key, 0) >= self.max_order_attempts:
                 logging.warning(f"[{ticker}] 오늘 {side} 주문 재시도 한도에 도달했습니다.")
                 return False
             return True
 
         def add_identity(order):
             key = (normalize_symbol(order['ticker']), order['type'])
-            attempt = rejected_counts.get(key, 0) + 1
-            raw = f"{today_str}:{self.strategy_name}:{key[0]}:{key[1]}:{attempt}"
+            attempt = retry_counts.get(key, 0) + 1
+            venue = getattr(self, "execution_venue", "PAPER")
+            raw = f"{today_str}:{self.strategy_name}:{venue}:{key[0]}:{key[1]}:{attempt}"
             order['idempotency_key'] = hashlib.sha256(raw.encode()).hexdigest()
             return order
 
@@ -385,7 +512,9 @@ class LiveTrader:
                     "ticker": ticker,
                     "qty": pos['qty'],
                     "expected_price": float(current_price),
-                    "reason": "DOWNTREND or OVERVALUED or MOMENTUM_LOSS"
+                    "reason": target_details.get(ticker, {}).get(
+                        "signal_reason", "TARGET_WEIGHT_ZERO"
+                    )
                 }))
             elif current_value > target_value * 1.10: # 10% 이상 초과 시 부분 매도
                 sell_qty = int((current_value - target_value) // current_price)
@@ -441,6 +570,8 @@ class LiveTrader:
         return orders
         
     def _execute_orders(self, orders):
+        if getattr(self.broker, "is_simulated", False):
+            return self._execute_simulation_orders(orders)
         import time
         from storage.postgres.repositories.order_repo import (
             DuplicateOrderError, attach_broker_order_id, create_order,
@@ -466,7 +597,11 @@ class LiveTrader:
             action = order['type']
             
             try:
-                current_price = self.broker.get_current_price(ticker)
+                if getattr(self.broker, "is_simulated", False):
+                    current_price = float(order["expected_price"])
+                    self.broker.set_market_price(ticker, current_price)
+                else:
+                    current_price = self.broker.get_current_price(ticker)
             except Exception as e:
                 logging.error(f"[{ticker}] 실시간 현재가 조회 실패로 주문을 건너뜁니다: {e}")
                 results.append({**order, "status": "SKIPPED", "message": str(e)})
@@ -474,7 +609,7 @@ class LiveTrader:
 
             expected_price = float(order.get("expected_price") or current_price)
             deviation = abs(current_price - expected_price) / expected_price
-            if deviation > self.max_price_deviation:
+            if action == "BUY" and deviation > self.max_price_deviation:
                 msg = f"가격 편차 {deviation:.2%}가 허용치 {self.max_price_deviation:.2%}를 초과"
                 logging.warning(f"[{ticker}] {msg}")
                 results.append({**order, "status": "SKIPPED", "message": msg})
@@ -562,6 +697,15 @@ class LiveTrader:
                         logging.warning(f"[{ticker}] 체결 확인 대기: {poll_error}")
                     time.sleep(self.fill_poll_interval)
 
+                if self.broker.is_mock and final_status == "ACCEPTED":
+                    inferred = self._infer_paper_fill_from_balance(
+                        ticker, action, qty, current_price, live_positions
+                    )
+                    if inferred is not None:
+                        final_status = self._record_broker_status(
+                            order_id, ticker, action, expected_price, odno, inferred
+                        )
+
                 if action == "BUY" and final_status in {"ACCEPTED", "PARTIAL", "FILLED"}:
                     today_cash -= qty * current_price
                 results.append({**order, "status": final_status, "broker_order_id": odno})
@@ -574,6 +718,18 @@ class LiveTrader:
             except Exception as e:
                 # 네트워크 타임아웃은 주문 성공 여부가 불명확하므로 REJECTED로 단정하지 않는다.
                 logging.exception(f"[{ticker}] 주문 결과 확인 불가: {e}")
+                inferred = None
+                if self.broker.is_mock:
+                    inferred = self._infer_paper_fill_from_balance(
+                        ticker, action, qty, current_price, live_positions
+                    )
+                if inferred is not None:
+                    final_status = self._record_broker_status(
+                        order_id, ticker, action, expected_price,
+                        "BALANCE", inferred,
+                    )
+                    results.append({**order, "status": final_status})
+                    continue
                 if order_id:
                     try:
                         update_order_status(
@@ -586,9 +742,35 @@ class LiveTrader:
 
         return results
 
+    def _execute_simulation_orders(self, orders):
+        results = []
+        for order in orders:
+            ticker = order["ticker"]
+            qty = int(order["qty"])
+            price = float(order["expected_price"])
+            try:
+                self.broker.set_market_price(ticker, price)
+                if order["type"] == "BUY":
+                    response = self.broker.place_market_buy(ticker, qty)
+                else:
+                    response = self.broker.place_market_sell(ticker, qty)
+                order_id = response["output"]["ODNO"]
+                status = self.broker.get_order_status(order_id)
+                results.append({
+                    **order,
+                    "status": status["status"],
+                    "broker_order_id": order_id,
+                    "fill_price": status["avg_fill_price"],
+                })
+            except Exception as exc:
+                logging.exception(f"[{ticker}] local simulation order failed: {exc}")
+                results.append({**order, "status": "REJECTED", "message": str(exc)})
+        return results
+
     def _idempotency_key(self, order):
         raw = ":".join([
             datetime.date.today().isoformat(), self.strategy_name,
+            getattr(self, "execution_venue", "PAPER"),
             normalize_symbol(order['ticker']), order['type'], str(order.get('reason', 'manual')),
         ])
         return hashlib.sha256(raw.encode()).hexdigest()
@@ -631,9 +813,53 @@ class LiveTrader:
         )
         return status['status']
 
-    def _reconcile_open_orders(self):
+    def _infer_paper_fill_from_balance(
+        self, ticker, action, ordered_qty, current_price, before_positions
+    ):
+        """Infer VTS fills from balance changes when daily order inquiry is empty."""
+        try:
+            after_positions = self.broker.get_balance().get("positions", {})
+        except Exception as exc:
+            logging.warning(f"[{ticker}] paper balance fallback failed: {exc}")
+            return None
+
+        before_qty = int(before_positions.get(ticker, {}).get("qty", 0))
+        after_qty = int(after_positions.get(ticker, {}).get("qty", 0))
+        filled_qty = (
+            max(before_qty - after_qty, 0)
+            if action == "SELL"
+            else max(after_qty - before_qty, 0)
+        )
+        filled_qty = min(filled_qty, int(ordered_qty))
+        if filled_qty <= 0:
+            return None
+        return {
+            "status": "FILLED" if filled_qty >= int(ordered_qty) else "PARTIAL",
+            "ordered_qty": int(ordered_qty),
+            "filled_qty": filled_qty,
+            "remaining_qty": max(int(ordered_qty) - filled_qty, 0),
+            "avg_fill_price": float(current_price),
+            "total_fill_amount": filled_qty * float(current_price),
+            "raw": {"source": "PAPER_BALANCE_FALLBACK"},
+        }
+
+    def _assert_no_unresolved_orders(self):
+        row = self.db.fetch_one(
+            """SELECT COUNT(*) AS count FROM orders
+               WHERE created_at::date = CURRENT_DATE
+                 AND order_status_code IN ('PENDING','SUBMITTED','ACCEPTED','PARTIAL')"""
+        )
+        count = int((row or {}).get("count") or 0)
+        if count:
+            raise RuntimeError(
+                f"unresolved order circuit breaker: {count} open orders require reconciliation"
+            )
+
+    def _reconcile_open_orders(self, live_positions=None):
         """이전 실행에서 남은 접수/부분체결 주문을 브로커 원장과 동기화한다."""
-        from storage.postgres.repositories.order_repo import attach_broker_order_id
+        from storage.postgres.repositories.order_repo import (
+            attach_broker_order_id, update_order_status,
+        )
 
         try:
             rows = self.db.fetch_all(
@@ -661,6 +887,24 @@ class LiveTrader:
                         daily_broker_rows = self.broker.fetch_daily_orders()
                     matches = self._match_unknown_broker_order(row, daily_broker_rows, linked_ids)
                     if len(matches) != 1:
+                        if len(matches) == 0 and self._unknown_order_grace_elapsed(row):
+                            update_order_status(
+                                self.db, row['id'], 'REJECTED',
+                                note=(
+                                    'AUTO_RECONCILED_NOT_FOUND: successful KIS daily-order '
+                                    'query found no matching order after grace period'
+                                ),
+                                event_type='AUTO_RECONCILE_NOT_FOUND',
+                                raw_payload={
+                                    'source': 'KIS_DAILY_ORDER_RECONCILIATION',
+                                    'broker_order_count': len(daily_broker_rows),
+                                },
+                            )
+                            logging.warning(
+                                f"[auto reconcile] order {row['id']} was not found in "
+                                "the KIS daily-order list; marked REJECTED"
+                            )
+                            continue
                         logging.error(
                             f"[정산 필요] 로컬 주문 {row['id']}의 브로커 주문 후보가 "
                             f"{len(matches)}건입니다. 자동 재주문하지 않습니다."
@@ -681,6 +925,49 @@ class LiveTrader:
                 )
             except Exception as e:
                 logging.warning(f"열린 주문 {row['id']} 정산 보류: {e}")
+
+        if self.broker.is_mock and live_positions is not None:
+            remaining = self.db.fetch_all(
+                """SELECT id::text, broker_order_id, symbol, order_side_code,
+                          price, qty, created_at
+                   FROM orders
+                   WHERE order_status_code IN ('SUBMITTED', 'ACCEPTED', 'PARTIAL')
+                     AND created_at::date = CURRENT_DATE"""
+            )
+            for row in remaining:
+                ticker = f"{normalize_symbol(row['symbol'])}.KS"
+                if row['order_side_code'] != 'SELL':
+                    continue
+                ordered_qty = int(row['qty'])
+                held_qty = int(live_positions.get(ticker, {}).get('qty', 0))
+                if held_qty >= ordered_qty:
+                    continue
+                filled_qty = ordered_qty - held_qty
+                synthetic = {
+                    "status": "FILLED" if held_qty == 0 else "PARTIAL",
+                    "ordered_qty": ordered_qty,
+                    "filled_qty": filled_qty,
+                    "remaining_qty": held_qty,
+                    "avg_fill_price": float(row['price']),
+                    "total_fill_amount": filled_qty * float(row['price']),
+                    "raw": {"source": "PAPER_POSITION_RECONCILIATION"},
+                }
+                self._record_broker_status(
+                    row['id'], ticker, 'SELL', float(row['price']),
+                    row['broker_order_id'] or 'BALANCE', synthetic,
+                )
+
+    def _unknown_order_grace_elapsed(self, row, now=None):
+        created_at = row.get('created_at')
+        if not isinstance(created_at, datetime.datetime):
+            return False
+        now = now or datetime.datetime.now(datetime.timezone.utc)
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=datetime.timezone.utc)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=datetime.timezone.utc)
+        grace = max(int(getattr(self, 'unknown_order_grace_seconds', 300)), 0)
+        return (now - created_at).total_seconds() >= grace
 
     @staticmethod
     def _match_unknown_broker_order(local_order, broker_rows, linked_ids):
