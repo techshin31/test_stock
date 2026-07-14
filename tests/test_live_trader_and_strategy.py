@@ -103,6 +103,7 @@ def test_live_trader_calculate_orders(monkeypatch):
 
 def test_portfolio_limit_does_not_cap_position_count():
     trader = object.__new__(LiveTrader)
+    trader.max_position_weight = 0.90
     targets = {"HELD1": 0.2, "HELD2": 0.2, "NEW": 0.2}
     details = {
         "HELD1": {"fa_score": 70, "momentum": 0.10},
@@ -118,6 +119,20 @@ def test_portfolio_limit_does_not_cap_position_count():
     assert sum(result.values()) == pytest.approx(0.9)
     assert result["NEW"] > result["HELD1"] > result["HELD2"]
     assert result["NEW"] / result["HELD2"] == pytest.approx(4.0, rel=1e-3)
+
+
+def test_portfolio_limit_caps_single_name_concentration():
+    trader = object.__new__(LiveTrader)
+    trader.max_position_weight = 0.15
+    targets = {"A": 0.4, "B": 0.3, "C": 0.2}
+    details = {
+        "A": {"fa_score": 90}, "B": {"fa_score": 70}, "C": {"fa_score": 60},
+    }
+
+    result = trader._apply_portfolio_limits(targets, details, {})
+
+    assert all(weight <= 0.15 for weight in result.values())
+    assert sum(result.values()) == pytest.approx(0.45)
 
 
 def test_many_positions_are_scaled_to_total_exposure_limit():

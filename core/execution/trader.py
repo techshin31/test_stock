@@ -37,6 +37,8 @@ class LiveTrader:
             os.getenv("KIS_UNKNOWN_ORDER_GRACE_SECONDS", "300")
         )
         self.allow_warning_fa_run = os.getenv("ALLOW_WARNING_FA_RUN", "false").lower() == "true"
+        self.price_guard_cooldown_seconds = int(os.getenv("PRICE_GUARD_COOLDOWN_SECONDS", "900"))
+        self.max_position_weight = float(os.getenv("MAX_POSITION_WEIGHT", "0.15"))
         if not 0 <= self.max_price_deviation <= 0.20:
             raise ValueError("MAX_PRICE_DEVIATION은 0~0.20 범위여야 합니다.")
         if not 1.0 <= self.buy_cash_buffer <= 1.20:
@@ -45,6 +47,8 @@ class LiveTrader:
             raise ValueError("주문/체결 시도 횟수는 1 이상이어야 합니다.")
         if self.fill_poll_interval < 0:
             raise ValueError("KIS_FILL_POLL_INTERVAL은 0 이상이어야 합니다.")
+        if not 0 < self.max_position_weight <= 0.30:
+            raise ValueError("MAX_POSITION_WEIGHT must be in (0, 0.30]")
 
         # 최적화된 파라미터 적용
         strategy_params = {
@@ -54,6 +58,9 @@ class LiveTrader:
             "fa_score_min": FA_CONTRACT.minimum_company_fa_score,
             "fa_score_exit": 40.0,  # fa_score 하락 시 매도 기준
             "debt_ratio_max": 2.0,  # 부채비율 상한 (200%)
+            "min_score_confidence": FA_CONTRACT.minimum_score_confidence,
+            "stop_loss_pct": float(os.getenv("STOP_LOSS_PCT", "0.10")),
+            "trailing_stop_pct": float(os.getenv("TRAILING_STOP_PCT", "0.08")),
         }
         self.strategy = FaTaMomentumStrategy(strategy_params)
         self.strategy_name = self.strategy.INVESTMENT_TYPE.name.lower()
@@ -62,6 +69,8 @@ class LiveTrader:
         )
         self.log_dir = Path("logs") / self.execution_venue.lower()
         self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.risk_state_path = self.log_dir / "risk_state.json"
+        self.price_guard_path = self.log_dir / "price_guard_state.json"
 
     def run_premarket_batch(self):
         logging.info(f"[{datetime.datetime.now()}] 프리마켓 FA 필터링 시작")
@@ -72,7 +81,10 @@ class LiveTrader:
         start_date = (signal_date - datetime.timedelta(days=200)).isoformat()
         
         ohlcv_store = download_multiple_stocks(tickers, start=start_date, end=end_date, show_progress=False)
-        ohlcv_store = enrich_ohlcv_with_fa(self.db, ohlcv_store, signal_date.isoformat())
+        ohlcv_store = enrich_ohlcv_with_fa(
+            self.db, ohlcv_store, signal_date.isoformat(),
+            min_score_confidence=FA_CONTRACT.minimum_score_confidence,
+        )
         ohlcv_store = self._filter_stale_data(ohlcv_store, signal_date)
         
         # 기업 위험 상태(매수 차단 종목) 조회
@@ -97,12 +109,16 @@ class LiveTrader:
             fa_score = last.get('fa_score', None)
             is_eligible = last.get('is_eligible', False)
             debt_ratio = last.get('debt_ratio', None)
+            score_confidence = last.get('score_confidence', None)
             # is_eligible 플래그 + fa_score >= 60 + 부채비율 200% 이하
             if (
                 symbol in candidate_by_symbol and
                 is_eligible and
                 fa_score is not None and float(fa_score) >= self.strategy.FA_SCORE_MIN and
-                (debt_ratio is None or float(debt_ratio) <= self.strategy.DEBT_RATIO_MAX)
+                debt_ratio is not None and pd.notnull(debt_ratio) and
+                float(debt_ratio) <= self.strategy.DEBT_RATIO_MAX and
+                score_confidence is not None and pd.notnull(score_confidence) and
+                float(score_confidence) >= self.strategy.MIN_SCORE_CONFIDENCE
             ):
                 fa_candidates.append(ticker)
         
@@ -113,6 +129,9 @@ class LiveTrader:
                 "run_id": published_run["id"],
                 "signal_date": signal_date.isoformat(),
                 "tickers": fa_candidates,
+                "minimum_fa_score": self.strategy.FA_SCORE_MIN,
+                "minimum_score_confidence": self.strategy.MIN_SCORE_CONFIDENCE,
+                "score_model_code": FA_CONTRACT.model_version,
             }, f, ensure_ascii=False, indent=2)
         logging.info(f"프리마켓 FA 필터링 완료. 관심 종목 {len(fa_candidates)}개 저장.")
         
@@ -153,10 +172,14 @@ class LiveTrader:
         logging.info(f"총 자산 추정치: {total_eval:,.0f}원")
         
         # Local simulation state is isolated from operational order/position tables.
+        unresolved_error = None
         if not getattr(self.broker, "is_simulated", False):
             self._sync_balance_and_positions(balance_info, total_eval)
             self._reconcile_open_orders(positions)
-            self._assert_no_unresolved_orders()
+            try:
+                self._assert_no_unresolved_orders()
+            except RuntimeError as exc:
+                unresolved_error = str(exc)
         
         # 대시보드 표시용 상태 업데이트
         if not os.path.exists("logs"):
@@ -183,12 +206,36 @@ class LiveTrader:
         dashboard_state["total_eval"] = total_eval
         dashboard_state["positions"] = list(positions.keys())
         dashboard_state["total_slippage"] = total_slippage
+        dashboard_state["unrealized_pnl"] = float(balance_info.get("unrealized_pnl", 0.0))
+        dashboard_state["daily_asset_change"] = float(balance_info.get("daily_asset_change", 0.0))
+        dashboard_state["daily_asset_change_rate"] = float(
+            balance_info.get("daily_asset_change_rate", 0.0)
+        )
+        dashboard_state["risk_controls"] = {
+            "stop_loss_pct": self.strategy.STOP_LOSS_PCT,
+            "trailing_stop_pct": self.strategy.TRAILING_STOP_PCT,
+        }
+        dashboard_state["daily_orders"] = self._daily_order_summary()
+        dashboard_state["operational_status"] = (
+            "ORDER_RECONCILIATION" if unresolved_error else "NORMAL"
+        )
+        dashboard_state["last_error"] = unresolved_error
         
         with dashboard_path.open("w", encoding="utf-8") as f:
             json.dump(dashboard_state, f, ensure_ascii=False, indent=2)
             
         # ponytail: append to csv for timeseries tracking
         self._append_account_history(balance_info, total_eval)
+
+        if unresolved_error:
+            logging.warning(f"{unresolved_error}; this scan will not create new orders")
+            timeline = dashboard_state.setdefault("timeline", [])
+            timeline.append(
+                f"[{datetime.datetime.now():%H:%M}] 주문 정산 대기: 신규 주문 생성 중지"
+            )
+            dashboard_state["timeline"] = timeline[-5:]
+            self._write_json_state(dashboard_path, dashboard_state)
+            return []
         
         # 2. 데이터 로드 (최근 150일)
         signal_date = previous_krx_trading_day(datetime.date.today())
@@ -216,7 +263,10 @@ class LiveTrader:
         
         logging.info(f"[데이터 로드] 관심 종목 + 보유 종목 ({len(tickers)}개) 초고속 병합 중...")
         ohlcv_store = download_multiple_stocks(tickers, start=start_date, end=end_date, show_progress=False)
-        ohlcv_store = enrich_ohlcv_with_fa(self.db, ohlcv_store, signal_date.isoformat())
+        ohlcv_store = enrich_ohlcv_with_fa(
+            self.db, ohlcv_store, signal_date.isoformat(),
+            min_score_confidence=FA_CONTRACT.minimum_score_confidence,
+        )
         ohlcv_store = self._filter_stale_data(ohlcv_store, signal_date)
         self.last_ohlcv_store = ohlcv_store
         
@@ -245,6 +295,7 @@ class LiveTrader:
             raise RuntimeError(f"기업 위험 상태 조회 실패로 신규 주문 계산을 중단합니다: {e}") from e
             
         target_details = {}
+        risk_peaks = self._update_risk_peaks(positions)
         for ticker, df in ohlcv_store.items():
             if df.empty or len(df) < 60:
                 continue
@@ -255,7 +306,10 @@ class LiveTrader:
                 if pos and total_eval > 0 else 0.0
             )
             target_weight, metadata = self.strategy.evaluate_latest(
-                df, market_regime, current_position=current_weight
+                df, market_regime, current_position=current_weight,
+                average_price=pos.get("avg_price") if pos else None,
+                current_price=pos.get("current_price") if pos else None,
+                peak_price=risk_peaks.get(ticker),
             )
             symbol = ticker.split('.')[0]
             if symbol in blocked_codes and ticker not in positions:
@@ -332,8 +386,106 @@ class LiveTrader:
         timeline = dashboard_state.setdefault("timeline", [])
         timeline.append(f"[{datetime.datetime.now().strftime('%H:%M')}] ⚡ {summary}")
         dashboard_state["timeline"] = timeline[-5:]
+        dashboard_state["daily_orders"] = self._daily_order_summary()
+        dashboard_state["operational_status"] = (
+            "ORDER_RECONCILIATION"
+            if dashboard_state["daily_orders"]["open"] > 0 else "NORMAL"
+        )
         with dashboard_path.open("w", encoding="utf-8") as f:
             json.dump(dashboard_state, f, ensure_ascii=False, indent=2)
+
+    def _daily_order_summary(self):
+        """Return today's cumulative order state; this is not the last scan result."""
+        empty = {"buy_filled": 0, "sell_filled": 0, "open": 0, "rejected": 0}
+        if getattr(getattr(self, "broker", None), "is_simulated", False):
+            return empty
+        if not hasattr(self, "db"):
+            return empty
+        try:
+            rows = self.db.fetch_all(
+                """SELECT order_side_code, order_status_code, COUNT(*) AS count
+                   FROM orders WHERE created_at::date = CURRENT_DATE
+                   GROUP BY order_side_code, order_status_code"""
+            )
+        except Exception as exc:
+            logging.warning(f"daily order summary unavailable: {exc}")
+            return empty
+        summary = dict(empty)
+        for row in rows:
+            count = int(row.get("count") or 0)
+            status = row.get("order_status_code")
+            side = row.get("order_side_code")
+            if status == "FILLED":
+                summary["buy_filled" if side == "BUY" else "sell_filled"] += count
+            elif status in {"PENDING", "SUBMITTED", "ACCEPTED", "PARTIAL"}:
+                summary["open"] += count
+            elif status in {"REJECTED", "CANCELLED"}:
+                summary["rejected"] += count
+        return summary
+
+    @staticmethod
+    def _read_json_state(path):
+        try:
+            return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        except (OSError, ValueError, TypeError):
+            return {}
+
+    @staticmethod
+    def _write_json_state(path, payload):
+        temp_path = path.with_suffix(path.suffix + ".tmp")
+        temp_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        temp_path.replace(path)
+
+    def _update_risk_peaks(self, positions):
+        """Persist the highest observed broker price while a position is held."""
+        state = self._read_json_state(self.risk_state_path)
+        peaks = {}
+        for ticker, position in positions.items():
+            current = float(position.get("current_price") or 0.0)
+            average = float(position.get("avg_price") or 0.0)
+            previous = float((state.get(ticker) or {}).get("peak_price") or 0.0)
+            peak = max(current, average, previous)
+            if peak > 0:
+                peaks[ticker] = peak
+        payload = {
+            ticker: {
+                "peak_price": peak,
+                "updated_at": datetime.datetime.now(ZoneInfo("Asia/Seoul")).isoformat(),
+            }
+            for ticker, peak in peaks.items()
+        }
+        self._write_json_state(self.risk_state_path, payload)
+        return peaks
+
+    def _price_guard_blocked(self, ticker, side):
+        path = getattr(self, "price_guard_path", None)
+        if path is None or side != "BUY":
+            return False
+        state = self._read_json_state(path)
+        item = state.get(f"{normalize_symbol(ticker)}:{side}", {})
+        try:
+            return datetime.datetime.fromisoformat(item.get("blocked_until")) > datetime.datetime.now(
+                ZoneInfo("Asia/Seoul")
+            )
+        except (TypeError, ValueError):
+            return False
+
+    def _record_price_guard(self, ticker, side, deviation):
+        path = getattr(self, "price_guard_path", None)
+        if path is None:
+            return
+        now = datetime.datetime.now(ZoneInfo("Asia/Seoul"))
+        state = self._read_json_state(path)
+        state[f"{normalize_symbol(ticker)}:{side}"] = {
+            "deviation": float(deviation),
+            "blocked_at": now.isoformat(),
+            "blocked_until": (
+                now + datetime.timedelta(seconds=self.price_guard_cooldown_seconds)
+            ).isoformat(),
+        }
+        self._write_json_state(path, state)
 
     def _write_decision_snapshot(
         self, total_eval, positions, target_positions, target_details, market_regime
@@ -412,6 +564,7 @@ class LiveTrader:
         protected_total = sum(result[ticker] for ticker in protected)
         allocatable = [ticker for ticker in active if ticker not in protected]
         allocation_budget = max(0.90 - protected_total, 0.0)
+        max_weight = getattr(self, "max_position_weight", 0.15)
         fa_scores = {
             ticker: max(
                 float(details.get(ticker, {}).get("fa_score") or 0.0)
@@ -420,22 +573,33 @@ class LiveTrader:
             )
             for ticker in allocatable
         }
-        score_total = sum(fa_scores.values())
         if allocatable:
-            if score_total > 0:
-                raw_weights = {
-                    ticker: allocation_budget * fa_scores[ticker] / score_total
-                    for ticker in allocatable
-                }
-            else:
-                equal_weight = allocation_budget / len(allocatable)
-                raw_weights = {ticker: equal_weight for ticker in allocatable}
-            assigned = 0.0
-            ordered = sorted(allocatable)
-            for ticker in ordered[:-1]:
-                result[ticker] = round(raw_weights[ticker], 4)
-                assigned += result[ticker]
-            result[ordered[-1]] = round(max(allocation_budget - assigned, 0.0), 4)
+            remaining = set(allocatable)
+            remaining_budget = min(allocation_budget, max_weight * len(remaining))
+            raw_weights = {}
+            use_scores = sum(fa_scores.values()) > 0
+            convictions = {
+                ticker: fa_scores[ticker] if use_scores else 1.0 for ticker in remaining
+            }
+            while remaining and remaining_budget > 0:
+                conviction_total = sum(convictions[ticker] for ticker in remaining)
+                capped = []
+                for ticker in remaining:
+                    proposed = remaining_budget * convictions[ticker] / conviction_total
+                    if proposed >= max_weight:
+                        raw_weights[ticker] = max_weight
+                        capped.append(ticker)
+                if not capped:
+                    for ticker in remaining:
+                        raw_weights[ticker] = (
+                            remaining_budget * convictions[ticker] / conviction_total
+                        )
+                    break
+                for ticker in capped:
+                    remaining.remove(ticker)
+                    remaining_budget -= max_weight
+            for ticker in allocatable:
+                result[ticker] = round(raw_weights.get(ticker, 0.0), 4)
         return result
         
     def _calculate_orders(
@@ -477,6 +641,9 @@ class LiveTrader:
 
         def can_order(ticker, side):
             key = (normalize_symbol(ticker), side)
+            if self._price_guard_blocked(ticker, side):
+                logging.info(f"[{ticker}] price guard cooldown is active for {side}")
+                return False
             if key in active_keys:
                 logging.info(f"[{ticker}] 오늘 활성/체결 {side} 주문이 존재하여 스킵합니다.")
                 return False
@@ -612,6 +779,7 @@ class LiveTrader:
             if action == "BUY" and deviation > self.max_price_deviation:
                 msg = f"가격 편차 {deviation:.2%}가 허용치 {self.max_price_deviation:.2%}를 초과"
                 logging.warning(f"[{ticker}] {msg}")
+                self._record_price_guard(ticker, action, deviation)
                 results.append({**order, "status": "SKIPPED", "message": msg})
                 continue
 
@@ -1014,7 +1182,7 @@ class LiveTrader:
                 "cash": cash,
                 "stock_value": stock_value,
                 "total_value": total_eval,
-                "date": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                "date": datetime.datetime.now(ZoneInfo("Asia/Seoul"))
             })
             logging.info("[DB 동기화] balance_history 기록 완료")
         except Exception as e:
@@ -1080,12 +1248,17 @@ class LiveTrader:
               AND c.is_selected = TRUE
               AND c.is_eligible = TRUE
               AND c.latest_available_date <= %s::date
-              AND c.score_confidence >= 0.50
+              AND c.score_confidence >= %s
               AND q.score_model_code <> 'UNSUPPORTED'
+              AND q.debt_ratio IS NOT NULL
+              AND q.debt_ratio <= %s
               AND (%s::date - c.latest_available_date) <= 180
             ORDER BY c.industry_rank NULLS LAST, c.fa_score DESC, c.stock_code
             """,
-            (run["id"], cutoff_date, cutoff_date),
+            (
+                run["id"], cutoff_date, FA_CONTRACT.minimum_score_confidence,
+                getattr(getattr(self, "strategy", None), "DEBT_RATIO_MAX", 2.0), cutoff_date,
+            ),
         )
         if not rows:
             raise RuntimeError(f"발행 FA run_id={run['id']}에 사용 가능한 선택 종목이 없습니다.")

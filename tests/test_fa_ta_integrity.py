@@ -75,6 +75,26 @@ def test_live_ta_rejects_missing_or_low_confidence_fundamentals():
         assert target == 0.0
 
 
+def test_live_strategy_hard_stop_precedes_hold_signal():
+    strategy = FaTaMomentumStrategy({"ma_window": 20, "ma_window_fast": 5})
+    target, metadata = strategy.evaluate_latest(
+        _strategy_frame(), "UPTREND", current_position=0.12,
+        average_price=100, current_price=89, peak_price=110,
+    )
+    assert target == 0.0
+    assert metadata["signal_reason"] == "HARD_STOP_LOSS"
+
+
+def test_live_strategy_trailing_stop_protects_gains():
+    strategy = FaTaMomentumStrategy({"ma_window": 20, "ma_window_fast": 5})
+    target, metadata = strategy.evaluate_latest(
+        _strategy_frame(), "UPTREND", current_position=0.12,
+        average_price=100, current_price=109, peak_price=120,
+    )
+    assert target == 0.0
+    assert metadata["signal_reason"] == "TRAILING_STOP"
+
+
 def test_portfolio_limit_keeps_all_eligible_positions_without_upscaling():
     trader = object.__new__(LiveTrader)
     targets = {f"{i:06d}.KS": 0.15 for i in range(6)}
@@ -88,7 +108,7 @@ def test_portfolio_limit_keeps_all_eligible_positions_without_upscaling():
     active = {ticker for ticker, weight in limited.items() if weight > 0}
     assert active == set(targets)
     assert sum(limited.values()) == pytest.approx(0.90)
-    assert limited["000005.KS"] > limited["000000.KS"]
+    assert all(weight == pytest.approx(0.15) for weight in limited.values())
 
 
 class PublishedDB:

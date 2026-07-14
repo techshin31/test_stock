@@ -48,8 +48,15 @@ class FaTaMomentumStrategy(AbstractStrategy):
         self.FA_SCORE_MIN = params.get("fa_score_min", 60.0)        # 진입 최소 FA 종합 점수
         self.FA_SCORE_EXIT = params.get("fa_score_exit", 40.0)      # 재무 악화 매도 기준
         self.DEBT_RATIO_MAX = params.get("debt_ratio_max", 2.0)     # 부채비율 상한 (200%)
+        self.MIN_SCORE_CONFIDENCE = params.get("min_score_confidence", 0.70)
+        self.STOP_LOSS_PCT = params.get("stop_loss_pct", 0.10)
+        self.TRAILING_STOP_PCT = params.get("trailing_stop_pct", 0.08)
         self.MA_WINDOW = params.get("ma_window", 60)
         self.MA_WINDOW_FAST = params.get("ma_window_fast", 20)
+        if not 0 < self.MIN_SCORE_CONFIDENCE <= 1:
+            raise ValueError("min_score_confidence must be in (0, 1]")
+        if not 0 < self.STOP_LOSS_PCT < 1 or not 0 < self.TRAILING_STOP_PCT < 1:
+            raise ValueError("stop-loss settings must be in (0, 1)")
 
     def make_defensive_signals(self, regime_df: pd.DataFrame) -> pd.Series:
         return pd.Series(0.0, index=regime_df.index, dtype=float)
@@ -60,6 +67,9 @@ class FaTaMomentumStrategy(AbstractStrategy):
         regime: str,
         *,
         current_position: float = 0.0,
+        average_price: float | None = None,
+        current_price: float | None = None,
+        peak_price: float | None = None,
     ) -> tuple[float, dict]:
         """완결된 최신 봉과 실제 계좌 포지션으로 오늘의 목표 비중을 계산한다.
 
@@ -89,11 +99,25 @@ class FaTaMomentumStrategy(AbstractStrategy):
         reason = "HOLD"
         target = max(float(current_position), 0.0)
 
-        if regime in (MarketRegime.DOWNTREND.name, MarketRegime.TRANSITION.name):
+        risk_price = float(current_price) if current_price and current_price > 0 else curr_close
+        average_price = float(average_price or 0.0)
+        peak_price = float(peak_price or 0.0)
+
+        if current_position > 0 and average_price > 0 and risk_price <= average_price * (1 - self.STOP_LOSS_PCT):
+            target, reason = 0.0, "HARD_STOP_LOSS"
+        elif (
+            current_position > 0
+            and peak_price > average_price > 0
+            and risk_price <= peak_price * (1 - self.TRAILING_STOP_PCT)
+        ):
+            target, reason = 0.0, "TRAILING_STOP"
+        elif regime in (MarketRegime.DOWNTREND.name, MarketRegime.TRANSITION.name):
             target, reason = 0.0, f"MARKET_{regime}"
         elif current_position > 0:
             if pd.notnull(fa_score) and float(fa_score) < self.FA_SCORE_EXIT:
                 target, reason = 0.0, "FA_SCORE_DETERIORATED"
+            elif pd.notnull(debt_ratio) and float(debt_ratio) > self.DEBT_RATIO_MAX:
+                target, reason = 0.0, "FA_DEBT_LIMIT"
             elif curr_ma_fast < curr_ma:
                 target, reason = 0.0, "TA_MOMENTUM_LOSS"
         else:
@@ -104,7 +128,7 @@ class FaTaMomentumStrategy(AbstractStrategy):
                 and pd.notnull(debt_ratio)
                 and float(debt_ratio) <= self.DEBT_RATIO_MAX
                 and pd.notnull(score_confidence)
-                and float(score_confidence) >= 0.50
+                and float(score_confidence) >= self.MIN_SCORE_CONFIDENCE
             )
             valid_ta = (
                 curr_close > curr_ma
@@ -132,6 +156,11 @@ class FaTaMomentumStrategy(AbstractStrategy):
             "ma": curr_ma,
             "ma_fast": curr_ma_fast,
             "momentum": curr_momentum,
+            "risk_price": risk_price,
+            "average_price": average_price or None,
+            "peak_price": peak_price or None,
+            "stop_loss_pct": self.STOP_LOSS_PCT,
+            "trailing_stop_pct": self.TRAILING_STOP_PCT,
         }
         return target, metadata
 
@@ -231,7 +260,7 @@ class FaTaMomentumStrategy(AbstractStrategy):
                         is_eligible and
                         pd.notnull(fa_score) and fa_score >= self.FA_SCORE_MIN and
                         pd.notnull(debt_ratio) and float(debt_ratio) <= self.DEBT_RATIO_MAX and
-                        pd.notnull(score_confidence) and float(score_confidence) >= 0.50 and
+                        pd.notnull(score_confidence) and float(score_confidence) >= self.MIN_SCORE_CONFIDENCE and
                         not fa_is_stale
                     )
                     

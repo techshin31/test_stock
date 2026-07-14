@@ -1,5 +1,7 @@
 import datetime as dt
 import os
+import threading
+import time
 from typing import Any
 
 import mojito
@@ -62,6 +64,47 @@ class KisBroker:
             acc_no=self.acc_no,
             mock=self.is_mock,
         )
+        self.request_min_interval = float(os.getenv("KIS_REQUEST_MIN_INTERVAL", "0.20"))
+        self.get_retry_attempts = int(os.getenv("KIS_GET_RETRY_ATTEMPTS", "3"))
+        self.retry_backoff_seconds = float(os.getenv("KIS_RETRY_BACKOFF_SECONDS", "0.5"))
+        if self.request_min_interval < 0 or self.get_retry_attempts < 1 or self.retry_backoff_seconds < 0:
+            raise ValueError("KIS request retry/rate-limit settings are invalid")
+        self._request_lock = threading.Lock()
+        self._last_request_at = 0.0
+
+    def _rate_limit(self) -> None:
+        """Keep API calls below the configured process-wide request pace."""
+        with self._request_lock:
+            wait = self.request_min_interval - (time.monotonic() - self._last_request_at)
+            if wait > 0:
+                time.sleep(wait)
+            self._last_request_at = time.monotonic()
+
+    def _safe_request(self, method: str, url: str, **kwargs):
+        """Retry idempotent reads/hash generation, never an actual order submission."""
+        retryable_statuses = {429, 500, 502, 503, 504}
+        last_error = None
+        for attempt in range(self.get_retry_attempts):
+            self._rate_limit()
+            try:
+                response = requests.request(method, url, timeout=10, **kwargs)
+                if response.status_code not in retryable_statuses:
+                    response.raise_for_status()
+                    return response
+                last_error = requests.HTTPError(
+                    f"{response.status_code} Server Error", response=response
+                )
+            except requests.RequestException as exc:
+                last_error = exc
+            if attempt + 1 < self.get_retry_attempts:
+                retry_after = 0.0
+                if getattr(last_error, "response", None) is not None:
+                    try:
+                        retry_after = float(last_error.response.headers.get("Retry-After", 0) or 0)
+                    except (TypeError, ValueError):
+                        retry_after = 0.0
+                time.sleep(max(retry_after, self.retry_backoff_seconds * (2 ** attempt)))
+        raise last_error or requests.RequestException("KIS request failed")
 
     @staticmethod
     def _require_success(resp: Any, operation: str) -> dict:
@@ -124,10 +167,23 @@ class KisBroker:
             except (TypeError, ValueError) as exc:
                 raise BrokerResponseError(f"잔고 조회: {item.get('pdno')} 포지션 값이 잘못되었습니다.") from exc
 
+        def optional_float(*keys: str) -> float:
+            for key in keys:
+                value = summary.get(key)
+                if value not in (None, ""):
+                    try:
+                        return float(value)
+                    except (TypeError, ValueError):
+                        continue
+            return 0.0
+
         return {
             "cash": cash,
             "today_cash": today_cash,
             "total_asset": total_asset,
+            "unrealized_pnl": optional_float("evlu_pfls_smtl_amt", "evlu_pfls_amt"),
+            "daily_asset_change": optional_float("asst_icdc_amt"),
+            "daily_asset_change_rate": optional_float("asst_icdc_erng_rt"),
             "positions": positions,
             "as_of": dt.datetime.now(dt.timezone.utc),
         }
@@ -149,11 +205,10 @@ class KisBroker:
             "CTX_AREA_FK100": fk100, "CTX_AREA_NK100": nk100,
         }
         try:
-            response = requests.get(
+            response = self._safe_request("GET",
                 f"{self.broker.base_url}/uapi/domestic-stock/v1/trading/inquire-balance",
-                headers=headers, params=params, timeout=10,
+                headers=headers, params=params,
             )
-            response.raise_for_status()
             payload = response.json()
         except (requests.RequestException, ValueError) as exc:
             raise BrokerResponseError(f"잔고 조회 통신 실패: {exc}") from exc
@@ -170,11 +225,10 @@ class KisBroker:
         }
         params = {"fid_cond_mrkt_div_code": "J", "fid_input_iscd": normalize_symbol(ticker)}
         try:
-            response = requests.get(
+            response = self._safe_request("GET",
                 f"{self.broker.base_url}/uapi/domestic-stock/v1/quotations/inquire-price",
-                headers=headers, params=params, timeout=10,
+                headers=headers, params=params,
             )
-            response.raise_for_status()
             payload = response.json()
         except (requests.RequestException, ValueError) as exc:
             raise BrokerResponseError(f"현재가 조회 통신 실패: {exc}") from exc
@@ -209,7 +263,7 @@ class KisBroker:
             "ORD_UNPR": "0",
         }
         try:
-            hash_response = requests.post(
+            hash_response = self._safe_request("POST",
                 f"{self.broker.base_url}/uapi/hashkey",
                 headers={
                     "content-type": "application/json",
@@ -217,9 +271,7 @@ class KisBroker:
                     "appSecret": self.secret,
                 },
                 json=data,
-                timeout=10,
             )
-            hash_response.raise_for_status()
             hashkey = hash_response.json().get("HASH")
             if not hashkey:
                 raise BrokerResponseError("주문 해시키 발급 응답에 HASH가 없습니다.")
@@ -228,6 +280,9 @@ class KisBroker:
                 tr_id = "VTTC0802U" if side == "buy" else "VTTC0801U"
             else:
                 tr_id = "TTTC0802U" if side == "buy" else "TTTC0801U"
+            # This call is deliberately made once. Retrying an ambiguous market-order
+            # response can create a duplicate order at the broker.
+            self._rate_limit()
             response = requests.post(
                 f"{self.broker.base_url}/uapi/domestic-stock/v1/trading/order-cash",
                 headers={
@@ -285,8 +340,7 @@ class KisBroker:
         rows = []
         for _ in range(20):
             try:
-                response = requests.get(url, headers=headers, params=params, timeout=10)
-                response.raise_for_status()
+                response = self._safe_request("GET", url, headers=headers, params=params)
                 payload = response.json()
             except (requests.RequestException, ValueError) as exc:
                 raise BrokerResponseError(f"주문 체결 조회 통신 실패: {exc}") from exc

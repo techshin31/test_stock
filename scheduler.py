@@ -32,7 +32,11 @@ def is_trading_day(now: datetime.datetime) -> bool:
 def draw_dashboard(last_mode, next_run_time, execution_mode):
     clear_screen()
     print("=======================================================================")
-    print(" 🚀 FA/TA 모멘텀 라이브 트레이더 [전광판 모드]")
+    mode_label = {
+        "PAPER": "한국투자 모의투자", "REAL": "실계좌", "DRY_RUN": "주문 없는 점검",
+        "SIMULATE": "로컬 시뮬레이션",
+    }.get(execution_mode, execution_mode)
+    print(f" 🚀 FA/TA 모멘텀 트레이더 | {mode_label}")
     print("=======================================================================")
     state = {}
     state_file = PROJECT_ROOT / "logs" / execution_mode.lower() / "dashboard_state.json"
@@ -43,14 +47,44 @@ def draw_dashboard(last_mode, next_run_time, execution_mode):
             total = state.get("total_eval", 0)
             positions = state.get("positions", [])
             print(f" 🕒 최근 업데이트: {state.get('updated_at', '-')}")
-            print(f" 💰 총 자산 추정치: {total:,.0f} 원")
-            print(f" 💵 현재 예수금:   {cash:,.0f} 원")
-            print(f" 📉 누적 슬리피지: {state.get('total_slippage', 0):,.0f} 원")
+            print(f" 💰 총 자산: {total:,.0f} 원 | 예수금: {cash:,.0f} 원")
+            print(
+                f" 📉 평가손익: {float(state.get('unrealized_pnl', 0)):,.0f} 원 | "
+                f"당일 자산변동: {float(state.get('daily_asset_change', 0)):,.0f} 원 "
+                f"({float(state.get('daily_asset_change_rate', 0)):.2f}%)"
+            )
+            print(f" 🧾 체결가 차이 비용(슬리피지 누계): {state.get('total_slippage', 0):,.0f} 원")
             print(f" 📊 보유 종목({len(positions)}): {', '.join(positions) if positions else '없음'}")
+            daily = state.get("daily_orders", {})
+            print(
+                " 📌 오늘 누적 주문: "
+                f"매수체결 {daily.get('buy_filled', 0)} | "
+                f"매도체결 {daily.get('sell_filled', 0)} | "
+                f"정산대기 {daily.get('open', 0)} | 거절·취소 {daily.get('rejected', 0)}"
+            )
+            risk = state.get("risk_controls", {})
+            print(
+                f" 🛡️ 위험관리: 손절 {float(risk.get('stop_loss_pct', 0)):.0%} | "
+                f"트레일링 {float(risk.get('trailing_stop_pct', 0)):.0%} | "
+                f"운영상태 {state.get('operational_status', '확인 중')}"
+            )
         except (OSError, ValueError, TypeError) as exc:
             print(f" [대시보드 데이터 오류: {exc}]")
     else:
         print(" [첫 매매 사이클 대기 중...]")
+
+    fa_file = PROJECT_ROOT / "logs" / "fa_candidates.json"
+    if fa_file.exists():
+        try:
+            fa = json.loads(fa_file.read_text(encoding="utf-8"))
+            print(
+                f" 🧠 FA 전략: {fa.get('signal_date', '-')} 기준 {len(fa.get('tickers', []))}종목 | "
+                f"점수 ≥ {fa.get('minimum_fa_score', 50.0)} | "
+                f"신뢰도 ≥ {fa.get('minimum_score_confidence', 0.70)} | "
+                f"모델 {fa.get('score_model_code', 'topdown-fa-v1.0.0')}"
+            )
+        except (OSError, ValueError, TypeError):
+            print(" [FA 후보 상태 읽기 실패]")
 
     report_file = PROJECT_ROOT / "logs" / execution_mode.lower() / "reports" / "latest.json"
     if report_file.exists():
@@ -66,7 +100,7 @@ def draw_dashboard(last_mode, next_run_time, execution_mode):
             print(" [일일 보고서 읽기 실패]")
 
     print("-----------------------------------------------------------------------")
-    print(f" 🎯 최근 실행된 작업: {last_mode or '없음'}")
+    print(f" 🎯 최근 실행된 작업: {last_mode or '없음'} (아래는 최근 1분 단위 결과)")
     print(" 📋 [최근 작업 타임라인]")
     for event in state.get("timeline", []) or ["(아직 기록된 타임라인이 없습니다)"]:
         print(f"    {event}")

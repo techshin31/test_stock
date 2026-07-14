@@ -7,7 +7,7 @@ from storage.postgres.connection import PostgreDB
 
 FA_MODEL_VERSION = "topdown-fa-v1.0.0"
 DEFAULT_MAX_FA_AGE_DAYS = 180
-DEFAULT_MIN_SCORE_CONFIDENCE = 0.50
+DEFAULT_MIN_SCORE_CONFIDENCE = 0.70
 
 
 def enrich_ohlcv_with_fa(

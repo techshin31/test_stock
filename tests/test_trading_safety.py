@@ -60,6 +60,33 @@ def test_balance_failure_is_not_converted_to_empty_account():
         wrapper.get_balance()
 
 
+def test_safe_kis_reads_retry_transient_server_error(monkeypatch):
+    wrapper = object.__new__(KisBroker)
+    wrapper.get_retry_attempts = 3
+    wrapper.retry_backoff_seconds = 0
+    wrapper._rate_limit = lambda: None
+    calls = []
+
+    class Response:
+        headers = {}
+
+        def __init__(self, status_code):
+            self.status_code = status_code
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise AssertionError("non-retryable response unexpectedly returned")
+
+    monkeypatch.setattr(
+        "core.broker.kis_api.requests.request",
+        lambda *a, **k: calls.append(True) or Response(500 if len(calls) == 1 else 200),
+    )
+    monkeypatch.setattr("core.broker.kis_api.time.sleep", lambda *_: None)
+
+    assert wrapper._safe_request("GET", "https://example.invalid").status_code == 200
+    assert len(calls) == 2
+
+
 def _bare_trader(broker):
     trader = object.__new__(LiveTrader)
     trader.broker = broker
