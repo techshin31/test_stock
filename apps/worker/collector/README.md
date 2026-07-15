@@ -36,7 +36,7 @@ Copy-Item apps/worker/.env.example apps/worker/.env
 | 환경변수 | 필수 대상 | 설명 |
 |---|---|---|
 | `POSTGRES_HOST` | 전체 | PostgreSQL 호스트 |
-| `POSTGRES_PORT` | 전체 | PostgreSQL 포트, 기본값 `5432` |
+| `POSTGRES_PORT` | 전체 | PostgreSQL 포트, Compose 사용 시 `5433` |
 | `POSTGRES_DB` | 전체 | 데이터베이스 이름 |
 | `POSTGRES_USER` | 전체 | 접속 사용자 |
 | `POSTGRES_PASSWORD` | 전체 | 접속 비밀번호 |
