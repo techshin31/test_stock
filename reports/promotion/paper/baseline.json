@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "mode": "PAPER",
+  "strategy": "aggressive",
+  "account_scope": "***9904-01",
+  "baseline_timestamp": "2026-07-20T17:46:10+09:00",
+  "baseline_total_asset": 463025590.0,
+  "baseline_cash": 187211590.0,
+  "baseline_position_count": 6,
+  "benchmark_symbol": "^KS11",
+  "benchmark_date": "2026-07-16",
+  "benchmark_close": 6820.60009765625,
+  "cash_flow_policy": "Declare every deposit/withdrawal in cash_flows.json",
+  "initialized_at": "2026-07-20T17:46:35+09:00"
+}

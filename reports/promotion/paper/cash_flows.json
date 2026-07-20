@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "mode": "PAPER",
+  "account_scope": "***9904-01",
+  "entries": [],
+  "instructions": "Add every external cash flow as {date, amount, reason}; deposits are positive."
+}
