@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "report_date": "2026-07-20",
+  "generated_at": "2026-07-20T13:06:46+09:00",
+  "report_status": "PRELIMINARY_INTRADAY",
+  "mode": "PAPER",
+  "executive_summary": "REAL 승격은 8개 조건 때문에 차단됩니다.",
+  "performance": {
+    "validation_status": "BLOCKED"
+  },
+  "performance_trend": [],
+  "operations": {
+    "as_of": "2026-07-20",
+    "observed_trading_days": 0,
+    "scan_count": 0,
+    "fresh_scan_count": 0,
+    "risk_checks_total": 0,
+    "risk_checks_completed": 0,
+    "submitted_orders": 0,
+    "reconciled_orders": 0,
+    "critical_incidents": 1,
+    "net_return": null,
+    "benchmark_return": null,
+    "max_drawdown": null,
+    "cost_drag": null,
+    "performance_validation_status": "BLOCKED",
+    "data_freshness_rate": 1.0,
+    "risk_check_coverage": 1.0,
+    "order_reconciliation_rate": 1.0,
+    "operational_integrity": 1.0,
+    "excess_return": null
+  },
+  "trading": {},
+  "validation": {
+    "status": "BLOCKED",
+    "checks": [
+      {
+        "name": "operational_log",
+        "passed": false,
+        "detail": "operational log not found: C:\\dev\\project\\Service_Stock_Analysis\\logs\\paper\\operational_health.jsonl"
+      },
+      {
+        "name": "certified_baseline",
+        "passed": false,
+        "detail": "[Errno 2] No such file or directory: 'C:\\\\dev\\\\project\\\\Service_Stock_Analysis\\\\reports\\\\promotion\\\\paper\\\\baseline.json'"
+      }
+    ],
+    "errors": [
+      "market close is not complete (15:30 KST required)",
+      "operational log not found: C:\\dev\\project\\Service_Stock_Analysis\\logs\\paper\\operational_health.jsonl",
+      "baseline unavailable: [Errno 2] No such file or directory: 'C:\\\\dev\\\\project\\\\Service_Stock_Analysis\\\\reports\\\\promotion\\\\paper\\\\baseline.json'"
+    ]
+  },
+  "promotion": {
+    "target_mode": "REAL",
+    "ready": false,
+    "manual_approval_required": true,
+    "blockers": [
+      "observed_trading_days 0 < 60",
+      "no operational scans were observed",
+      "critical_incidents 1 > 0",
+      "performance_validation_status BLOCKED != READY",
+      "submitted_orders 0 < 10",
+      "net_return and benchmark_return are required",
+      "max_drawdown is required",
+      "cost_drag is required"
+    ]
+  },
+  "sources": [
+    "C:\\dev\\project\\Service_Stock_Analysis\\logs\\paper\\operational_health.jsonl",
+    "C:\\dev\\project\\Service_Stock_Analysis\\logs\\paper\\account_snapshots.jsonl",
+    "C:\\dev\\project\\Service_Stock_Analysis\\reports\\promotion\\paper\\baseline.json",
+    "C:\\dev\\project\\Service_Stock_Analysis\\reports\\promotion\\paper\\cash_flows.json"
+  ],
+  "caveats": [
+    "수익률은 인증 기준선 이후 계좌 NAV의 시간가중수익률이며 현금흐름은 cash_flows.json 선언값으로 조정합니다.",
+    "수수료·세금이 체결 원장에 0으로 기록되면 설정된 KOSPI 비용률로 추정합니다.",
+    "슬리피지는 예상가 대비 체결가 차이로 계산되며 음수는 가격개선입니다.",
+    "이 보고서는 승격 근거만 생성하며 PAPER/REAL 모드를 자동으로 켜지 않습니다."
+  ]
+}

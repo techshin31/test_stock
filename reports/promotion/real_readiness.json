@@ -1,0 +1,22 @@
+{
+  "validation_status": "BLOCKED",
+  "as_of": "2026-07-20",
+  "generated_at": "2026-07-20T13:06:46+09:00",
+  "mode": "PAPER",
+  "promotion": {
+    "target_mode": "REAL",
+    "ready": false,
+    "manual_approval_required": true,
+    "blockers": [
+      "observed_trading_days 0 < 60",
+      "no operational scans were observed",
+      "critical_incidents 1 > 0",
+      "performance_validation_status BLOCKED != READY",
+      "submitted_orders 0 < 10",
+      "net_return and benchmark_return are required",
+      "max_drawdown is required",
+      "cost_drag is required"
+    ]
+  },
+  "source_report": "C:\\dev\\project\\Service_Stock_Analysis\\reports\\promotion\\paper\\daily\\2026-07-20.json"
+}

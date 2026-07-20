@@ -138,6 +138,8 @@ CREATE TABLE orders (
     price           NUMERIC(18, 4),
     stop_price      NUMERIC(18, 4),
     order_status_code    VARCHAR(50)     NOT NULL DEFAULT 'PENDING',
+    execution_venue_code VARCHAR(20)     NOT NULL DEFAULT 'UNKNOWN',
+    account_scope        VARCHAR(100)    NOT NULL DEFAULT 'UNKNOWN',
     filled_qty      NUMERIC(18, 4)  NOT NULL DEFAULT 0,
     avg_fill_price  NUMERIC(18, 4),
     commission      NUMERIC(18, 4)  NOT NULL DEFAULT 0,
@@ -155,6 +157,7 @@ CREATE INDEX idx_orders_order_status_code ON orders(order_status_code);
 CREATE INDEX idx_orders_strategy_id       ON orders(strategy_id);
 CREATE INDEX idx_orders_plan_id           ON orders(plan_id);
 CREATE INDEX idx_orders_created_at        ON orders(created_at);
+CREATE INDEX idx_orders_execution_scope   ON orders(execution_venue_code, account_scope, created_at);
 CREATE UNIQUE INDEX uq_orders_idempotency_key ON orders(idempotency_key)
     WHERE idempotency_key IS NOT NULL;
 
@@ -172,6 +175,8 @@ COMMENT ON COLUMN orders.qty              IS '주문 수량';
 COMMENT ON COLUMN orders.price            IS '지정가 주문 시 희망 가격 (시장가이면 NULL)';
 COMMENT ON COLUMN orders.stop_price       IS '스탑 주문 트리거 가격';
 COMMENT ON COLUMN orders.order_status_code     IS '주문 상태 (codes.ORDER_STATUS)';
+COMMENT ON COLUMN orders.execution_venue_code  IS '실행 환경: DRY_RUN/SIMULATE/PAPER/REAL';
+COMMENT ON COLUMN orders.account_scope         IS '원문 계좌번호가 아닌 마스킹된 계좌 식별 범위';
 COMMENT ON COLUMN orders.filled_qty       IS '실제 체결된 누적 수량';
 COMMENT ON COLUMN orders.avg_fill_price   IS '평균 체결 단가';
 COMMENT ON COLUMN orders.commission       IS '총 수수료';

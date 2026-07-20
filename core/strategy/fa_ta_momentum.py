@@ -58,6 +58,43 @@ class FaTaMomentumStrategy(AbstractStrategy):
         if not 0 < self.STOP_LOSS_PCT < 1 or not 0 < self.TRAILING_STOP_PCT < 1:
             raise ValueError("stop-loss settings must be in (0, 1)")
 
+    def evaluate_position_risk(
+        self,
+        *,
+        current_position: float,
+        average_price: float | None,
+        current_price: float | None,
+        peak_price: float | None,
+    ) -> tuple[float, dict]:
+        """Evaluate price-based exits without requiring daily OHLCV/FA data.
+
+        Broker price risk controls are a separate safety layer.  A stale daily bar
+        may block entries and indicator exits, but it must never suppress a hard or
+        trailing stop for an existing position.
+        """
+        target = max(float(current_position), 0.0)
+        average = float(average_price or 0.0)
+        current = float(current_price or 0.0)
+        peak = float(peak_price or 0.0)
+        reason = "RISK_CLEAR"
+
+        if target > 0 and average > 0 and current > 0:
+            if current <= average * (1 - self.STOP_LOSS_PCT):
+                target, reason = 0.0, "HARD_STOP_LOSS"
+            elif peak > average and current <= peak * (1 - self.TRAILING_STOP_PCT):
+                target, reason = 0.0, "TRAILING_STOP"
+
+        return target, {
+            "target_position": target,
+            "signal_reason": reason,
+            "risk_price": current or None,
+            "average_price": average or None,
+            "peak_price": peak or None,
+            "stop_loss_pct": self.STOP_LOSS_PCT,
+            "trailing_stop_pct": self.TRAILING_STOP_PCT,
+            "risk_price_source": "BROKER_BALANCE",
+        }
+
     def make_defensive_signals(self, regime_df: pd.DataFrame) -> pd.Series:
         return pd.Series(0.0, index=regime_df.index, dtype=float)
 
@@ -77,6 +114,25 @@ class FaTaMomentumStrategy(AbstractStrategy):
         제공한다. 지표는 충분한 과거 데이터로 계산하되 의사결정은 마지막 행에서만
         수행한다.
         """
+        risk_target, risk_metadata = self.evaluate_position_risk(
+            current_position=current_position,
+            average_price=average_price,
+            current_price=current_price,
+            peak_price=peak_price,
+        )
+        if risk_metadata["signal_reason"] != "RISK_CLEAR":
+            return risk_target, {
+                "regime": regime,
+                "fa_score": None,
+                "score_confidence": None,
+                "debt_ratio": None,
+                "close": None,
+                "ma": None,
+                "ma_fast": None,
+                "momentum": None,
+                **risk_metadata,
+            }
+
         required = max(self.MA_WINDOW, self.MA_WINDOW_FAST)
         if ohlcv.empty or len(ohlcv) <= required:
             raise ValueError(f"TA 계산에 최소 {required + 1}개 완결 봉이 필요합니다.")
@@ -97,21 +153,13 @@ class FaTaMomentumStrategy(AbstractStrategy):
         curr_ma_fast = float(ma_fast.iloc[-1])
         curr_momentum = float(momentum.iloc[-1])
         reason = "HOLD"
-        target = max(float(current_position), 0.0)
+        target = risk_target
 
         risk_price = float(current_price) if current_price and current_price > 0 else curr_close
         average_price = float(average_price or 0.0)
         peak_price = float(peak_price or 0.0)
 
-        if current_position > 0 and average_price > 0 and risk_price <= average_price * (1 - self.STOP_LOSS_PCT):
-            target, reason = 0.0, "HARD_STOP_LOSS"
-        elif (
-            current_position > 0
-            and peak_price > average_price > 0
-            and risk_price <= peak_price * (1 - self.TRAILING_STOP_PCT)
-        ):
-            target, reason = 0.0, "TRAILING_STOP"
-        elif regime in (MarketRegime.DOWNTREND.name, MarketRegime.TRANSITION.name):
+        if regime in (MarketRegime.DOWNTREND.name, MarketRegime.TRANSITION.name):
             target, reason = 0.0, f"MARKET_{regime}"
         elif current_position > 0:
             if pd.notnull(fa_score) and float(fa_score) < self.FA_SCORE_EXIT:
@@ -161,6 +209,7 @@ class FaTaMomentumStrategy(AbstractStrategy):
             "peak_price": peak_price or None,
             "stop_loss_pct": self.STOP_LOSS_PCT,
             "trailing_stop_pct": self.TRAILING_STOP_PCT,
+            "risk_price_source": "BROKER_BALANCE" if current_price else "DAILY_CLOSE",
         }
         return target, metadata
 

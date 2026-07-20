@@ -33,6 +33,10 @@ def main():
     mode_group.add_argument("--simulate", action="store_true", help="로컬 가상 계좌와 즉시 체결 엔진 사용")
     parser.add_argument("--dry-run", action="store_true", help="주문 실행 없이 시그널만 계산")
     parser.add_argument("--premarket", action="store_true", help="장 시작 전 FA 필터링(관심종목 추출) 1회 실행")
+    parser.add_argument(
+        "--snapshot-only", action="store_true",
+        help="주문·시그널 계산 없이 현재 계좌 잔고 기준선용 스냅샷만 저장",
+    )
     parser.add_argument("--liquidate", action="store_true", help="보유 중인 모든 종목을 즉시 전량 시장가 매도하여 현금화")
     parser.add_argument(
         "--confirm-liquidate", choices=["LIQUIDATE"],
@@ -49,6 +53,7 @@ def main():
     
     bot = TelegramBot()
     
+    trader = None
     try:
         if args.dry_run:
             bot.send_message("🚀 <b>[DRY RUN] 실전 매매 스크립트 가동</b>\n주문을 실행하지 않고 시그널만 분석합니다.")
@@ -138,6 +143,17 @@ def main():
             bot.send_message(msg)
             return
             
+        if args.snapshot_only:
+            snapshot = trader.capture_account_snapshot()
+            msg = (
+                "✅ <b>계좌 기준선용 스냅샷 저장 완료</b>\n"
+                f"모드: {snapshot['mode']} / 총자산: {snapshot['total_asset']:,.0f}원 / "
+                f"보유종목: {snapshot['position_count']}개\n"
+                "주문은 전송하지 않았습니다."
+            )
+            logging.info(msg)
+            bot.send_message(msg)
+            return
         if args.premarket:
             trader.run_premarket_batch()
             orders = None
@@ -174,6 +190,8 @@ def main():
         err_msg = traceback.format_exc()
         logging.error(err_msg)
         try:
+            if trader is not None:
+                trader.record_operational_error(e)
             bot.send_message(f"🚨 <b>자동매매 스크립트 에러 발생</b>\n<pre>{str(e)}</pre>")
         finally:
             raise SystemExit(1)

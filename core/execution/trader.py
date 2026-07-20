@@ -39,6 +39,8 @@ class LiveTrader:
         self.allow_warning_fa_run = os.getenv("ALLOW_WARNING_FA_RUN", "false").lower() == "true"
         self.price_guard_cooldown_seconds = int(os.getenv("PRICE_GUARD_COOLDOWN_SECONDS", "900"))
         self.max_position_weight = float(os.getenv("MAX_POSITION_WEIGHT", "0.15"))
+        self.max_daily_loss_rate = float(os.getenv("MAX_DAILY_LOSS_RATE", "0.03"))
+        self.manual_entry_pause = os.getenv("TRADING_KILL_SWITCH", "false").lower() == "true"
         if not 0 <= self.max_price_deviation <= 0.20:
             raise ValueError("MAX_PRICE_DEVIATION은 0~0.20 범위여야 합니다.")
         if not 1.0 <= self.buy_cash_buffer <= 1.20:
@@ -49,6 +51,8 @@ class LiveTrader:
             raise ValueError("KIS_FILL_POLL_INTERVAL은 0 이상이어야 합니다.")
         if not 0 < self.max_position_weight <= 0.30:
             raise ValueError("MAX_POSITION_WEIGHT must be in (0, 0.30]")
+        if not 0 < self.max_daily_loss_rate <= 0.20:
+            raise ValueError("MAX_DAILY_LOSS_RATE must be in (0, 0.20]")
 
         # 최적화된 파라미터 적용
         strategy_params = {
@@ -71,6 +75,8 @@ class LiveTrader:
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.risk_state_path = self.log_dir / "risk_state.json"
         self.price_guard_path = self.log_dir / "price_guard_state.json"
+        self.last_data_health = {}
+        self.last_order_candidates = []
 
     def run_premarket_batch(self):
         logging.info(f"[{datetime.datetime.now()}] 프리마켓 FA 필터링 시작")
@@ -85,7 +91,13 @@ class LiveTrader:
             self.db, ohlcv_store, signal_date.isoformat(),
             min_score_confidence=FA_CONTRACT.minimum_score_confidence,
         )
-        ohlcv_store = self._filter_stale_data(ohlcv_store, signal_date)
+        ohlcv_store, data_health = self._filter_stale_data(
+            ohlcv_store,
+            signal_date,
+            expected_tickers=tickers,
+            return_health=True,
+        )
+        self.last_data_health = data_health
         
         # 기업 위험 상태(매수 차단 종목) 조회
         from storage.postgres.repositories.company_risk_repo import fetch_buy_blocked_stock_codes
@@ -148,9 +160,26 @@ class LiveTrader:
         timeline = dashboard_state.setdefault("timeline", [])
         timeline.append(f"[{datetime.datetime.now().strftime('%H:%M')}] ☀️ 프리마켓 우량주(FA) {len(fa_candidates)}개 발굴 완료")
         dashboard_state["timeline"] = timeline[-5:] # 최근 5개 유지
+        dashboard_state["execution_mode"] = self.execution_venue
+        dashboard_state["strategy"] = self.strategy_name
+        dashboard_state["account_scope"] = getattr(
+            self.broker, "masked_account", "UNKNOWN"
+        )
+        dashboard_state["data_health"] = data_health
+        dashboard_state["order_candidates"] = self._candidate_order_summary([])
+        actual_orders = self._daily_order_summary()
+        dashboard_state["actual_orders"] = actual_orders
+        dashboard_state["daily_orders"] = actual_orders
+        dashboard_state["operational_status"] = self._derive_operational_status(
+            data_health, actual_orders
+        )
+        dashboard_state["last_error"] = (
+            "; ".join(data_health.get("dependency_errors", [])) or None
+        )
         
         with dashboard_path.open("w", encoding="utf-8") as f:
             json.dump(dashboard_state, f, ensure_ascii=False, indent=2)
+        self._append_operational_health(dashboard_state)
 
         return fa_candidates
 
@@ -170,6 +199,16 @@ class LiveTrader:
         # 없을 경우 예수금 + 평가금액 합산으로 대체
         total_eval = balance_info.get("total_asset") or (cash + sum(p['qty'] * p['current_price'] for p in positions.values()))
         logging.info(f"총 자산 추정치: {total_eval:,.0f}원")
+        daily_asset_change = float(balance_info.get("daily_asset_change", 0.0))
+        previous_total_eval = float(total_eval) - daily_asset_change
+        daily_return_decimal = (
+            daily_asset_change / previous_total_eval if previous_total_eval > 0 else 0.0
+        )
+        entry_circuit_breaker = None
+        if self.manual_entry_pause:
+            entry_circuit_breaker = "MANUAL_KILL_SWITCH"
+        elif daily_return_decimal <= -self.max_daily_loss_rate:
+            entry_circuit_breaker = "DAILY_LOSS_LIMIT"
         
         # Local simulation state is isolated from operational order/position tables.
         unresolved_error = None
@@ -193,9 +232,22 @@ class LiveTrader:
             except (OSError, ValueError, TypeError) as e:
                 logging.warning(f"대시보드 상태 로드 실패: {e}")
             
-        # 누적 슬리피지 합산 조회
+        # 현재 전략/실행환경/계좌 범위의 누적 슬리피지 합산 조회
         try:
-            row = self.db.fetch_one("SELECT SUM(slippage) as total FROM executions")
+            row = self.db.fetch_one(
+                """SELECT SUM(e.slippage) AS total
+                   FROM executions e
+                   JOIN orders o ON o.id = e.order_id
+                   JOIN strategies s ON s.id = o.strategy_id
+                   WHERE s.name = %s
+                     AND o.execution_venue_code = %s
+                     AND o.account_scope = %s""",
+                (
+                    self.strategy_name,
+                    self.execution_venue,
+                    getattr(self.broker, "masked_account", "UNKNOWN"),
+                ),
+            )
             total_slippage = float(row['total'] or 0.0) if row else 0.0
         except Exception as e:
             logging.warning(f"누적 슬리피지 조회 실패: {e}")
@@ -214,10 +266,20 @@ class LiveTrader:
         dashboard_state["risk_controls"] = {
             "stop_loss_pct": self.strategy.STOP_LOSS_PCT,
             "trailing_stop_pct": self.strategy.TRAILING_STOP_PCT,
+            "max_daily_loss_rate": self.max_daily_loss_rate,
+            "manual_entry_pause": self.manual_entry_pause,
         }
-        dashboard_state["daily_orders"] = self._daily_order_summary()
+        dashboard_state["execution_mode"] = self.execution_venue
+        dashboard_state["strategy"] = self.strategy_name
+        dashboard_state["account_scope"] = getattr(
+            self.broker, "masked_account", "UNKNOWN"
+        )
+        actual_orders = self._daily_order_summary()
+        dashboard_state["actual_orders"] = actual_orders
+        dashboard_state["daily_orders"] = actual_orders
+        dashboard_state["order_candidates"] = self._candidate_order_summary([])
         dashboard_state["operational_status"] = (
-            "ORDER_RECONCILIATION" if unresolved_error else "NORMAL"
+            "ORDER_RECONCILIATION" if unresolved_error else "SCANNING"
         )
         dashboard_state["last_error"] = unresolved_error
         
@@ -237,11 +299,13 @@ class LiveTrader:
             self._write_json_state(dashboard_path, dashboard_state)
             return []
         
-        # 2. 데이터 로드 (최근 150일)
+        # 2. 데이터 로드. 데이터/의존성 장애는 신규 진입만 차단하며, 보유
+        # 포지션의 가격 기반 손절은 아래 독립 위험 계층에서 계속 평가한다.
         signal_date = previous_krx_trading_day(datetime.date.today())
         end_date = (signal_date + datetime.timedelta(days=1)).isoformat()
         start_date = (signal_date - datetime.timedelta(days=200)).isoformat()
-        
+        dependency_errors = []
+
         try:
             with open("logs/fa_candidates.json", "r", encoding="utf-8") as f:
                 candidate_payload = json.load(f)
@@ -254,102 +318,210 @@ class LiveTrader:
                     f"actual={candidate_payload.get('signal_date')}"
                 )
             fa_candidates = list(candidate_payload.get("tickers", []))
-        except (OSError, ValueError, TypeError) as e:
-            # 프리마켓 결과가 없으면 신규 매수를 허용하지 않고 보유 종목만 평가한다.
-            logging.error(f"FA 후보 파일 로드 실패로 신규 매수를 차단합니다: {e}")
+        except (OSError, ValueError, TypeError) as exc:
+            message = f"FA 후보 파일 오류: {exc}"
+            logging.error(f"{message}; 신규 매수를 차단합니다")
+            dependency_errors.append(message)
             fa_candidates = []
-            
-        tickers = list(set(fa_candidates + list(positions.keys())))
-        
-        logging.info(f"[데이터 로드] 관심 종목 + 보유 종목 ({len(tickers)}개) 초고속 병합 중...")
-        ohlcv_store = download_multiple_stocks(tickers, start=start_date, end=end_date, show_progress=False)
-        ohlcv_store = enrich_ohlcv_with_fa(
-            self.db, ohlcv_store, signal_date.isoformat(),
-            min_score_confidence=FA_CONTRACT.minimum_score_confidence,
-        )
-        ohlcv_store = self._filter_stale_data(ohlcv_store, signal_date)
+
+        tickers = sorted(set(fa_candidates) | set(positions))
+        logging.info(f"[데이터 로드] 관심 종목 + 보유 종목 ({len(tickers)}개) 병합 중...")
+        try:
+            downloaded = download_multiple_stocks(
+                tickers, start=start_date, end=end_date, show_progress=False
+            )
+            enriched = enrich_ohlcv_with_fa(
+                self.db,
+                downloaded,
+                signal_date.isoformat(),
+                min_score_confidence=FA_CONTRACT.minimum_score_confidence,
+            )
+            ohlcv_store, data_health = self._filter_stale_data(
+                enriched,
+                signal_date,
+                expected_tickers=tickers,
+                return_health=True,
+            )
+        except Exception as exc:
+            message = f"종목 데이터 로드 오류: {exc}"
+            logging.exception(message)
+            dependency_errors.append(message)
+            ohlcv_store = {}
+            data_health = {
+                "expected_date": signal_date.isoformat(),
+                "expected_count": len(tickers),
+                "fresh_count": 0,
+                "stale_count": 0,
+                "missing_count": len(tickers),
+                "stale_tickers": [],
+                "missing_tickers": tickers,
+            }
         self.last_ohlcv_store = ohlcv_store
-        
-        # 3. 시그널 생성 및 타겟 비중 산출
-        print("[시그널 생성] 전 종목 전략 평가 중...")
+
+        # 3. 보유 위험을 먼저 평가한다. 이 계층은 일봉/FA/시장국면과 무관하다.
+        print("[시그널 생성] 위험관리 후 진입·청산 신호 평가 중...")
         target_positions = {}
-        
-        # KOSPI 200MA 기준 시장 국면 이력. 조회 실패 시 신규 주문을 중단한다.
+        target_details = {}
+        risk_peaks = self._update_risk_peaks(positions)
+        risk_decisions = {}
+        risk_checked = 0
+        for ticker, pos in positions.items():
+            price_for_weight = float(pos.get("current_price") or pos.get("avg_price") or 0.0)
+            current_weight = (
+                float(pos.get("qty") or 0.0) * price_for_weight / total_eval
+                if total_eval > 0 else 0.0
+            )
+            risk_target, risk_metadata = self.strategy.evaluate_position_risk(
+                current_position=current_weight,
+                average_price=pos.get("avg_price"),
+                current_price=pos.get("current_price"),
+                peak_price=risk_peaks.get(ticker),
+            )
+            risk_decisions[ticker] = (risk_target, risk_metadata)
+            if (
+                float(pos.get("avg_price") or 0.0) > 0
+                and float(pos.get("current_price") or 0.0) > 0
+            ):
+                risk_checked += 1
+
+        # 시장국면 실패 시에도 가격/FA/TA 청산은 계속 평가하되 신규 진입은 차단한다.
+        market_regime = None
         try:
             start_date_kospi = (signal_date - datetime.timedelta(days=320)).isoformat()
             kospi_close = download_kospi_index(start_date_kospi, end_date)
             if len(kospi_close) < 200:
                 raise ValueError("KOSPI 200일 이동평균 계산 데이터 부족")
+            kospi_last_date = pd.Timestamp(kospi_close.index[-1]).date()
+            if kospi_last_date != signal_date:
+                raise ValueError(
+                    f"KOSPI 데이터가 오래됨(last={kospi_last_date}, expected={signal_date})"
+                )
             ma200 = kospi_close.rolling(200, min_periods=200).mean()
             market_regimes = pd.Series("TRANSITION", index=kospi_close.index, dtype=object)
             market_regimes.loc[kospi_close > ma200] = "UPTREND"
             market_regimes.loc[kospi_close <= ma200] = "DOWNTREND"
             market_regime = str(market_regimes.iloc[-1])
-        except Exception as e:
-            raise RuntimeError(f"KOSPI 시장 국면 계산 실패로 주문을 중단합니다: {e}") from e
-        # 기업 위험 상태(매수 차단 종목) 조회
+        except Exception as exc:
+            message = f"KOSPI 시장국면 오류: {exc}"
+            logging.error(f"{message}; 신규 매수를 차단합니다")
+            dependency_errors.append(message)
+
         from storage.postgres.repositories.company_risk_repo import fetch_buy_blocked_stock_codes
+        blocked_codes = None
         try:
             blocked_codes = fetch_buy_blocked_stock_codes(self.db, datetime.date.today())
-        except Exception as e:
-            raise RuntimeError(f"기업 위험 상태 조회 실패로 신규 주문 계산을 중단합니다: {e}") from e
-            
-        target_details = {}
-        risk_peaks = self._update_risk_peaks(positions)
+        except Exception as exc:
+            message = f"기업 위험상태 오류: {exc}"
+            logging.error(f"{message}; 신규 매수를 차단합니다")
+            dependency_errors.append(message)
+
+        minimum_bars = max(self.strategy.MA_WINDOW, self.strategy.MA_WINDOW_FAST) + 1
+        insufficient_history = []
+        usable_signal_tickers = set()
         for ticker, df in ohlcv_store.items():
-            if df.empty or len(df) < 60:
+            if df.empty or len(df) < minimum_bars:
+                insufficient_history.append(ticker)
                 continue
+            usable_signal_tickers.add(ticker)
 
             pos = positions.get(ticker)
-            current_weight = (
-                pos["qty"] * pos["current_price"] / total_eval
-                if pos and total_eval > 0 else 0.0
-            )
+            if pos and risk_decisions[ticker][1]["signal_reason"] != "RISK_CLEAR":
+                target_positions[ticker], target_details[ticker] = risk_decisions[ticker]
+                continue
+            if pos:
+                current_weight = risk_decisions[ticker][0]
+            else:
+                current_weight = 0.0
+                # 알 수 없는 기업 위험 상태에서는 신규 진입을 fail-closed 한다.
+                if blocked_codes is None:
+                    continue
+
             target_weight, metadata = self.strategy.evaluate_latest(
-                df, market_regime, current_position=current_weight,
+                df,
+                market_regime or "UNAVAILABLE",
+                current_position=current_weight,
                 average_price=pos.get("avg_price") if pos else None,
                 current_price=pos.get("current_price") if pos else None,
                 peak_price=risk_peaks.get(ticker),
             )
             symbol = ticker.split('.')[0]
-            if symbol in blocked_codes and ticker not in positions:
+            if blocked_codes is not None and symbol in blocked_codes and not pos:
                 target_weight = 0.0
+                metadata["signal_reason"] = "COMPANY_RISK_BLOCKED"
             target_positions[ticker] = target_weight
             target_details[ticker] = metadata
-                    
-        # 이미 보유 중인데 target_positions에 안 뜬 종목은 계속 홀딩 (target_weight == 기존 비중)
-        for ticker in positions.keys():
-            if ticker not in target_positions:
-                pos = positions[ticker]
-                current_weight = (
-                    pos["qty"] * pos["current_price"] / total_eval
-                    if total_eval > 0 else 0.0
-                )
-                target_positions[ticker] = current_weight
-                target_details[ticker] = {
-                    "fa_score": 0.0,
-                    "momentum": -1.0,
-                    "signal_reason": "DATA_UNAVAILABLE_HOLD",
-                }
+
+        # 신호 데이터가 없어도 독립 위험청산은 실행한다. 위험 신호가 없을 때만
+        # 현재 비중을 보존하며, 이 상태는 정상(NORMAL)으로 표시하지 않는다.
+        for ticker, pos in positions.items():
+            if ticker in target_positions:
+                continue
+            risk_target, risk_metadata = risk_decisions[ticker]
+            if risk_metadata["signal_reason"] != "RISK_CLEAR":
+                target_positions[ticker] = risk_target
+                target_details[ticker] = risk_metadata
+                continue
+            target_positions[ticker] = risk_target
+            target_details[ticker] = {
+                **risk_metadata,
+                "fa_score": None,
+                "momentum": None,
+                "signal_reason": "DATA_UNAVAILABLE_HOLD",
+            }
+
+        data_health["insufficient_history_tickers"] = sorted(insufficient_history)
+        data_health["held_stale_tickers"] = sorted(set(positions) - usable_signal_tickers)
+        data_health["risk_checks_total"] = len(positions)
+        data_health["risk_checks_completed"] = risk_checked
+        data_health["risk_check_coverage"] = (
+            risk_checked / len(positions) if positions else 1.0
+        )
+        data_health["dependency_errors"] = dependency_errors
+        data_health["daily_return_decimal"] = daily_return_decimal
+        data_health["entry_circuit_breaker"] = entry_circuit_breaker
+        self.last_data_health = data_health
 
         target_positions = self._apply_portfolio_limits(
             target_positions, target_details, positions
         )
+        if entry_circuit_breaker:
+            target_positions = self._apply_entry_circuit_breaker(
+                target_positions,
+                target_details,
+                positions,
+                total_eval,
+                entry_circuit_breaker,
+            )
         self._write_decision_snapshot(
-            total_eval, positions, target_positions, target_details, market_regime
+            total_eval,
+            positions,
+            target_positions,
+            target_details,
+            market_regime or "UNAVAILABLE",
         )
-                
+
         print(f"[타겟 산출 완료] 타겟 포지션 수: {len([t for t, w in target_positions.items() if w > 0.0])}개")
-        
-        # 4. 주문 실행 (주식 수 계산 및 API 전송)
+
+        # 4. 주문 후보 계산. DRY_RUN에서는 후보만 기록되고 실제 주문은 0건이다.
         orders = self._calculate_orders(
             total_eval, positions, target_positions, ohlcv_store, target_details
         )
+        self.last_order_candidates = list(orders)
+        candidate_summary = self._candidate_order_summary(orders)
+        dashboard_state["data_health"] = data_health
+        dashboard_state["order_candidates"] = candidate_summary
+        dashboard_state["actual_orders"] = actual_orders
+        dashboard_state["daily_orders"] = actual_orders
+        dashboard_state["operational_status"] = self._derive_operational_status(
+            data_health, actual_orders
+        )
+        dashboard_state["last_error"] = "; ".join(dependency_errors) or None
+        self._write_json_state(dashboard_path, dashboard_state)
         print(f"[{datetime.datetime.now()}] 배치 종료")
         return orders
 
     def update_intraday_dashboard(self, execution_results):
-        """Record broker outcomes, not pre-execution order candidates."""
+        """Record candidates and broker outcomes as separate operational metrics."""
         results = list(execution_results or [])
         dashboard_path = self.log_dir / "dashboard_state.json"
         dashboard_state = {"timeline": []}
@@ -361,8 +533,9 @@ class LiveTrader:
                 logging.warning(f"대시보드 상태 로드 실패: {exc}")
 
         if self.execution_venue == "DRY_RUN":
-            buy_count = sum(row.get("type") == "BUY" for row in results)
-            sell_count = sum(row.get("type") == "SELL" for row in results)
+            candidates = list(getattr(self, "last_order_candidates", results) or results)
+            buy_count = sum(row.get("type") == "BUY" for row in candidates)
+            sell_count = sum(row.get("type") == "SELL" for row in candidates)
             summary = f"모의계산: 매수후보 {buy_count}건 / 매도후보 {sell_count}건"
         else:
             filled = {"FILLED"}
@@ -386,26 +559,117 @@ class LiveTrader:
         timeline = dashboard_state.setdefault("timeline", [])
         timeline.append(f"[{datetime.datetime.now().strftime('%H:%M')}] ⚡ {summary}")
         dashboard_state["timeline"] = timeline[-5:]
-        dashboard_state["daily_orders"] = self._daily_order_summary()
-        dashboard_state["operational_status"] = (
-            "ORDER_RECONCILIATION"
-            if dashboard_state["daily_orders"]["open"] > 0 else "NORMAL"
+        dashboard_state["updated_at"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        actual_orders = self._daily_order_summary()
+        candidates = list(getattr(self, "last_order_candidates", []) or [])
+        dashboard_state["execution_mode"] = self.execution_venue
+        dashboard_state["actual_orders"] = actual_orders
+        dashboard_state["daily_orders"] = actual_orders  # backward-compatible alias
+        dashboard_state["order_candidates"] = self._candidate_order_summary(candidates)
+        data_health = getattr(self, "last_data_health", {}) or dashboard_state.get(
+            "data_health", {}
         )
-        with dashboard_path.open("w", encoding="utf-8") as f:
-            json.dump(dashboard_state, f, ensure_ascii=False, indent=2)
+        dashboard_state["data_health"] = data_health
+        dashboard_state["operational_status"] = self._derive_operational_status(
+            data_health,
+            actual_orders,
+            last_error=dashboard_state.get("last_error"),
+        )
+        self._write_json_state(dashboard_path, dashboard_state)
+        self._append_operational_health(dashboard_state)
+
+    @staticmethod
+    def _candidate_order_summary(orders):
+        rows = list(orders or [])
+        risk_reasons = {"HARD_STOP_LOSS", "TRAILING_STOP"}
+        return {
+            "total": len(rows),
+            "buy": sum(row.get("type") == "BUY" for row in rows),
+            "sell": sum(row.get("type") == "SELL" for row in rows),
+            "risk_exit": sum(row.get("reason") in risk_reasons for row in rows),
+        }
+
+    @staticmethod
+    def _derive_operational_status(data_health, actual_orders, last_error=None):
+        health = data_health or {}
+        actual = actual_orders or {}
+        if int(actual.get("open") or 0) > 0:
+            return "ORDER_RECONCILIATION"
+        risk_total = int(health.get("risk_checks_total") or 0)
+        risk_completed = int(health.get("risk_checks_completed") or 0)
+        if risk_completed < risk_total:
+            return "DEGRADED_RISK_UNCHECKED"
+        if health.get("entry_circuit_breaker"):
+            return "ENTRY_CIRCUIT_BREAKER"
+        if health.get("held_stale_tickers"):
+            return "DEGRADED_DATA_STALE"
+        if int(health.get("stale_count") or 0) or int(health.get("missing_count") or 0):
+            return "DEGRADED_DATA_STALE"
+        if health.get("dependency_errors"):
+            return "DEGRADED_DEPENDENCY"
+        if last_error:
+            return "ERROR"
+        return "NORMAL"
+
+    def record_operational_error(self, error):
+        """Persist an unexpected failure so the dashboard cannot remain NORMAL."""
+        dashboard_path = self.log_dir / "dashboard_state.json"
+        state = self._read_json_state(dashboard_path)
+        state.setdefault("timeline", []).append(
+            f"[{datetime.datetime.now():%H:%M}] 실행 오류: {error}"
+        )
+        state["timeline"] = state["timeline"][-5:]
+        state["updated_at"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        state["execution_mode"] = self.execution_venue
+        state["operational_status"] = "ERROR"
+        state["last_error"] = str(error)
+        self._write_json_state(dashboard_path, state)
+        self._append_operational_health(state)
+
+    def _append_operational_health(self, dashboard_state):
+        """Append one auditable operational observation for KPI rollups."""
+        payload = {
+            "timestamp": datetime.datetime.now(ZoneInfo("Asia/Seoul")).isoformat(),
+            "mode": getattr(self, "execution_venue", "UNKNOWN"),
+            "strategy": getattr(self, "strategy_name", "UNKNOWN"),
+            "account_scope": getattr(
+                getattr(self, "broker", None), "masked_account", "UNKNOWN"
+            ),
+            "operational_status": dashboard_state.get("operational_status"),
+            "data_health": dashboard_state.get("data_health", {}),
+            "order_candidates": dashboard_state.get("order_candidates", {}),
+            "actual_orders": dashboard_state.get(
+                "actual_orders", dashboard_state.get("daily_orders", {})
+            ),
+            "last_error": dashboard_state.get("last_error"),
+        }
+        with (self.log_dir / "operational_health.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
 
     def _daily_order_summary(self):
         """Return today's cumulative order state; this is not the last scan result."""
         empty = {"buy_filled": 0, "sell_filled": 0, "open": 0, "rejected": 0}
+        if getattr(self, "execution_venue", None) in {"DRY_RUN", "SIMULATE"}:
+            return empty
         if getattr(getattr(self, "broker", None), "is_simulated", False):
             return empty
         if not hasattr(self, "db"):
             return empty
         try:
             rows = self.db.fetch_all(
-                """SELECT order_side_code, order_status_code, COUNT(*) AS count
-                   FROM orders WHERE created_at::date = CURRENT_DATE
-                   GROUP BY order_side_code, order_status_code"""
+                """SELECT o.order_side_code, o.order_status_code, COUNT(*) AS count
+                   FROM orders o
+                   JOIN strategies s ON s.id = o.strategy_id
+                   WHERE o.created_at::date = CURRENT_DATE
+                     AND s.name = %s
+                     AND o.execution_venue_code = %s
+                     AND o.account_scope = %s
+                   GROUP BY o.order_side_code, o.order_status_code""",
+                (
+                    self.strategy_name,
+                    self.execution_venue,
+                    getattr(self.broker, "masked_account", "UNKNOWN"),
+                ),
             )
         except Exception as exc:
             logging.warning(f"daily order summary unavailable: {exc}")
@@ -524,6 +788,25 @@ class LiveTrader:
             handle.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
 
     def _append_account_history(self, balance_info, total_eval):
+        timestamp = datetime.datetime.now(ZoneInfo("Asia/Seoul")).isoformat(
+            timespec="seconds"
+        )
+        snapshot = {
+            "timestamp": timestamp,
+            "mode": self.execution_venue,
+            "strategy": self.strategy_name,
+            "account_scope": getattr(self.broker, "masked_account", "UNKNOWN"),
+            "cash": float(balance_info["cash"]),
+            "total_asset": float(total_eval),
+            "position_count": len(balance_info.get("positions", {})),
+        }
+        with (self.log_dir / "account_snapshots.jsonl").open(
+            "a", encoding="utf-8"
+        ) as handle:
+            handle.write(json.dumps(snapshot, ensure_ascii=False) + "\n")
+
+        # Keep the legacy CSV for existing dashboard and notebook consumers.  The
+        # scoped JSONL above is the authoritative source for promotion evidence.
         path = self.log_dir / "account_history.csv"
         if not path.exists():
             path.write_text(
@@ -532,10 +815,30 @@ class LiveTrader:
             )
         with path.open("a", encoding="utf-8") as handle:
             handle.write(
-                f"{datetime.datetime.now().isoformat(timespec='seconds')},"
+                f"{timestamp},"
                 f"{self.execution_venue},{float(balance_info['cash']):.4f},"
                 f"{float(total_eval):.4f},{len(balance_info.get('positions', {}))}\n"
             )
+
+    def capture_account_snapshot(self):
+        """Capture a scoped balance observation without evaluating or placing orders."""
+        balance_info = self.broker.get_balance()
+        cash = float(balance_info.get("cash") or 0.0)
+        positions = balance_info.get("positions", {})
+        total_eval = cash + sum(
+            float(position.get("qty") or 0.0)
+            * float(position.get("current_price") or position.get("avg_price") or 0.0)
+            for position in positions.values()
+        )
+        self._append_account_history(balance_info, total_eval)
+        return {
+            "mode": self.execution_venue,
+            "strategy": self.strategy_name,
+            "account_scope": getattr(self.broker, "masked_account", "UNKNOWN"),
+            "cash": cash,
+            "total_asset": total_eval,
+            "position_count": len(positions),
+        }
 
     def append_trade_history(self, results):
         if not results:
@@ -559,7 +862,7 @@ class LiveTrader:
         protected = {
             ticker
             for ticker in active
-            if details.get(ticker, {}).get("signal_reason") == "DATA_UNAVAILABLE_HOLD"
+            if str(details.get(ticker, {}).get("signal_reason", "")).endswith("_HOLD")
         }
         protected_total = sum(result[ticker] for ticker in protected)
         allocatable = [ticker for ticker in active if ticker not in protected]
@@ -600,6 +903,35 @@ class LiveTrader:
                     remaining_budget -= max_weight
             for ticker in allocatable:
                 result[ticker] = round(raw_weights.get(ticker, 0.0), 4)
+        return result
+
+    @staticmethod
+    def _apply_entry_circuit_breaker(
+        targets,
+        details,
+        positions,
+        total_eval,
+        reason,
+    ):
+        """Block exposure increases while preserving all sell/risk-exit targets."""
+        result = dict(targets)
+        for ticker, target_weight in list(result.items()):
+            position = positions.get(ticker)
+            if not position:
+                if target_weight > 0:
+                    result[ticker] = 0.0
+                    details.setdefault(ticker, {})["signal_reason"] = reason
+                continue
+            price = float(
+                position.get("current_price") or position.get("avg_price") or 0.0
+            )
+            current_weight = (
+                float(position.get("qty") or 0.0) * price / total_eval
+                if total_eval > 0 else 0.0
+            )
+            if target_weight > current_weight:
+                result[ticker] = current_weight
+                details.setdefault(ticker, {})["signal_reason"] = reason
         return result
         
     def _calculate_orders(
@@ -822,6 +1154,8 @@ class LiveTrader:
                     "market_type_code": "KOSPI",
                     "instrument_type_code": "STOCK",
                     "order_type_code": "MARKET",
+                    "execution_venue_code": getattr(self, "execution_venue", "PAPER"),
+                    "account_scope": getattr(self.broker, "masked_account", "UNKNOWN"),
                     "idempotency_key": order.get("idempotency_key") or self._idempotency_key(order),
                 })
             except DuplicateOrderError as e:
@@ -1333,9 +1667,16 @@ class LiveTrader:
             raise RuntimeError(f"universe 테이블 갱신 실패: {e}") from e
 
     @staticmethod
-    def _filter_stale_data(ohlcv_store, expected_date):
-        """마지막 완결 거래일 데이터가 없는 종목을 신호 계산에서 제외한다."""
+    def _filter_stale_data(
+        ohlcv_store,
+        expected_date,
+        *,
+        expected_tickers=None,
+        return_health=False,
+    ):
+        """Exclude stale bars and optionally return a structured freshness report."""
         fresh = {}
+        stale_tickers = []
         for ticker, df in ohlcv_store.items():
             if df is None or df.empty:
                 continue
@@ -1344,6 +1685,25 @@ class LiveTrader:
                 logging.warning(
                     f"[{ticker}] 시세가 오래되었습니다(last={last_date}, expected={expected_date})."
                 )
+                stale_tickers.append(ticker)
                 continue
             fresh[ticker] = df
-        return fresh
+        expected = set(expected_tickers or ohlcv_store.keys())
+        missing_tickers = sorted(expected - set(ohlcv_store))
+        empty_tickers = sorted(
+            ticker
+            for ticker in expected & set(ohlcv_store)
+            if ohlcv_store[ticker] is None or ohlcv_store[ticker].empty
+        )
+        missing_tickers = sorted(set(missing_tickers) | set(empty_tickers))
+        health = {
+            "expected_date": expected_date.isoformat(),
+            "expected_count": len(expected),
+            "fresh_count": len(fresh),
+            "stale_count": len(stale_tickers),
+            "missing_count": len(missing_tickers),
+            "stale_tickers": sorted(stale_tickers),
+            "missing_tickers": missing_tickers,
+            "dependency_errors": [],
+        }
+        return (fresh, health) if return_health else fresh

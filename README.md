@@ -122,7 +122,9 @@ uv run python run_live_trader.py --mock --premarket
 ### 자동 실행
 
 Scheduler는 KRX 거래일 08:30에 장전 준비를 실행하고, 09:00~15:20에는 매분
-매매 사이클을 실행합니다.
+매매 사이클을 실행합니다. 대시보드는 `실제 주문`과 `주문 후보`를 분리하고,
+보유종목 신호 데이터 또는 위험점검이 누락되면 `NORMAL` 대신 `DEGRADED_*`
+상태를 표시합니다.
 
 ```powershell
 # 기본값: 주문 없는 점검 모드
@@ -133,6 +135,37 @@ uv run python scheduler.py --simulate
 
 # KIS 모의투자 주문
 uv run python scheduler.py --paper
+```
+
+Windows에서는 `run_scheduler.bat`도 같은 규칙을 적용합니다. 인수가 없으면
+`--dry-run`이고, `--paper`와 `--live`는 각각 승격 게이트를 먼저 통과해야 합니다.
+`run_trader.bat`의 메뉴 2번은 주문 없는 DRY_RUN이며, PAPER와 REAL은 별도
+메뉴와 게이트로 분리되어 있습니다. DRY_RUN 1거래일의 FINAL EOD 보고서가
+통과한 뒤 PAPER를 처음 열기 전에는 메뉴 7번으로
+주문 없는 계좌 스냅샷과 인증 기준선을 먼저 만듭니다. 기준선이 없으면 PAPER
+실행도 차단됩니다. REAL 기준선은 REAL 최종 확인 뒤 첫 주문 직전에 주문 없이
+자동 캡처하며, 캡처 실패 시 실주문을 중단합니다.
+
+DRY_RUN/PAPER/REAL 스케줄러는 거래일 15:30에 EOD 성과·운영 보고서를
+`reports/promotion/<mode>/daily/`에 생성합니다. PAPER 보고서는 BAT의 REAL
+게이트가 읽는 `reports/promotion/real_readiness.json`도 갱신합니다. 인증 기준선,
+동일 계좌 범위, 당일 잔고, KOSPI, 주문·체결 원장, 외부 현금흐름 장부 중 하나라도
+검증되지 않으면 `validation_status=BLOCKED`가 되어 REAL 전환이 불가능합니다.
+
+```powershell
+# 장 마감 보고서를 수동 재생성
+uv run python -m core.analytics.trading_performance --mode DRY_RUN
+uv run python -m core.analytics.trading_performance --mode PAPER
+
+# 기준선 존재 여부 확인
+uv run python -m core.analytics.trading_performance --mode PAPER --check-baseline
+```
+
+거래일 라이브러리에 아직 반영되지 않은 임시 휴장일은 쉼표로 추가할 수 있습니다.
+잘못된 날짜 형식은 안전을 위해 실행 오류로 처리됩니다.
+
+```powershell
+$env:KRX_ADDITIONAL_HOLIDAYS="2026-08-03,2026-10-12"
 ```
 
 시뮬레이션 리포트는 `logs/simulate/reports/`에 생성되며 필요하면 직접 다시 만들 수
@@ -164,8 +197,14 @@ uv run python run_live_trader.py --live --liquidate --confirm-liquidate LIQUIDAT
 주문 전 KIS 현재가와 전략 기준가의 편차를 검사하고, 브로커 접수 응답이 아니라
 KIS 주문·체결 조회 결과만 체결 원장에 기록합니다. 주요 운영 한도는
 `MAX_PRICE_DEVIATION`, `MAX_POSITION_WEIGHT`, `BUY_CASH_BUFFER`,
-`MAX_ORDER_ATTEMPTS`, `KIS_FILL_POLL_ATTEMPTS`, `KIS_FILL_POLL_INTERVAL`로
-조정할 수 있습니다.
+`MAX_ORDER_ATTEMPTS`, `KIS_FILL_POLL_ATTEMPTS`, `KIS_FILL_POLL_INTERVAL`,
+`MAX_DAILY_LOSS_RATE`로 조정할 수 있습니다. `TRADING_KILL_SWITCH=true`는 신규
+매수와 비중 확대만 즉시 멈추며, 보유 포지션의 매도·손절은 계속 허용합니다.
+
+주문 운영 지표를 전략·실행환경·마스킹 계좌별로 분리하려면 기존 DB에
+`storage/postgres/schema/08_order_execution_scope.sql`을 1회 적용해야 합니다.
+전체 안전 불변식, KPI, DRY_RUN→PAPER→REAL 승격 조건은
+[자동매매 시스템 설계 기준](docs/AUTOMATED_TRADING_SYSTEM_DESIGN.md)을 참고하세요.
 
 ## 백테스트와 연구
 

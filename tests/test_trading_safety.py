@@ -295,6 +295,20 @@ def test_scheduler_simulation_uses_local_broker_flag(monkeypatch):
     assert "--dry-run" not in captured["cmd"]
 
 
+def test_scheduler_eod_report_passes_mode_and_date(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        scheduler.subprocess,
+        "run",
+        lambda cmd, **kwargs: captured.update(cmd=cmd) or type("R", (), {"returncode": 0})(),
+    )
+
+    scheduler.run_end_of_day_report(datetime.date(2026, 7, 20), "PAPER")
+
+    assert "core.analytics.trading_performance" in captured["cmd"]
+    assert captured["cmd"][-3:] == ["PAPER", "--date", "2026-07-20"]
+
+
 def test_unknown_order_recovery_requires_one_precise_match():
     local = {
         "symbol": "005930", "order_side_code": "BUY", "qty": 2,

@@ -41,8 +41,20 @@ def ensure_order_status_history_table(db: PostgreDB) -> None:
     )
     db.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(255)")
     db.execute(
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS "
+        "execution_venue_code VARCHAR(20) NOT NULL DEFAULT 'UNKNOWN'"
+    )
+    db.execute(
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS "
+        "account_scope VARCHAR(100) NOT NULL DEFAULT 'UNKNOWN'"
+    )
+    db.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_idempotency_key "
         "ON orders(idempotency_key) WHERE idempotency_key IS NOT NULL"
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_orders_execution_scope "
+        "ON orders(execution_venue_code, account_scope, created_at)"
     )
 
 
@@ -194,9 +206,11 @@ def create_order(db: PostgreDB, data: dict) -> str:
                 qty,
                 price,
                 order_status_code,
+                execution_venue_code,
+                account_scope,
                 submitted_at,
                 idempotency_key
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDING', NULL, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDING', %s, %s, NULL, %s)
             ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
             RETURNING id::text
             """,
@@ -210,6 +224,8 @@ def create_order(db: PostgreDB, data: dict) -> str:
                 data.get("order_type_code", "MARKET"),
                 qty,
                 price,
+                data.get("execution_venue_code", "UNKNOWN"),
+                data.get("account_scope", "UNKNOWN"),
                 data.get("idempotency_key"),
             ),
         ).fetchone()

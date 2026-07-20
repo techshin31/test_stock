@@ -1,0 +1,4 @@
+method,trading_days,total_return,sharpe,max_drawdown,cost_ratio,run_count,published_count,execution_assumption
+동일 비중,107,0.14166089,0.907016,-0.21498413,0.02209730,7,1,일봉 종가·비례비중
+FA 직접 비례,107,0.15493595,0.968823,-0.20302810,0.02151986,7,1,일봉 종가·비례비중
+FA 초과점수 비례,107,0.21111938,1.215674,-0.16990471,0.02013056,7,1,일봉 종가·비례비중

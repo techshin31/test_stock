@@ -1,0 +1,5 @@
+priority,finding,evidence,severity,impact
+1,거래일 달력 오류,"로컬은 7/17을 세션으로 판단; 실제 마지막 완료 세션은 7/16",Critical,"전 종목 stale 처리, 후보·위험청산 평가 중단"
+2,위험청산 경로 결합,"삼성전자 고점 대비 -11.99%, 8% 스톱 충족",Critical,손실 제한 주문 후보가 생성되지 않음
+3,DRY_RUN 실행,scheduler.py가 --dry-run 전달,High,실제 주문 누적은 의도적으로 항상 0
+4,상태·지표 오표시,"6/6 DATA_UNAVAILABLE_HOLD인데 operational_status=NORMAL",High,운영자는 장애를 정상 관망으로 오해
