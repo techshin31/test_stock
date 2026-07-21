@@ -6,6 +6,9 @@ def upsert_position(
     strategy_name: str,
     symbol: str,
     data: dict,
+    *,
+    execution_venue_code: str,
+    account_scope: str,
 ) -> None:
     """KIS 잔고를 positions 테이블에 동기화한다 (upsert).
 
@@ -31,14 +34,19 @@ def upsert_position(
             symbol,
             market_type_code,
             instrument_type_code,
+            execution_venue_code,
+            account_scope,
             qty,
             avg_cost,
             realized_pnl
         )
-        SELECT s.id, %s, %s, %s, %s, %s, %s
+        SELECT s.id, %s, %s, %s, %s, %s, %s, %s, %s
         FROM strategies s
         WHERE s.name = %s
-        ON CONFLICT (strategy_id, symbol, instrument_type_code)
+        ON CONFLICT (
+            strategy_id, symbol, instrument_type_code,
+            execution_venue_code, account_scope
+        )
         DO UPDATE SET
             qty        = EXCLUDED.qty,
             avg_cost   = EXCLUDED.avg_cost,
@@ -49,6 +57,8 @@ def upsert_position(
             symbol,
             data.get("market_type_code", "KOSPI"),
             data.get("instrument_type_code", "STOCK"),
+            execution_venue_code,
+            account_scope,
             data["qty"],
             data["avg_cost"],
             data.get("realized_pnl", 0),
@@ -60,6 +70,9 @@ def upsert_position(
 def fetch_active_position_symbols(
     db: PostgreDB,
     strategy_name: str,
+    *,
+    execution_venue_code: str,
+    account_scope: str,
 ) -> list[str]:
     """전략의 현재 qty > 0 종목 코드 목록을 반환한다."""
     rows = db.fetch_all(
@@ -67,9 +80,12 @@ def fetch_active_position_symbols(
         SELECT p.symbol
         FROM positions p
         JOIN strategies s ON p.strategy_id = s.id
-        WHERE s.name = %s AND p.qty > 0
+        WHERE s.name = %s
+          AND p.execution_venue_code = %s
+          AND p.account_scope = %s
+          AND p.qty > 0
         """,
-        (strategy_name,),
+        (strategy_name, execution_venue_code, account_scope),
     )
     return [row["symbol"] for row in rows]
 
@@ -78,6 +94,9 @@ def zero_out_position(
     db: PostgreDB,
     strategy_name: str,
     symbol: str,
+    *,
+    execution_venue_code: str,
+    account_scope: str,
 ) -> None:
     """특정 종목의 포지션 수량을 0으로 업데이트한다."""
     db.execute(
@@ -88,8 +107,10 @@ def zero_out_position(
         WHERE p.strategy_id = s.id
           AND s.name = %s
           AND p.symbol = %s
+          AND p.execution_venue_code = %s
+          AND p.account_scope = %s
         """,
-        (strategy_name, symbol),
+        (strategy_name, symbol, execution_venue_code, account_scope),
     )
 
 
@@ -97,6 +118,9 @@ def delete_position(
     db: PostgreDB,
     strategy_name: str,
     symbol: str,
+    *,
+    execution_venue_code: str,
+    account_scope: str,
 ) -> None:
     """브로커 동기화 캐시에서 잘못된 레거시 종목코드 행을 삭제한다."""
     db.execute(
@@ -106,14 +130,19 @@ def delete_position(
         WHERE p.strategy_id = s.id
           AND s.name = %s
           AND p.symbol = %s
+          AND p.execution_venue_code = %s
+          AND p.account_scope = %s
         """,
-        (strategy_name, symbol),
+        (strategy_name, symbol, execution_venue_code, account_scope),
     )
 
 
 def fetch_positions(
     db: PostgreDB,
     strategy_name: str,
+    *,
+    execution_venue_code: str,
+    account_scope: str,
 ) -> list[dict]:
     """전략의 현재 보유 포지션을 조회한다 (qty > 0인 종목만).
 
@@ -135,8 +164,10 @@ def fetch_positions(
         FROM positions p
         JOIN strategies s ON p.strategy_id = s.id
         WHERE s.name = %s
+          AND p.execution_venue_code = %s
+          AND p.account_scope = %s
           AND p.qty > 0
         ORDER BY p.symbol
         """,
-        (strategy_name,),
+        (strategy_name, execution_venue_code, account_scope),
     )

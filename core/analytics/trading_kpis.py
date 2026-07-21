@@ -167,8 +167,16 @@ def snapshot_from_operational_log(
     risk_total = 0
     risk_completed = 0
     critical_incidents = 0
+    active_critical_status = None
+    critical_statuses = {
+        "ERROR",
+        "DEGRADED_RISK_UNCHECKED",
+        "ENTRY_CIRCUIT_BREAKER",
+        "ORDER_RECONCILIATION",
+        "ORDER_SUPPRESSION",
+    }
     last_by_day: dict[date, tuple[datetime, dict]] = {}
-    for timestamp, row in records:
+    for timestamp, row in sorted(records, key=lambda item: item[0]):
         health = row.get("data_health") or {}
         expected = int(health.get("expected_count") or 0)
         fresh = int(health.get("fresh_count") or 0)
@@ -180,8 +188,13 @@ def snapshot_from_operational_log(
             fresh_scans += 1
         risk_total += int(health.get("risk_checks_total") or 0)
         risk_completed += int(health.get("risk_checks_completed") or 0)
-        if row.get("operational_status") in {"ERROR", "DEGRADED_RISK_UNCHECKED"}:
-            critical_incidents += 1
+        status = row.get("operational_status")
+        if status in critical_statuses:
+            if status != active_critical_status:
+                critical_incidents += 1
+            active_critical_status = status
+        else:
+            active_critical_status = None
         day = timestamp.date()
         if day not in last_by_day or timestamp > last_by_day[day][0]:
             last_by_day[day] = (timestamp, row)

@@ -274,12 +274,17 @@ CREATE TABLE positions (
     symbol          VARCHAR(20)     NOT NULL,
     market_type_code     VARCHAR(50)     NOT NULL,
     instrument_type_code VARCHAR(50)     NOT NULL DEFAULT 'STOCK',
+    execution_venue_code VARCHAR(20)     NOT NULL DEFAULT 'UNKNOWN',
+    account_scope        VARCHAR(100)    NOT NULL DEFAULT 'UNKNOWN',
     qty             NUMERIC(18, 4)  NOT NULL DEFAULT 0,
     avg_cost        NUMERIC(18, 4)  NOT NULL,
     realized_pnl    NUMERIC(18, 4)  NOT NULL DEFAULT 0,
     opened_at       TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-    UNIQUE (strategy_id, symbol, instrument_type_code)
+    CONSTRAINT positions_execution_scope_key UNIQUE (
+        strategy_id, symbol, instrument_type_code,
+        execution_venue_code, account_scope
+    )
 );
 
 ALTER TABLE positions DROP CONSTRAINT IF EXISTS ck_positions_normalized_symbol;
@@ -308,6 +313,8 @@ COMMENT ON COLUMN positions.updated_at    IS '최종 수정 일시';
 CREATE TABLE balance_history (
     id              SERIAL          PRIMARY KEY,
     strategy_id     INT             REFERENCES strategies(id),
+    execution_venue_code VARCHAR(20)     NOT NULL DEFAULT 'UNKNOWN',
+    account_scope        VARCHAR(100)    NOT NULL DEFAULT 'UNKNOWN',
     cash            NUMERIC(18, 4)  NOT NULL,
     stock_value     NUMERIC(18, 4)  NOT NULL,
     total_value     NUMERIC(18, 4)  NOT NULL,
@@ -317,6 +324,8 @@ CREATE TABLE balance_history (
 
 CREATE INDEX idx_balance_history_strategy_id ON balance_history(strategy_id);
 CREATE INDEX idx_balance_history_recorded_at ON balance_history(recorded_at);
+CREATE INDEX idx_balance_history_execution_scope
+    ON balance_history(execution_venue_code, account_scope, recorded_at);
 
 COMMENT ON TABLE  balance_history              IS '전략별 일별 잔고 스냅샷 (수익률 계산용)';
 COMMENT ON COLUMN balance_history.id           IS '잔고 기록 고유 ID';

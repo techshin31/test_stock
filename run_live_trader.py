@@ -1,11 +1,17 @@
 import argparse
-import traceback
+import atexit
+import datetime
+import hashlib
+import json
 import logging
 import os
+import traceback
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 from core.execution.trader import LiveTrader
 from core.utils.telegram_bot import TelegramBot
+from core.utils.process_lock import ProcessAlreadyRunning, ProcessInstanceLock
 
 def configure_logging(mode: str) -> None:
     log_dir = os.path.join("logs", mode.lower())
@@ -25,6 +31,112 @@ def configure_logging(mode: str) -> None:
         force=True,
     )
 
+
+def build_result_message(
+    orders, execution_results, suppressions=None, global_pause=None
+):
+    suppressions = list(suppressions or [])
+    if global_pause:
+        return (
+            "⛔ <b>미정산 주문 보호 작동</b>\n"
+            "모든 신규 주문을 일시 중지했습니다. 브로커 정산 확인 후 자동 해제됩니다.\n"
+            f"상세: {global_pause}"
+        )
+    reason_labels = {
+        "AMBIGUOUS_RESULT_SAME_DAY": "브로커 응답 불확실로 당일 재시도 금지",
+        "OPEN_ORDER_TODAY": "오늘 열린 주문과 중복 방지",
+        "FILLED_ORDER_TODAY": "오늘 체결 주문과 중복 방지",
+        "PRICE_GUARD_COOLDOWN": "가격 편차 보호 대기",
+        "RETRY_LIMIT": "당일 주문 재시도 한도",
+    }
+    suppression_detail = None
+    if suppressions:
+        symbols = ", ".join(sorted({row["ticker"] for row in suppressions}))
+        reasons = ", ".join(sorted({
+            reason_labels.get(row.get("reason"), row.get("reason", "UNKNOWN"))
+            for row in suppressions
+        }))
+        suppression_detail = f"대상: {symbols}\n사유: {reasons}"
+    if not orders and suppression_detail:
+        return (
+            "🛡️ <b>주문 후보 안전 차단</b>\n"
+            f"{suppression_detail}\n"
+            "전역 신규주문 중지가 아니라 해당 후보만 이번 사이클에서 제외했습니다."
+        )
+    if not orders:
+        return (
+            "✅ <b>금일 매매 내역 없음</b>\n"
+            "기존 포지션을 유지하거나 신규 진입 시그널이 없습니다."
+        )
+
+    message = "✅ <b>금일 매매 완료</b>\n\n"
+    for order in execution_results:
+        action_kr = "🔴매도" if order["type"] == "SELL" else "🟢매수"
+        status = order.get("status", "DRY_RUN")
+        message += (
+            f"• {action_kr} {order['ticker']} ({order['qty']}주) [{status}]\n"
+            f"  사유: {order['reason']}\n"
+        )
+    if suppression_detail:
+        message += (
+            "\n🛡️ <b>별도 주문 후보 안전 차단</b>\n"
+            f"{suppression_detail}\n"
+            "전역 신규주문 중지가 아니라 해당 후보만 제외했습니다."
+        )
+    return message
+
+
+def send_intraday_notification_once(
+    bot,
+    message,
+    orders,
+    execution_results,
+    suppressions,
+    global_pause,
+    state_path,
+    *,
+    today=None,
+):
+    """Deliver each state-changing intraday alert once after confirmed send."""
+    payload = {
+        "orders": list(orders or []),
+        "results": list(execution_results or []),
+        "suppressions": list(suppressions or []),
+        "global_pause": global_pause,
+    }
+    if not any(payload.values()):
+        return False
+    signature = hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()
+    ).hexdigest()
+    path = Path(state_path)
+    day = (today or datetime.date.today()).isoformat()
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        state = {}
+    delivered_keys = (
+        list(state.get("delivered_keys", [])) if state.get("date") == day else []
+    )
+    if signature in delivered_keys:
+        return False
+    if not bot.send_message(message):
+        return False
+    delivered_keys.append(signature)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = path.with_suffix(path.suffix + ".tmp")
+        temp_path.write_text(
+            json.dumps(
+                {"date": day, "delivered_keys": delivered_keys[-100:]}, indent=2
+            ),
+            encoding="utf-8",
+        )
+        temp_path.replace(path)
+    except OSError as exc:
+        logging.warning("알림 중복 방지 상태 저장 실패: %s", exc)
+    return True
+
 def main():
     parser = argparse.ArgumentParser(description="FA+TA Momentum Live Trader")
     mode_group = parser.add_mutually_exclusive_group()
@@ -32,17 +144,28 @@ def main():
     mode_group.add_argument("--mock", action="store_true", help="모의투자 계좌 사용(기본값)")
     mode_group.add_argument("--simulate", action="store_true", help="로컬 가상 계좌와 즉시 체결 엔진 사용")
     parser.add_argument("--dry-run", action="store_true", help="주문 실행 없이 시그널만 계산")
-    parser.add_argument("--premarket", action="store_true", help="장 시작 전 FA 필터링(관심종목 추출) 1회 실행")
-    parser.add_argument(
+    action_group = parser.add_mutually_exclusive_group()
+    action_group.add_argument(
+        "--premarket", action="store_true",
+        help="장 시작 전 FA 필터링(관심종목 추출) 1회 실행",
+    )
+    action_group.add_argument(
         "--snapshot-only", action="store_true",
         help="주문·시그널 계산 없이 현재 계좌 잔고 기준선용 스냅샷만 저장",
     )
-    parser.add_argument("--liquidate", action="store_true", help="보유 중인 모든 종목을 즉시 전량 시장가 매도하여 현금화")
+    action_group.add_argument(
+        "--liquidate", action="store_true",
+        help="보유 중인 모든 종목을 즉시 전량 시장가 매도하여 현금화",
+    )
     parser.add_argument(
         "--confirm-liquidate", choices=["LIQUIDATE"],
         help="전체 청산 확인 문자열. --liquidate와 함께 LIQUIDATE를 입력해야 함",
     )
     args = parser.parse_args()
+    if args.live and args.dry_run:
+        parser.error("--live and --dry-run cannot be combined; DRY_RUN always uses mock")
+    if args.liquidate and args.dry_run:
+        parser.error("--liquidate and --dry-run cannot be combined")
     requested_mode = (
         "DRY_RUN" if args.dry_run
         else "SIMULATE" if args.simulate
@@ -50,13 +173,26 @@ def main():
         else "PAPER"
     )
     configure_logging(requested_mode)
+    cycle_lock = None
+    if not args.snapshot_only:
+        cycle_lock = ProcessInstanceLock(
+            os.path.join("logs", "trader.cycle.lock"),
+            requested_mode,
+            label="trader cycle",
+        )
+        try:
+            cycle_lock.acquire()
+        except ProcessAlreadyRunning as exc:
+            logging.warning("[BLOCKED] %s", exc)
+            raise SystemExit(2)
+        atexit.register(cycle_lock.release)
     
     bot = TelegramBot()
     
     trader = None
     try:
         if args.dry_run:
-            bot.send_message("🚀 <b>[DRY RUN] 실전 매매 스크립트 가동</b>\n주문을 실행하지 않고 시그널만 분석합니다.")
+            logging.info("[DRY RUN] 주문 없이 시그널을 분석합니다.")
         elif args.premarket:
             bot.send_message("🚀 <b>장 시작 전 준비 스크립트 가동</b>\n오늘의 FA/TA 타겟 유니버스를 필터링합니다.")
         elif args.liquidate:
@@ -69,7 +205,9 @@ def main():
         # 트레이더 초기화
         # 주의: dry_run이면 무조건 mock API를 바라보게 하거나 주문 전송 단계에서 막음
         trader = LiveTrader(
-            mock=not args.live, simulate=args.simulate, dry_run=args.dry_run
+            mock=args.dry_run or not args.live,
+            simulate=args.simulate,
+            dry_run=args.dry_run,
         )
         runtime_mode = (
             "DRY_RUN" if args.dry_run
@@ -172,19 +310,25 @@ def main():
                 trader.append_trade_history(execution_results)
         
         # 결과 메시지 조립
-        if not orders:
-            msg = "✅ <b>금일 매매 내역 없음</b>\n기존 포지션을 유지하거나 신규 진입 시그널이 없습니다."
-        else:
-            msg = "✅ <b>금일 매매 완료</b>\n\n"
-            for o in execution_results:
-                action_kr = "🔴매도" if o['type'] == "SELL" else "🟢매수"
-                status = o.get('status', 'DRY_RUN')
-                msg += f"• {action_kr} {o['ticker']} ({o['qty']}주) [{status}]\n  사유: {o['reason']}\n"
+        msg = build_result_message(
+            orders,
+            execution_results,
+            getattr(trader, "last_order_suppressions", []),
+            getattr(trader, "last_global_order_pause", None),
+        )
                 
         logging.info("\n=== [실행 결과 요약] ===")
         logging.info(msg)
         logging.info("======================\n")
-        bot.send_message(msg)
+        send_intraday_notification_once(
+            bot,
+            msg,
+            orders,
+            execution_results,
+            getattr(trader, "last_order_suppressions", []),
+            getattr(trader, "last_global_order_pause", None),
+            Path("logs") / requested_mode.lower() / "notification_state.json",
+        )
         
     except Exception as e:
         err_msg = traceback.format_exc()

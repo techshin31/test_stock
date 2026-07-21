@@ -32,6 +32,7 @@ BASELINE_CONFIRMATION = "CLEAN_PAPER_BASELINE"
 REAL_BASELINE_CONFIRMATION = "CLEAN_REAL_BASELINE"
 RESET_CONFIRMATION = "RESET_CLEAN_BASELINE"
 BENCHMARK_SYMBOL = "^KS11"
+KRX_CLOSE_TIME = dt.time(15, 30)
 
 
 def _default_benchmark_loader(start: str, end: str) -> pd.Series:
@@ -133,6 +134,42 @@ def _benchmark_closes(
     for index, value in series.dropna().items():
         closes[pd.Timestamp(index).date()] = float(value)
     return closes
+
+
+def _benchmark_cutoff_date(snapshot_timestamp: dt.datetime) -> dt.date:
+    local = snapshot_timestamp.astimezone(dt.timezone(dt.timedelta(hours=9)))
+    if local.time().replace(tzinfo=None) < KRX_CLOSE_TIME:
+        return local.date() - dt.timedelta(days=1)
+    return local.date()
+
+
+def _benchmark_anchor(
+    loader: Callable[[str, str], pd.Series],
+    snapshot_timestamp: dt.datetime,
+) -> tuple[dt.date, float]:
+    cutoff = _benchmark_cutoff_date(snapshot_timestamp)
+    closes = _benchmark_closes(loader, cutoff - dt.timedelta(days=14), cutoff)
+    eligible = [day for day in closes if day <= cutoff]
+    if not eligible:
+        raise ValueError(f"KOSPI close unavailable through baseline cutoff {cutoff}")
+    anchor_date = max(eligible)
+    return anchor_date, closes[anchor_date]
+
+
+def _benchmark_anchor_freshness(
+    baseline: dict,
+    closes: dict[dt.date, float],
+) -> tuple[bool, str]:
+    certified = dt.date.fromisoformat(str(baseline["benchmark_date"]))
+    baseline_timestamp = _parse_timestamp(str(baseline["baseline_timestamp"]))
+    cutoff = _benchmark_cutoff_date(baseline_timestamp)
+    eligible = [day for day in closes if day <= cutoff]
+    expected = max(eligible) if eligible else None
+    detail = (
+        f"certified={certified}, expected={expected}, "
+        f"snapshot={baseline_timestamp.isoformat()}"
+    )
+    return expected == certified, detail
 
 
 def _load_cash_flows(path: Path, baseline: dict) -> tuple[list[dict], list[str]]:
@@ -486,6 +523,18 @@ def build_end_of_day_report(
                     "detail": f"{len(closes)} KOSPI closes",
                 })
                 sources.append(f"Yahoo Finance {BENCHMARK_SYMBOL} via data loader")
+                anchor_is_fresh, anchor_detail = _benchmark_anchor_freshness(
+                    baseline, closes
+                )
+                validation_checks.append({
+                    "name": "benchmark_anchor_freshness",
+                    "passed": anchor_is_fresh,
+                    "detail": anchor_detail,
+                })
+                if not anchor_is_fresh:
+                    validation_errors.append(
+                        f"stale benchmark baseline anchor: {anchor_detail}"
+                    )
             except Exception as exc:
                 closes = {}
                 validation_errors.append(f"benchmark unavailable: {exc}")
@@ -741,14 +790,13 @@ def initialize_baseline(
         raise ValueError(
             "baseline requires a same-day --snapshot-only observation before PAPER orders"
         )
-    from core.utils.trading_calendar import is_krx_trading_day, previous_krx_trading_day
+    from core.utils.trading_calendar import is_krx_trading_day
 
     if not is_krx_trading_day(report_date.isoformat()):
         raise ValueError("baseline must be initialized on a KRX trading day")
-    benchmark_date = previous_krx_trading_day(report_date)
-    closes = _benchmark_closes(benchmark_loader, benchmark_date, benchmark_date)
-    if benchmark_date not in closes:
-        raise ValueError(f"KOSPI close unavailable for baseline date {benchmark_date}")
+    benchmark_date, benchmark_close = _benchmark_anchor(
+        benchmark_loader, latest["timestamp"]
+    )
     baseline = {
         "schema_version": 1,
         "mode": mode,
@@ -760,7 +808,8 @@ def initialize_baseline(
         "baseline_position_count": int(latest.get("position_count") or 0),
         "benchmark_symbol": BENCHMARK_SYMBOL,
         "benchmark_date": benchmark_date.isoformat(),
-        "benchmark_close": closes[benchmark_date],
+        "benchmark_close": benchmark_close,
+        "benchmark_anchor_policy": "LATEST_CLOSED_SESSION_AT_SNAPSHOT",
         "cash_flow_policy": "Declare every deposit/withdrawal in cash_flows.json",
         "initialized_at": dt.datetime.now(
             dt.timezone(dt.timedelta(hours=9))

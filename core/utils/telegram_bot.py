@@ -13,7 +13,7 @@ class TelegramBot:
             
     def send_message(self, message: str):
         if not self.token or not self.chat_id:
-            return
+            return False
             
         url = f"https://api.telegram.org/bot{self.token}/sendMessage"
         payload = {
@@ -23,7 +23,10 @@ class TelegramBot:
         }
         
         try:
-            resp = requests.post(url, json=payload)
+            resp = requests.post(url, json=payload, timeout=10)
             resp.raise_for_status()
+            return True
         except Exception as e:
-            print(f"[ERROR] 텔레그램 전송 실패: {e}")
+            safe_error = str(e).replace(str(self.token), "***")
+            print(f"[ERROR] 텔레그램 전송 실패: {safe_error}")
+            return False

@@ -1,3 +1,4 @@
+import datetime
 import pandas as pd
 import numpy as np
 import json
@@ -5,6 +6,7 @@ import pytest
 from core.strategy.fa_ta_momentum import FaTaMomentumStrategy
 from core.execution.trader import LiveTrader
 from apps.worker.fa_contract import DEFAULT_CONFIG as FA_CONTRACT
+from run_live_trader import build_result_message, send_intraday_notification_once
 
 def test_fa_ta_momentum_strategy_signals():
     params = {
@@ -67,6 +69,7 @@ def test_live_trader_calculate_orders(monkeypatch):
     monkeypatch.setenv("POSTGRES_PASSWORD", "test-only")
     
     trader = LiveTrader(mock=True)
+    trader.broker = type("Broker", (), {"masked_account": "***1234-01"})()
     assert trader.strategy.FA_SCORE_MIN == FA_CONTRACT.minimum_company_fa_score
     
     total_eval = 10_000_000
@@ -168,6 +171,8 @@ def test_portfolio_limit_preserves_position_when_data_is_unavailable():
 def test_cancelled_order_uses_next_idempotency_attempt(monkeypatch):
     trader = object.__new__(LiveTrader)
     trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.broker = type("Broker", (), {"masked_account": "***1234-01"})()
     trader.max_order_attempts = 2
     trader.db = type("DB", (), {
         "fetch_all": lambda *a, **k: [{
@@ -186,6 +191,268 @@ def test_cancelled_order_uses_next_idempotency_attempt(monkeypatch):
 
     assert len(orders) == 1
     assert orders[0]["idempotency_key"]
+
+
+def test_ambiguous_broker_result_blocks_same_day_retry():
+    trader = object.__new__(LiveTrader)
+    trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.broker = type("Broker", (), {"masked_account": "***1234-01"})()
+    trader.max_order_attempts = 2
+    trader.db = type("DB", (), {
+        "fetch_all": lambda *a, **k: [{
+            "symbol": "005930", "order_side_code": "BUY",
+            "order_status_code": "REJECTED", "had_unknown_result": True,
+        }]
+    })()
+    trader._price_guard_blocked = lambda *args: False
+
+    orders = trader._calculate_orders(
+        1_000_000,
+        {"005930.KS": {"qty": 1, "current_price": 100}},
+        {"005930.KS": 0.15},
+        {"005930.KS": pd.DataFrame({"close": [100]})},
+    )
+
+    assert orders == []
+    assert trader.last_order_suppressions == [{
+        "ticker": "005930.KS",
+        "side": "BUY",
+        "reason": "AMBIGUOUS_RESULT_SAME_DAY",
+    }]
+
+
+def test_filled_order_is_not_reported_as_suppression_when_no_order_is_needed():
+    trader = object.__new__(LiveTrader)
+    trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.broker = type("Broker", (), {"masked_account": "***1234-01"})()
+    trader.max_order_attempts = 2
+    trader.db = type("DB", (), {
+        "fetch_all": lambda *a, **k: [{
+            "symbol": "005930", "order_side_code": "BUY",
+            "order_status_code": "FILLED", "had_unknown_result": False,
+        }]
+    })()
+    trader._price_guard_blocked = lambda *args: False
+
+    orders = trader._calculate_orders(
+        1_000_000,
+        {"005930.KS": {"qty": 1_450, "current_price": 100}},
+        {"005930.KS": 0.15},
+        {"005930.KS": pd.DataFrame({"close": [100]})},
+    )
+
+    assert orders == []
+    assert trader.last_order_suppressions == []
+
+
+def test_held_position_rebalance_uses_broker_current_price():
+    trader = object.__new__(LiveTrader)
+    trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.broker = type("Broker", (), {"masked_account": "***1234-01"})()
+    trader.max_order_attempts = 2
+    trader.db = type("DB", (), {"fetch_all": lambda *a, **k: []})()
+    trader._price_guard_blocked = lambda *args: False
+
+    orders = trader._calculate_orders(
+        1_000_000,
+        {"005930.KS": {"qty": 200, "current_price": 6_000}},
+        {"005930.KS": 0.50},
+        {"005930.KS": pd.DataFrame({"close": [1_000]})},
+    )
+
+    assert len(orders) == 1
+    assert orders[0]["type"] == "SELL"
+    assert orders[0]["expected_price"] == 6_000
+    assert orders[0]["qty"] == 116
+
+
+def test_urgent_risk_exit_is_allowed_after_earlier_filled_sell():
+    trader = object.__new__(LiveTrader)
+    trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.broker = type("Broker", (), {"masked_account": "***1234-01"})()
+    trader.max_order_attempts = 2
+    trader.db = type("DB", (), {
+        "fetch_all": lambda *a, **k: [{
+            "symbol": "005930", "order_side_code": "SELL",
+            "order_status_code": "FILLED", "had_unknown_result": False,
+        }]
+    })()
+    trader._price_guard_blocked = lambda *args: False
+
+    orders = trader._calculate_orders(
+        1_000_000,
+        {"005930.KS": {"qty": 10, "current_price": 100}},
+        {"005930.KS": 0.0},
+        {},
+        {"005930.KS": {"signal_reason": "HARD_STOP_LOSS"}},
+    )
+
+    assert len(orders) == 1
+    assert orders[0]["reason"] == "HARD_STOP_LOSS"
+    assert trader.last_order_suppressions == []
+
+
+def test_normal_sell_is_blocked_after_earlier_filled_sell():
+    trader = object.__new__(LiveTrader)
+    trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.broker = type("Broker", (), {"masked_account": "***1234-01"})()
+    trader.max_order_attempts = 2
+    trader.db = type("DB", (), {
+        "fetch_all": lambda *a, **k: [{
+            "symbol": "005930", "order_side_code": "SELL",
+            "order_status_code": "FILLED", "had_unknown_result": False,
+        }]
+    })()
+    trader._price_guard_blocked = lambda *args: False
+
+    orders = trader._calculate_orders(
+        1_000_000,
+        {"005930.KS": {"qty": 10, "current_price": 100}},
+        {"005930.KS": 0.0},
+        {},
+        {"005930.KS": {"signal_reason": "PORTFOLIO_EXIT"}},
+    )
+
+    assert orders == []
+    assert trader.last_order_suppressions[0]["reason"] == "FILLED_ORDER_TODAY"
+
+
+def test_result_message_distinguishes_candidate_suppression_from_global_stop():
+    message = build_result_message([], [], [{
+        "ticker": "021240.KS",
+        "side": "BUY",
+        "reason": "AMBIGUOUS_RESULT_SAME_DAY",
+    }])
+
+    assert "주문 후보 안전 차단" in message
+    assert "021240.KS" in message
+    assert "전역 신규주문 중지가 아니라" in message
+
+
+def test_result_message_keeps_suppression_visible_when_another_order_executes():
+    order = {
+        "ticker": "483650.KS",
+        "type": "SELL",
+        "qty": 51,
+        "reason": "REBALANCE_WEIGHT_REDUCTION",
+    }
+    message = build_result_message(
+        [order],
+        [{**order, "status": "FILLED"}],
+        [{
+            "ticker": "021240.KS",
+            "side": "BUY",
+            "reason": "AMBIGUOUS_RESULT_SAME_DAY",
+        }],
+    )
+
+    assert "483650.KS (51주) [FILLED]" in message
+    assert "별도 주문 후보 안전 차단" in message
+    assert "021240.KS" in message
+    assert "전역 신규주문 중지가 아니라" in message
+
+
+def test_result_message_identifies_true_global_order_pause():
+    message = build_result_message(
+        [], [], [], "unresolved order circuit breaker: 1 open order"
+    )
+
+    assert "미정산 주문 보호 작동" in message
+    assert "모든 신규 주문을 일시 중지" in message
+    assert "자동 해제" in message
+
+
+def test_intraday_notification_deduplicates_repeated_state_and_skips_idle(tmp_path):
+    state_path = tmp_path / "notification_state.json"
+    today = datetime.date(2026, 7, 21)
+    bot = type("Bot", (), {
+        "calls": [],
+        "send_message": lambda self, message: self.calls.append(message) or True,
+    })()
+    suppression = [{
+        "ticker": "021240.KS",
+        "side": "BUY",
+        "reason": "AMBIGUOUS_RESULT_SAME_DAY",
+    }]
+
+    assert not send_intraday_notification_once(
+        bot, "idle", [], [], [], None, state_path, today=today
+    )
+    assert send_intraday_notification_once(
+        bot, "suppressed", [], [], suppression, None, state_path, today=today
+    )
+    assert not send_intraday_notification_once(
+        bot, "suppressed", [], [], suppression, None, state_path, today=today
+    )
+    assert send_intraday_notification_once(
+        bot, "paused", [], [], [], "one unresolved order", state_path, today=today
+    )
+    assert bot.calls == ["suppressed", "paused"]
+
+
+def test_intraday_notification_failure_is_retried(tmp_path):
+    state_path = tmp_path / "notification_state.json"
+    today = datetime.date(2026, 7, 21)
+    failing_bot = type("Bot", (), {"send_message": lambda *_: False})()
+    working_bot = type("Bot", (), {"send_message": lambda *_: True})()
+    suppression = [{"ticker": "021240.KS", "reason": "RETRY_LIMIT"}]
+
+    assert not send_intraday_notification_once(
+        failing_bot, "blocked", [], [], suppression, None,
+        state_path, today=today,
+    )
+    assert send_intraday_notification_once(
+        working_bot, "blocked", [], [], suppression, None,
+        state_path, today=today,
+    )
+
+
+def test_order_history_query_is_scoped_to_current_account():
+    calls = []
+
+    class DB:
+        def fetch_all(self, query, params):
+            calls.append((query, params))
+            return []
+
+    trader = object.__new__(LiveTrader)
+    trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.broker = type("Broker", (), {"masked_account": "***1234-01"})()
+    trader.max_order_attempts = 2
+    trader.db = DB()
+    trader._price_guard_blocked = lambda *args: False
+
+    trader._calculate_orders(
+        1_000_000,
+        {},
+        {"005930.KS": 0.15},
+        {"005930.KS": pd.DataFrame({"close": [100]})},
+    )
+
+    query, params = calls[0]
+    assert "execution_venue_code = %s" in query
+    assert "account_scope = %s" in query
+    assert params[1:] == ("aggressive", "PAPER", "***1234-01")
+
+
+def test_idempotency_key_is_isolated_by_account_scope():
+    trader = object.__new__(LiveTrader)
+    trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.broker = type("Broker", (), {"masked_account": "***1111-01"})()
+    order = {"ticker": "005930.KS", "type": "BUY", "reason": "ENTRY"}
+
+    first = trader._idempotency_key(order)
+    trader.broker = type("Broker", (), {"masked_account": "***2222-01"})()
+    second = trader._idempotency_key(order)
+
+    assert first != second
 
 
 def test_decision_snapshot_explains_zero_and_selected_targets(tmp_path, monkeypatch):
@@ -248,6 +515,11 @@ def test_dashboard_counts_execution_outcomes_not_order_candidates(tmp_path):
     trader = object.__new__(LiveTrader)
     trader.execution_venue = "PAPER"
     trader.log_dir = tmp_path
+    trader.last_order_suppressions = [{
+        "ticker": "005930.KS",
+        "side": "BUY",
+        "reason": "AMBIGUOUS_RESULT_SAME_DAY",
+    }]
     trader.update_intraday_dashboard([
         {"type": "BUY", "status": "SKIPPED"},
         {"type": "BUY", "status": "SKIPPED"},
@@ -261,7 +533,11 @@ def test_dashboard_counts_execution_outcomes_not_order_candidates(tmp_path):
     assert "매도체결 0건" in line
     assert "부분·대기 1건" in line
     assert "건너뜀 2건" in line
+    assert "안전차단 매수 1건" in line
     assert "신규매수" not in line
+    assert payload["order_suppressions"]["by_reason"] == {
+        "AMBIGUOUS_RESULT_SAME_DAY": 1,
+    }
 
 
 def test_broker_trailing_stop_does_not_require_daily_bars():
@@ -290,6 +566,7 @@ def test_risk_exit_generates_sell_when_daily_bars_are_stale():
     trader = object.__new__(LiveTrader)
     trader.strategy_name = "aggressive"
     trader.execution_venue = "DRY_RUN"
+    trader.broker = type("Broker", (), {"masked_account": "***1234-01"})()
     trader.max_order_attempts = 2
     trader.price_guard_path = None
     trader.db = type("DB", (), {"fetch_all": lambda *a, **k: []})()
@@ -395,6 +672,27 @@ def test_entry_circuit_breaker_blocks_buys_but_preserves_sells():
     assert details["ADD.KS"]["signal_reason"] == "DAILY_LOSS_LIMIT"
 
 
+def test_dependency_error_blocks_existing_position_increase():
+    targets = {"ADD.KS": 0.15, "EXIT.KS": 0.0}
+    details = {ticker: {"signal_reason": "HOLD"} for ticker in targets}
+    positions = {
+        "ADD.KS": {"qty": 10, "current_price": 10_000},
+        "EXIT.KS": {"qty": 10, "current_price": 10_000},
+    }
+
+    result = LiveTrader._apply_entry_circuit_breaker(
+        targets,
+        details,
+        positions,
+        total_eval=1_000_000,
+        reason="DEPENDENCY_ERROR_ENTRY_BLOCK",
+    )
+
+    assert result["ADD.KS"] == pytest.approx(0.10)
+    assert result["EXIT.KS"] == 0.0
+    assert details["ADD.KS"]["signal_reason"] == "DEPENDENCY_ERROR_ENTRY_BLOCK"
+
+
 def test_entry_circuit_breaker_has_visible_operational_status():
     status = LiveTrader._derive_operational_status(
         {
@@ -405,3 +703,35 @@ def test_entry_circuit_breaker_has_visible_operational_status():
         {"open": 0},
     )
     assert status == "ENTRY_CIRCUIT_BREAKER"
+
+
+def test_order_suppression_has_visible_operational_status():
+    status = LiveTrader._derive_operational_status(
+        {
+            "risk_checks_total": 1,
+            "risk_checks_completed": 1,
+            "order_suppressions": {
+                "total": 1,
+                "by_reason": {"AMBIGUOUS_RESULT_SAME_DAY": 1},
+            },
+        },
+        {"open": 0},
+    )
+
+    assert status == "ORDER_SUPPRESSION"
+
+
+def test_filled_order_deduplication_is_not_a_critical_suppression():
+    status = LiveTrader._derive_operational_status(
+        {
+            "risk_checks_total": 1,
+            "risk_checks_completed": 1,
+            "order_suppressions": {
+                "total": 1,
+                "by_reason": {"FILLED_ORDER_TODAY": 1},
+            },
+        },
+        {"open": 0},
+    )
+
+    assert status == "ORDER_DEDUPLICATION"

@@ -6,6 +6,7 @@ import pytest
 
 from core.analytics.trading_performance import (
     BASELINE_CONFIRMATION,
+    _benchmark_anchor_freshness,
     build_end_of_day_report,
     calculate_performance,
     check_baseline,
@@ -229,6 +230,52 @@ def test_initialize_baseline_requires_same_day_scoped_snapshot(tmp_path):
             benchmark_loader=benchmark_loader,
         )
 
+
+def test_initialize_baseline_after_close_uses_same_day_benchmark(tmp_path):
+    report_date = dt.date(2026, 7, 20)
+    log_dir = tmp_path / "logs" / "paper"
+    promotion_dir = tmp_path / "reports" / "promotion"
+    _write_jsonl(log_dir / "account_snapshots.jsonl", [{
+        **_snapshot("2026-07-20T16:00:00+09:00", 1_000),
+        "timestamp": "2026-07-20T16:00:00+09:00",
+    }])
+
+    def benchmark_loader(start, end):
+        return pd.Series(
+            [2_900.0, 3_000.0],
+            index=pd.to_datetime(["2026-07-16", "2026-07-20"]),
+        )
+
+    baseline = initialize_baseline(
+        mode="PAPER",
+        report_date=report_date,
+        log_dir=log_dir,
+        promotion_dir=promotion_dir,
+        confirmation=BASELINE_CONFIRMATION,
+        benchmark_loader=benchmark_loader,
+    )
+
+    assert baseline["benchmark_date"] == "2026-07-20"
+    assert baseline["benchmark_close"] == 3_000.0
+    assert baseline["benchmark_anchor_policy"] == (
+        "LATEST_CLOSED_SESSION_AT_SNAPSHOT"
+    )
+
+
+def test_after_close_stale_benchmark_anchor_is_rejected():
+    fresh, detail = _benchmark_anchor_freshness(
+        {
+            "baseline_timestamp": "2026-07-20T17:46:10+09:00",
+            "benchmark_date": "2026-07-16",
+        },
+        {
+            dt.date(2026, 7, 16): 2_900.0,
+            dt.date(2026, 7, 20): 3_000.0,
+        },
+    )
+
+    assert fresh is False
+    assert "expected=2026-07-20" in detail
 
 def test_baseline_check_rejects_current_account_mismatch(tmp_path):
     report_date = dt.date(2026, 7, 20)

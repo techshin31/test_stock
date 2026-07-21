@@ -1,4 +1,5 @@
 import argparse
+import atexit
 import datetime
 import json
 import os
@@ -8,9 +9,47 @@ import traceback
 from pathlib import Path
 
 from core.utils.trading_calendar import is_krx_trading_day
+from core.utils.process_lock import ProcessAlreadyRunning, ProcessInstanceLock
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+
+SUPPRESSION_REASON_LABELS = {
+    "AMBIGUOUS_RESULT_SAME_DAY": "브로커 응답 불확실·당일 재시도 금지",
+    "OPEN_ORDER_TODAY": "당일 미체결 주문 중복 방지",
+    "FILLED_ORDER_TODAY": "당일 체결 주문 중복 방지",
+    "PRICE_GUARD_COOLDOWN": "가격 편차 보호 대기",
+    "RETRY_LIMIT": "당일 재시도 한도",
+}
+
+OPERATIONAL_STATUS_LABELS = {
+    "NORMAL": "정상",
+    "SCANNING": "스캔 중",
+    "ORDER_SUPPRESSION": "후보별 주문 안전차단",
+    "ORDER_DEDUPLICATION": "중복 주문 제거",
+    "ORDER_RECONCILIATION": "미정산 주문 정산 중·전체 신규주문 일시정지",
+    "ENTRY_CIRCUIT_BREAKER": "신규 진입 안전차단·매도 위험청산 허용",
+    "DEGRADED_DATA_STALE": "일부 데이터 지연",
+    "DEGRADED_RISK_UNCHECKED": "위험점검 미완료",
+    "ERROR": "오류",
+}
+
+
+def operational_status_label(status: str) -> str:
+    label = OPERATIONAL_STATUS_LABELS.get(status, status or "확인 중")
+    return f"{label} ({status})" if status else label
+
+
+SchedulerAlreadyRunning = ProcessAlreadyRunning
+
+
+class SchedulerInstanceLock(ProcessInstanceLock):
+    """Global lock preventing concurrent scheduler processes."""
+
+    def __init__(self, path: Path, mode: str):
+        super().__init__(path, mode, label="scheduler")
+
+
 def log_error(message: str, mode: str) -> None:
     scheduler_log = PROJECT_ROOT / "logs" / mode.lower() / "scheduler.log"
     scheduler_log.parent.mkdir(parents=True, exist_ok=True)
@@ -68,6 +107,17 @@ def draw_dashboard(last_mode, next_run_time, execution_mode):
                 f"매수 {candidates.get('buy', 0)} | 매도 {candidates.get('sell', 0)} | "
                 f"위험청산 {candidates.get('risk_exit', 0)}"
             )
+            suppressions = state.get("order_suppressions", {})
+            if int(suppressions.get("total", 0) or 0) > 0:
+                reasons = ", ".join(
+                    f"{SUPPRESSION_REASON_LABELS.get(reason, reason)} {count}"
+                    for reason, count in suppressions.get("by_reason", {}).items()
+                )
+                print(
+                    " 🚧 후보별 주문 안전차단: "
+                    f"매수 {suppressions.get('buy', 0)} | "
+                    f"매도 {suppressions.get('sell', 0)} | {reasons}"
+                )
             data_health = state.get("data_health", {})
             print(
                 " 🩺 데이터/위험 점검: "
@@ -82,7 +132,8 @@ def draw_dashboard(last_mode, next_run_time, execution_mode):
                 f" 🛡️ 위험관리: 손절 {float(risk.get('stop_loss_pct', 0)):.0%} | "
                 f"트레일링 {float(risk.get('trailing_stop_pct', 0)):.0%} | "
                 f"일손실한도 {float(risk.get('max_daily_loss_rate', 0)):.0%} | "
-                f"운영상태 {state.get('operational_status', '확인 중')}"
+                "운영상태 "
+                f"{operational_status_label(state.get('operational_status'))}"
             )
             if state.get("last_error"):
                 print(f" ⚠️ 최근 오류: {state['last_error']}")
@@ -150,11 +201,18 @@ def get_next_run_time(now):
     return "다음 KRX 거래일 08:30"
 
 
+def claim_daily_report(last_run_date, report_date):
+    """Claim a report date before execution to prevent tight failure retries."""
+    if last_run_date == report_date:
+        return False, last_run_date
+    return True, report_date
+
+
 def run_command(mode="intraday", live=False, dry_run=True, simulate=False):
     print(f"\n[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] 작업 시작 ({mode})")
     broker_flag = "--live" if live else "--simulate" if simulate else "--mock"
     cmd = ["uv", "run", "python", "run_live_trader.py", broker_flag]
-    if dry_run and mode != "premarket":
+    if dry_run:
         cmd.append("--dry-run")
     if mode == "premarket":
         cmd.append("--premarket")
@@ -166,8 +224,12 @@ def run_command(mode="intraday", live=False, dry_run=True, simulate=False):
         stderr=subprocess.DEVNULL,
         timeout=15 * 60,
     )
+    if result.returncode == 2:
+        print(f"[SKIPPED] {mode} trader cycle is already running")
+        return False
     if result.returncode != 0:
         raise RuntimeError(f"{mode} 하위 프로세스 실패(returncode={result.returncode})")
+    return True
 
 
 def run_simulation_report(report_date):
@@ -231,6 +293,16 @@ def main():
         "DRY_RUN" if dry_run else "SIMULATE" if args.simulate
         else "REAL" if args.live else "PAPER"
     )
+    instance_lock = SchedulerInstanceLock(
+        PROJECT_ROOT / "logs" / "scheduler.instance.lock",
+        execution_mode,
+    )
+    try:
+        instance_lock.acquire()
+    except SchedulerAlreadyRunning as exc:
+        print(f"[BLOCKED] {exc}")
+        return 2
+    atexit.register(instance_lock.release)
     report_run_date = None
 
     try:
@@ -252,30 +324,49 @@ def main():
             if is_trading_day(now):
                 if now.hour == 8 and now.minute == 30 and last_run_mark != "8:30":
                     last_run_mark = "8:30"
-                    run_command(mode="premarket", live=args.live, dry_run=dry_run, simulate=args.simulate)
-                    last_run_mode = "premarket"
+                    completed = run_command(
+                        mode="premarket", live=args.live,
+                        dry_run=dry_run, simulate=args.simulate,
+                    )
+                    last_run_mode = (
+                        "premarket" if completed else "premarket skipped (cycle busy)"
+                    )
                 elif (9 <= now.hour <= 14) or (now.hour == 15 and now.minute <= 20):
                     current_mark = f"{now.hour}:{now.minute}"
                     if last_run_mark != current_mark:
                         last_run_mark = current_mark
-                        run_command(mode="intraday", live=args.live, dry_run=dry_run, simulate=args.simulate)
-                        last_run_mode = "intraday"
+                        completed = run_command(
+                            mode="intraday", live=args.live,
+                            dry_run=dry_run, simulate=args.simulate,
+                        )
+                        last_run_mode = (
+                            "intraday" if completed
+                            else "intraday skipped (cycle busy)"
+                        )
                 if (
                     args.simulate
                     and (now.hour > 15 or (now.hour == 15 and now.minute >= 21))
                     and report_run_date != now.date()
                 ):
-                    run_simulation_report(now.date())
-                    report_run_date = now.date()
-                    last_run_mode = "simulation_report"
+                    # Claim the date before execution so a failed report cannot be
+                    # retried every 10 seconds for the rest of the day.
+                    claimed, report_run_date = claim_daily_report(
+                        report_run_date, now.date()
+                    )
+                    if claimed:
+                        run_simulation_report(now.date())
+                        last_run_mode = "simulation_report"
                 elif (
                     not args.simulate
                     and (now.hour > 15 or (now.hour == 15 and now.minute >= 30))
                     and report_run_date != now.date()
                 ):
-                    run_end_of_day_report(now.date(), execution_mode)
-                    report_run_date = now.date()
-                    last_run_mode = "eod_performance_report"
+                    claimed, report_run_date = claim_daily_report(
+                        report_run_date, now.date()
+                    )
+                    if claimed:
+                        run_end_of_day_report(now.date(), execution_mode)
+                        last_run_mode = "eod_performance_report"
         except Exception as exc:
             log_error(f"scheduled job failed: {exc}", execution_mode)
             retry_note = " (10초 후 재시도)" if cold_start_pending else ""
@@ -285,4 +376,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

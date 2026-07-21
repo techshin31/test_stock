@@ -1,5 +1,6 @@
 import datetime as dt
 import os
+import re
 import threading
 import time
 from typing import Any
@@ -11,6 +12,17 @@ from dotenv import load_dotenv
 
 class BrokerResponseError(RuntimeError):
     """KIS가 실패 응답 또는 불완전한 데이터를 반환했을 때 발생한다."""
+
+
+_SENSITIVE_QUERY_PATTERN = re.compile(
+    r"(?i)(\b(?:CANO|ACNT_PRDT_CD|authorization|appkey|appsecret|hashkey|access_token)=)"
+    r"([^&\s]+)"
+)
+
+
+def redact_sensitive_text(value: object) -> str:
+    """Remove KIS credentials and account fields from an error string."""
+    return _SENSITIVE_QUERY_PATTERN.sub(r"\1***", str(value))
 
 
 def normalize_symbol(ticker: str) -> str:
@@ -79,6 +91,19 @@ class KisBroker:
             if wait > 0:
                 time.sleep(wait)
             self._last_request_at = time.monotonic()
+
+    def _safe_error_message(self, exc: BaseException) -> str:
+        message = redact_sensitive_text(exc)
+        broker = getattr(self, "broker", None)
+        for secret in (
+            getattr(self, "key", None),
+            getattr(self, "secret", None),
+            getattr(broker, "access_token", None),
+            getattr(broker, "acc_no_prefix", None),
+        ):
+            if secret:
+                message = message.replace(str(secret), "***")
+        return message
 
     def _safe_request(self, method: str, url: str, **kwargs):
         """Retry idempotent reads/hash generation, never an actual order submission."""
@@ -211,7 +236,9 @@ class KisBroker:
             )
             payload = response.json()
         except (requests.RequestException, ValueError) as exc:
-            raise BrokerResponseError(f"잔고 조회 통신 실패: {exc}") from exc
+            raise BrokerResponseError(
+                f"잔고 조회 통신 실패: {self._safe_error_message(exc)}"
+            ) from None
         payload["tr_cont"] = response.headers.get("tr_cont", "")
         return payload
 
@@ -231,7 +258,9 @@ class KisBroker:
             )
             payload = response.json()
         except (requests.RequestException, ValueError) as exc:
-            raise BrokerResponseError(f"현재가 조회 통신 실패: {exc}") from exc
+            raise BrokerResponseError(
+                f"현재가 조회 통신 실패: {self._safe_error_message(exc)}"
+            ) from None
         resp = self._require_success(payload, "현재가 조회")
         output = resp.get("output")
         if not isinstance(output, dict):
@@ -303,7 +332,9 @@ class KisBroker:
             raise
         except (requests.RequestException, ValueError) as exc:
             # timeout/연결 종료는 서버 접수 여부를 단정할 수 없다.
-            raise RuntimeError(f"시장가 주문 통신 결과 불명: {exc}") from exc
+            raise RuntimeError(
+                f"시장가 주문 통신 결과 불명: {self._safe_error_message(exc)}"
+            ) from None
         return self._require_success(payload, "시장가 매수" if side == "buy" else "시장가 매도")
 
     def fetch_daily_orders(self, target_date: dt.date | None = None) -> list[dict]:
@@ -343,7 +374,9 @@ class KisBroker:
                 response = self._safe_request("GET", url, headers=headers, params=params)
                 payload = response.json()
             except (requests.RequestException, ValueError) as exc:
-                raise BrokerResponseError(f"주문 체결 조회 통신 실패: {exc}") from exc
+                raise BrokerResponseError(
+                    f"주문 체결 조회 통신 실패: {self._safe_error_message(exc)}"
+                ) from None
             payload = self._require_success(payload, "주문 체결 조회")
             page_rows = payload.get("output1", [])
             if not isinstance(page_rows, list):

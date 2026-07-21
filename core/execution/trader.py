@@ -77,6 +77,8 @@ class LiveTrader:
         self.price_guard_path = self.log_dir / "price_guard_state.json"
         self.last_data_health = {}
         self.last_order_candidates = []
+        self.last_order_suppressions = []
+        self.last_global_order_pause = None
 
     def run_premarket_batch(self):
         logging.info(f"[{datetime.datetime.now()}] 프리마켓 FA 필터링 시작")
@@ -185,6 +187,7 @@ class LiveTrader:
 
     def run_daily_batch(self):
         logging.info(f"[{datetime.datetime.now()}] 실전 매매 배치 시작 (Intraday)")
+        self.last_global_order_pause = None
         
         # 1. 잔고 조회
         balance_info = self.broker.get_balance()
@@ -290,10 +293,12 @@ class LiveTrader:
         self._append_account_history(balance_info, total_eval)
 
         if unresolved_error:
+            self.last_global_order_pause = unresolved_error
             logging.warning(f"{unresolved_error}; this scan will not create new orders")
             timeline = dashboard_state.setdefault("timeline", [])
             timeline.append(
-                f"[{datetime.datetime.now():%H:%M}] 주문 정산 대기: 신규 주문 생성 중지"
+                f"[{datetime.datetime.now():%H:%M}] 미정산 주문 보호: "
+                "모든 신규 주문 일시 중지 (정산 후 자동 해제)"
             )
             dashboard_state["timeline"] = timeline[-5:]
             self._write_json_state(dashboard_path, dashboard_state)
@@ -478,12 +483,25 @@ class LiveTrader:
         )
         data_health["dependency_errors"] = dependency_errors
         data_health["daily_return_decimal"] = daily_return_decimal
-        data_health["entry_circuit_breaker"] = entry_circuit_breaker
+        dependency_entry_blocker = (
+            "DEPENDENCY_ERROR_ENTRY_BLOCK" if dependency_errors else None
+        )
+        data_health["entry_circuit_breaker"] = (
+            entry_circuit_breaker or dependency_entry_blocker
+        )
         self.last_data_health = data_health
 
         target_positions = self._apply_portfolio_limits(
             target_positions, target_details, positions
         )
+        if dependency_entry_blocker:
+            target_positions = self._apply_entry_circuit_breaker(
+                target_positions,
+                target_details,
+                positions,
+                total_eval,
+                dependency_entry_blocker,
+            )
         if entry_circuit_breaker:
             target_positions = self._apply_entry_circuit_breaker(
                 target_positions,
@@ -508,8 +526,13 @@ class LiveTrader:
         )
         self.last_order_candidates = list(orders)
         candidate_summary = self._candidate_order_summary(orders)
+        suppression_summary = self._suppression_summary(
+            getattr(self, "last_order_suppressions", [])
+        )
+        data_health["order_suppressions"] = suppression_summary
         dashboard_state["data_health"] = data_health
         dashboard_state["order_candidates"] = candidate_summary
+        dashboard_state["order_suppressions"] = suppression_summary
         dashboard_state["actual_orders"] = actual_orders
         dashboard_state["daily_orders"] = actual_orders
         dashboard_state["operational_status"] = self._derive_operational_status(
@@ -555,6 +578,15 @@ class LiveTrader:
                 f"장중 결과: 매수체결 {buy_filled}건 / 매도체결 {sell_filled}건 / "
                 f"부분·대기 {open_count}건 / 건너뜀 {skipped_count}건"
             )
+            suppressions = list(
+                getattr(self, "last_order_suppressions", []) or []
+            )
+            if suppressions:
+                buy_blocked = sum(row.get("side") == "BUY" for row in suppressions)
+                sell_blocked = sum(row.get("side") == "SELL" for row in suppressions)
+                summary += (
+                    f" / 안전차단 매수 {buy_blocked}건·매도 {sell_blocked}건"
+                )
 
         timeline = dashboard_state.setdefault("timeline", [])
         timeline.append(f"[{datetime.datetime.now().strftime('%H:%M')}] ⚡ {summary}")
@@ -566,6 +598,9 @@ class LiveTrader:
         dashboard_state["actual_orders"] = actual_orders
         dashboard_state["daily_orders"] = actual_orders  # backward-compatible alias
         dashboard_state["order_candidates"] = self._candidate_order_summary(candidates)
+        dashboard_state["order_suppressions"] = self._suppression_summary(
+            getattr(self, "last_order_suppressions", [])
+        )
         data_health = getattr(self, "last_data_health", {}) or dashboard_state.get(
             "data_health", {}
         )
@@ -590,6 +625,21 @@ class LiveTrader:
         }
 
     @staticmethod
+    def _suppression_summary(suppressions):
+        rows = list(suppressions or [])
+        by_reason = {}
+        for row in rows:
+            reason = row.get("reason") or "UNKNOWN"
+            by_reason[reason] = by_reason.get(reason, 0) + 1
+        return {
+            "total": len(rows),
+            "buy": sum(row.get("side") == "BUY" for row in rows),
+            "sell": sum(row.get("side") == "SELL" for row in rows),
+            "by_reason": by_reason,
+            "symbols": sorted({row.get("ticker") for row in rows if row.get("ticker")}),
+        }
+
+    @staticmethod
     def _derive_operational_status(data_health, actual_orders, last_error=None):
         health = data_health or {}
         actual = actual_orders or {}
@@ -601,6 +651,17 @@ class LiveTrader:
             return "DEGRADED_RISK_UNCHECKED"
         if health.get("entry_circuit_breaker"):
             return "ENTRY_CIRCUIT_BREAKER"
+        suppressions = health.get("order_suppressions") or {}
+        suppression_reasons = set((suppressions.get("by_reason") or {}).keys())
+        critical_suppressions = {
+            "AMBIGUOUS_RESULT_SAME_DAY",
+            "PRICE_GUARD_COOLDOWN",
+            "RETRY_LIMIT",
+        }
+        if suppression_reasons & critical_suppressions:
+            return "ORDER_SUPPRESSION"
+        if int(suppressions.get("total") or 0) > 0:
+            return "ORDER_DEDUPLICATION"
         if health.get("held_stale_tickers"):
             return "DEGRADED_DATA_STALE"
         if int(health.get("stale_count") or 0) or int(health.get("missing_count") or 0):
@@ -638,6 +699,7 @@ class LiveTrader:
             "operational_status": dashboard_state.get("operational_status"),
             "data_health": dashboard_state.get("data_health", {}),
             "order_candidates": dashboard_state.get("order_candidates", {}),
+            "order_suppressions": dashboard_state.get("order_suppressions", {}),
             "actual_orders": dashboard_state.get(
                 "actual_orders", dashboard_state.get("daily_orders", {})
             ),
@@ -656,6 +718,7 @@ class LiveTrader:
         if not hasattr(self, "db"):
             return empty
         try:
+            strategy_name, execution_venue, account_scope = self._order_scope()
             rows = self.db.fetch_all(
                 """SELECT o.order_side_code, o.order_status_code, COUNT(*) AS count
                    FROM orders o
@@ -666,9 +729,9 @@ class LiveTrader:
                      AND o.account_scope = %s
                    GROUP BY o.order_side_code, o.order_status_code""",
                 (
-                    self.strategy_name,
-                    self.execution_venue,
-                    getattr(self.broker, "masked_account", "UNKNOWN"),
+                    strategy_name,
+                    execution_venue,
+                    account_scope,
                 ),
             )
         except Exception as exc:
@@ -686,6 +749,19 @@ class LiveTrader:
             elif status in {"REJECTED", "CANCELLED"}:
                 summary["rejected"] += count
         return summary
+
+    def _order_scope(self):
+        """Return the current strategy/account scope used by every order query."""
+        strategy_name = getattr(self, "strategy_name", None)
+        execution_venue = getattr(self, "execution_venue", None)
+        account_scope = getattr(
+            getattr(self, "broker", None), "masked_account", None
+        )
+        if not strategy_name or not execution_venue or not account_scope:
+            raise RuntimeError("strategy, execution venue, and account scope are required")
+        if execution_venue == "UNKNOWN" or account_scope == "UNKNOWN":
+            raise RuntimeError("unknown execution venue/account scope is not allowed")
+        return strategy_name, execution_venue, account_scope
 
     @staticmethod
     def _read_json_state(path):
@@ -944,69 +1020,134 @@ class LiveTrader:
     ):
         """현재 비중과 타겟 비중을 비교하여 실제 매수/매도할 주식 수 계산 (부분 매수/매도 포함 리밸런싱)"""
         orders = []
+        self.last_order_suppressions = []
         target_details = target_details or {}
         
         # 상태 기반 중복 방지. 거부 주문은 제한 횟수 내에서만 재시도한다.
         today_str = datetime.datetime.now().strftime('%Y-%m-%d')
+        strategy_name, execution_venue, account_scope = self._order_scope()
         if getattr(getattr(self, "broker", None), "is_simulated", False):
             rows = []
         else:
             try:
                 rows = self.db.fetch_all(
-                    """SELECT symbol, order_side_code, order_status_code
-                       FROM orders WHERE created_at::date = %s::date""",
-                    (today_str,)
+                    """SELECT o.symbol, o.order_side_code, o.order_status_code,
+                              EXISTS (
+                                  SELECT 1 FROM order_status_history h
+                                  WHERE h.order_id = o.id
+                                    AND h.event_type = 'UNKNOWN_RESULT'
+                              ) AS had_unknown_result
+                       FROM orders o
+                       JOIN strategies s ON s.id = o.strategy_id
+                       WHERE o.created_at::date = %s::date
+                         AND s.name = %s
+                         AND o.execution_venue_code = %s
+                         AND o.account_scope = %s""",
+                    (today_str, strategy_name, execution_venue, account_scope)
                 )
             except Exception as e:
                 raise RuntimeError(f"당일 주문 이력 조회 실패로 주문 계산을 중단합니다: {e}") from e
 
-        active_statuses = {'PENDING', 'SUBMITTED', 'ACCEPTED', 'PARTIAL', 'FILLED'}
-        active_keys = {
+        open_statuses = {'PENDING', 'SUBMITTED', 'ACCEPTED', 'PARTIAL'}
+        open_keys = {
             (normalize_symbol(r['symbol']), r['order_side_code'])
-            for r in rows if r['order_status_code'] in active_statuses
+            for r in rows if r['order_status_code'] in open_statuses
+        }
+        filled_keys = {
+            (normalize_symbol(r['symbol']), r['order_side_code'])
+            for r in rows if r['order_status_code'] == 'FILLED'
+        }
+        ambiguous_keys = {
+            (normalize_symbol(r['symbol']), r['order_side_code'])
+            for r in rows if r.get('had_unknown_result')
         }
         retry_counts = {}
+        attempt_counts = {}
         for row in rows:
+            key = (normalize_symbol(row['symbol']), row['order_side_code'])
+            attempt_counts[key] = attempt_counts.get(key, 0) + 1
             if row['order_status_code'] in {'REJECTED', 'CANCELLED'}:
-                key = (normalize_symbol(row['symbol']), row['order_side_code'])
                 retry_counts[key] = retry_counts.get(key, 0) + 1
 
-        def can_order(ticker, side):
+        urgent_exit_reasons = {
+            "HARD_STOP_LOSS",
+            "TRAILING_STOP",
+            "COMPANY_RISK_BLOCKED",
+            "DOWNTREND",
+            "FA_SCORE_DETERIORATED",
+            "TA_MOMENTUM_LOSS",
+        }
+
+        def can_order(ticker, side, reason=None):
             key = (normalize_symbol(ticker), side)
             if self._price_guard_blocked(ticker, side):
                 logging.info(f"[{ticker}] price guard cooldown is active for {side}")
+                self.last_order_suppressions.append({
+                    "ticker": ticker, "side": side, "reason": "PRICE_GUARD_COOLDOWN"
+                })
                 return False
-            if key in active_keys:
-                logging.info(f"[{ticker}] 오늘 활성/체결 {side} 주문이 존재하여 스킵합니다.")
+            if key in open_keys:
+                logging.info(f"[{ticker}] 오늘 열린 {side} 주문이 존재하여 스킵합니다.")
+                self.last_order_suppressions.append({
+                    "ticker": ticker, "side": side, "reason": "OPEN_ORDER_TODAY"
+                })
+                return False
+            urgent_exit = side == "SELL" and reason in urgent_exit_reasons
+            if key in filled_keys and not urgent_exit:
+                logging.info(f"[{ticker}] 오늘 체결된 {side} 주문이 존재하여 스킵합니다.")
+                self.last_order_suppressions.append({
+                    "ticker": ticker, "side": side, "reason": "FILLED_ORDER_TODAY"
+                })
+                return False
+            if key in ambiguous_keys:
+                logging.warning(
+                    f"[{ticker}] ambiguous {side} broker result occurred today; "
+                    "same-day retry is blocked"
+                )
+                self.last_order_suppressions.append({
+                    "ticker": ticker,
+                    "side": side,
+                    "reason": "AMBIGUOUS_RESULT_SAME_DAY",
+                })
                 return False
             if retry_counts.get(key, 0) >= self.max_order_attempts:
                 logging.warning(f"[{ticker}] 오늘 {side} 주문 재시도 한도에 도달했습니다.")
+                self.last_order_suppressions.append({
+                    "ticker": ticker, "side": side, "reason": "RETRY_LIMIT"
+                })
                 return False
             return True
 
         def add_identity(order):
             key = (normalize_symbol(order['ticker']), order['type'])
-            attempt = retry_counts.get(key, 0) + 1
-            venue = getattr(self, "execution_venue", "PAPER")
-            raw = f"{today_str}:{self.strategy_name}:{venue}:{key[0]}:{key[1]}:{attempt}"
+            attempt = attempt_counts.get(key, 0) + 1
+            raw = (
+                f"{today_str}:{strategy_name}:{execution_venue}:{account_scope}:"
+                f"{key[0]}:{key[1]}:{attempt}"
+            )
             order['idempotency_key'] = hashlib.sha256(raw.encode()).hexdigest()
             return order
 
         # 1. 매도 주문 계산 (현금 확보를 위해 먼저 실행)
         for ticker, pos in current_positions.items():
-            if not can_order(ticker, 'SELL'):
-                continue
             target_weight = target_positions.get(ticker, 0.0)
-            current_price = ohlcv_store[ticker].iloc[-1]['close'] if ticker in ohlcv_store and not ohlcv_store[ticker].empty else pos['current_price']
+            current_price = float(pos.get('current_price') or 0.0)
+            if (
+                current_price <= 0
+                and ticker in ohlcv_store
+                and not ohlcv_store[ticker].empty
+            ):
+                current_price = float(ohlcv_store[ticker].iloc[-1]['close'])
             if current_price <= 0:
                 continue
                 
             current_value = pos['qty'] * current_price
             target_value = total_eval * target_weight
             
+            candidate = None
             if target_weight == 0.0:
                 # 전량 매도
-                orders.append(add_identity({
+                candidate = {
                     "type": "SELL",
                     "ticker": ticker,
                     "qty": pos['qty'],
@@ -1014,57 +1155,67 @@ class LiveTrader:
                     "reason": target_details.get(ticker, {}).get(
                         "signal_reason", "TARGET_WEIGHT_ZERO"
                     )
-                }))
+                }
             elif current_value > target_value * 1.10: # 10% 이상 초과 시 부분 매도
                 sell_qty = int((current_value - target_value) // current_price)
                 if sell_qty > 0:
-                    orders.append(add_identity({
+                    candidate = {
                         "type": "SELL",
                         "ticker": ticker,
                         "qty": sell_qty,
                         "expected_price": float(current_price),
                         "reason": f"REBALANCE_WEIGHT_REDUCTION_FROM_{int(current_value/total_eval*100)}%_TO_{int(target_weight*100)}%"
-                    }))
+                    }
+            if candidate and can_order(ticker, 'SELL', candidate.get("reason")):
+                orders.append(add_identity(candidate))
                     
         # 2. 매수 주문 계산
         for ticker, weight in target_positions.items():
             if weight <= 0.0:
                 continue
-            if not can_order(ticker, 'BUY'):
-                continue
-            if ticker not in ohlcv_store or ohlcv_store[ticker].empty:
-                continue
-            current_price = ohlcv_store[ticker].iloc[-1]['close']
+            if ticker in current_positions:
+                current_price = float(
+                    current_positions[ticker].get('current_price') or 0.0
+                )
+            else:
+                current_price = 0.0
+            if current_price <= 0:
+                if ticker not in ohlcv_store or ohlcv_store[ticker].empty:
+                    continue
+                current_price = float(ohlcv_store[ticker].iloc[-1]['close'])
 
             if current_price <= 0:
                 continue
                 
             target_value = total_eval * weight
             
+            candidate = None
             if ticker in current_positions:
                 pos = current_positions[ticker]
                 current_value = pos['qty'] * current_price
                 if current_value < target_value * 0.90: # 10% 이상 부족 시 부분 매수
                     buy_qty = int((target_value - current_value) // current_price)
                     if buy_qty > 0:
-                        orders.append(add_identity({
+                        candidate = {
                             "type": "BUY",
                             "ticker": ticker,
                             "qty": buy_qty,
                             "expected_price": float(current_price),
                             "reason": f"REBALANCE_WEIGHT_INCREASE_TO_{int(weight*100)}%"
-                        }))
+                        }
             else:
                 # 신규 진입
                 target_qty = int(target_value // current_price)
                 if target_qty > 0:
-                    orders.append(add_identity({
+                    candidate = {
                         "type": "BUY",
                         "ticker": ticker,
                         "qty": target_qty,
                         "expected_price": float(current_price),
                         "reason": f"FA+TA MOMENTUM ENTRY_{int(weight*100)}%"
-                    }))
+                    }
+            if candidate and can_order(ticker, 'BUY', candidate.get("reason")):
+                orders.append(add_identity(candidate))
                     
         return orders
         
@@ -1270,9 +1421,10 @@ class LiveTrader:
         return results
 
     def _idempotency_key(self, order):
+        strategy_name, execution_venue, account_scope = self._order_scope()
         raw = ":".join([
-            datetime.date.today().isoformat(), self.strategy_name,
-            getattr(self, "execution_venue", "PAPER"),
+            datetime.date.today().isoformat(), strategy_name,
+            execution_venue, account_scope,
             normalize_symbol(order['ticker']), order['type'], str(order.get('reason', 'manual')),
         ])
         return hashlib.sha256(raw.encode()).hexdigest()
@@ -1346,10 +1498,17 @@ class LiveTrader:
         }
 
     def _assert_no_unresolved_orders(self):
+        strategy_name, execution_venue, account_scope = self._order_scope()
         row = self.db.fetch_one(
-            """SELECT COUNT(*) AS count FROM orders
-               WHERE created_at::date = CURRENT_DATE
-                 AND order_status_code IN ('PENDING','SUBMITTED','ACCEPTED','PARTIAL')"""
+            """SELECT COUNT(*) AS count
+               FROM orders o
+               JOIN strategies s ON s.id = o.strategy_id
+               WHERE o.created_at::date = CURRENT_DATE
+                 AND o.order_status_code IN ('PENDING','SUBMITTED','ACCEPTED','PARTIAL')
+                 AND s.name = %s
+                 AND o.execution_venue_code = %s
+                 AND o.account_scope = %s""",
+            (strategy_name, execution_venue, account_scope),
         )
         count = int((row or {}).get("count") or 0)
         if count:
@@ -1363,18 +1522,31 @@ class LiveTrader:
             attach_broker_order_id, update_order_status,
         )
 
+        strategy_name, execution_venue, account_scope = self._order_scope()
+        scope_params = (strategy_name, execution_venue, account_scope)
         try:
             rows = self.db.fetch_all(
-                """SELECT id::text, broker_order_id, symbol, order_side_code,
-                          price, qty, created_at
-                   FROM orders
-                   WHERE order_status_code IN ('SUBMITTED', 'ACCEPTED', 'PARTIAL')
-                     AND created_at::date = CURRENT_DATE"""
+                """SELECT o.id::text, o.broker_order_id, o.symbol, o.order_side_code,
+                          o.price, o.qty, o.created_at
+                   FROM orders o
+                   JOIN strategies s ON s.id = o.strategy_id
+                   WHERE o.order_status_code IN ('SUBMITTED', 'ACCEPTED', 'PARTIAL')
+                     AND o.created_at::date = CURRENT_DATE
+                     AND s.name = %s
+                     AND o.execution_venue_code = %s
+                     AND o.account_scope = %s""",
+                scope_params,
             )
             all_linked_rows = self.db.fetch_all(
-                """SELECT broker_order_id FROM orders
-                   WHERE created_at::date = CURRENT_DATE
-                     AND broker_order_id IS NOT NULL"""
+                """SELECT o.broker_order_id
+                   FROM orders o
+                   JOIN strategies s ON s.id = o.strategy_id
+                   WHERE o.created_at::date = CURRENT_DATE
+                     AND o.broker_order_id IS NOT NULL
+                     AND s.name = %s
+                     AND o.execution_venue_code = %s
+                     AND o.account_scope = %s""",
+                scope_params,
             )
         except Exception as e:
             raise RuntimeError(f"열린 주문 조회 실패: {e}") from e
@@ -1430,11 +1602,16 @@ class LiveTrader:
 
         if self.broker.is_mock and live_positions is not None:
             remaining = self.db.fetch_all(
-                """SELECT id::text, broker_order_id, symbol, order_side_code,
-                          price, qty, created_at
-                   FROM orders
-                   WHERE order_status_code IN ('SUBMITTED', 'ACCEPTED', 'PARTIAL')
-                     AND created_at::date = CURRENT_DATE"""
+                """SELECT o.id::text, o.broker_order_id, o.symbol, o.order_side_code,
+                          o.price, o.qty, o.created_at
+                   FROM orders o
+                   JOIN strategies s ON s.id = o.strategy_id
+                   WHERE o.order_status_code IN ('SUBMITTED', 'ACCEPTED', 'PARTIAL')
+                     AND o.created_at::date = CURRENT_DATE
+                     AND s.name = %s
+                     AND o.execution_venue_code = %s
+                     AND o.account_scope = %s""",
+                scope_params,
             )
             for row in remaining:
                 ticker = f"{normalize_symbol(row['symbol'])}.KS"
@@ -1508,6 +1685,9 @@ class LiveTrader:
         cash = balance_info['cash']
         positions = balance_info['positions']
         stock_value = total_eval - cash
+        account_scope = getattr(self.broker, "masked_account", "UNKNOWN")
+        if account_scope in {None, "", "UNKNOWN"}:
+            raise RuntimeError("account scope is required for balance synchronization")
         
         # 1. balance_history 저장
         from storage.postgres.repositories.balance_repo import insert_balance_history
@@ -1517,7 +1697,7 @@ class LiveTrader:
                 "stock_value": stock_value,
                 "total_value": total_eval,
                 "date": datetime.datetime.now(ZoneInfo("Asia/Seoul"))
-            })
+            }, execution_venue_code=self.execution_venue, account_scope=account_scope)
             logging.info("[DB 동기화] balance_history 기록 완료")
         except Exception as e:
             raise RuntimeError(f"balance_history 기록 실패: {e}") from e
@@ -1528,7 +1708,12 @@ class LiveTrader:
             zero_out_position,
         )
         try:
-            db_symbols = fetch_active_position_symbols(self.db, self.strategy_name)
+            db_symbols = fetch_active_position_symbols(
+                self.db,
+                self.strategy_name,
+                execution_venue_code=self.execution_venue,
+                account_scope=account_scope,
+            )
             
             for symbol, pos in positions.items():
                 upsert_position(self.db, self.strategy_name, normalize_symbol(symbol), {
@@ -1536,14 +1721,26 @@ class LiveTrader:
                     "avg_cost": pos["avg_price"],
                     "market_type_code": "KOSPI",
                     "instrument_type_code": "STOCK"
-                })
+                }, execution_venue_code=self.execution_venue, account_scope=account_scope)
                 
             for db_symbol in db_symbols:
                 if db_symbol != normalize_symbol(db_symbol):
-                    delete_position(self.db, self.strategy_name, db_symbol)
+                    delete_position(
+                        self.db,
+                        self.strategy_name,
+                        db_symbol,
+                        execution_venue_code=self.execution_venue,
+                        account_scope=account_scope,
+                    )
                     continue
                 if normalize_symbol(db_symbol) not in {normalize_symbol(s) for s in positions}:
-                    zero_out_position(self.db, self.strategy_name, db_symbol)
+                    zero_out_position(
+                        self.db,
+                        self.strategy_name,
+                        db_symbol,
+                        execution_venue_code=self.execution_venue,
+                        account_scope=account_scope,
+                    )
             logging.info("[DB 동기화] positions 테이블 갱신 완료")
         except Exception as e:
             raise RuntimeError(f"positions 테이블 갱신 실패: {e}") from e

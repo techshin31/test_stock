@@ -1,11 +1,20 @@
 import datetime
+import sys
 from contextlib import contextmanager
 
 import pytest
+import requests
 
-from core.broker.kis_api import BrokerResponseError, KisBroker, normalize_symbol
+from core.broker.kis_api import (
+    BrokerResponseError,
+    KisBroker,
+    normalize_symbol,
+    redact_sensitive_text,
+)
 from core.broker.simulation import LocalSimulationBroker
 from core.execution.trader import LiveTrader
+from core.utils.telegram_bot import TelegramBot
+from run_live_trader import main as trader_main
 from scheduler import is_trading_day
 import scheduler
 from storage.postgres.repositories.order_repo import DuplicateOrderError, create_order
@@ -43,12 +52,118 @@ def test_live_broker_requires_both_environment_gates(monkeypatch):
     assert broker.masked_account == "***5678-01"
 
 
+def test_cli_rejects_live_dry_run_before_broker_initialization(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["run_live_trader.py", "--live", "--dry-run"])
+    monkeypatch.setattr(
+        "run_live_trader.LiveTrader",
+        lambda *args, **kwargs: pytest.fail("broker must not initialize"),
+    )
+
+    with pytest.raises(SystemExit) as caught:
+        trader_main()
+
+    assert caught.value.code == 2
+
+
+def test_cli_rejects_conflicting_one_shot_actions(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["run_live_trader.py", "--mock", "--snapshot-only", "--liquidate"],
+    )
+
+    with pytest.raises(SystemExit) as caught:
+        trader_main()
+
+    assert caught.value.code == 2
+
+
 def test_mock_mode_is_safe_default_even_with_real_marker(monkeypatch):
     _credential_env(monkeypatch)
     monkeypatch.setenv("KIS_ENV", "real")
     monkeypatch.setenv("ALLOW_LIVE_ORDER", "false")
     monkeypatch.setattr("core.broker.kis_api.mojito.KoreaInvestment", DummyKoreaInvestment)
     assert KisBroker().is_mock is True
+
+
+def test_kis_error_redaction_removes_account_and_credentials():
+    message = (
+        "500 for https://example.test/orders?CANO=12345678&ACNT_PRDT_CD=01&"
+        "appKey=secret-key&authorization=secret-token"
+    )
+
+    redacted = redact_sensitive_text(message)
+
+    assert "12345678" not in redacted
+    assert "secret-key" not in redacted
+    assert "secret-token" not in redacted
+    assert "CANO=***" in redacted
+
+
+def test_kis_safe_error_message_masks_instance_secrets():
+    broker = object.__new__(KisBroker)
+    broker.key = "app-key"
+    broker.secret = "app-secret"
+    broker.broker = type("Client", (), {
+        "access_token": "access-token",
+        "acc_no_prefix": "12345678",
+    })()
+
+    message = broker._safe_error_message(
+        RuntimeError("app-key app-secret access-token 12345678-01")
+    )
+
+    assert message == "*** *** *** ***-01"
+
+
+def test_telegram_uses_timeout_and_masks_token_on_failure(monkeypatch, capsys):
+    bot = object.__new__(TelegramBot)
+    bot.token = "sensitive-bot-token"
+    bot.chat_id = "chat-id"
+    captured = {}
+
+    def fail(url, **kwargs):
+        captured.update({"url": url, **kwargs})
+        raise RuntimeError(f"failed at {url}")
+
+    monkeypatch.setattr("core.utils.telegram_bot.requests.post", fail)
+
+    bot.send_message("test")
+
+    output = capsys.readouterr().out
+    assert captured["timeout"] == 10
+    assert "sensitive-bot-token" not in output
+    assert "/bot***/sendMessage" in output
+
+
+def test_daily_order_http_error_does_not_chain_raw_account_details():
+    broker = object.__new__(KisBroker)
+    broker.key = "app-key"
+    broker.secret = "app-secret"
+    broker.is_mock = True
+    broker.broker = type("Client", (), {
+        "base_url": "https://example.test",
+        "access_token": "access-token",
+        "acc_no_prefix": "12345678",
+        "acc_no_postfix": "01",
+    })()
+
+    def fail_request(*args, **kwargs):
+        response = requests.Response()
+        response.status_code = 500
+        response.url = "https://example.test/orders?CANO=12345678&ACNT_PRDT_CD=01"
+        raise requests.HTTPError(
+            f"500 Server Error for url: {response.url}", response=response
+        )
+
+    broker._safe_request = fail_request
+
+    with pytest.raises(BrokerResponseError) as caught:
+        broker.fetch_daily_orders(datetime.date(2026, 7, 21))
+
+    assert "12345678" not in str(caught.value)
+    assert "CANO=***" in str(caught.value)
+    assert caught.value.__cause__ is None
 
 
 def test_balance_failure_is_not_converted_to_empty_account():
@@ -102,6 +217,7 @@ def _bare_trader(broker):
 
 class SafeBroker:
     is_mock = True
+    masked_account = "***1234-01"
 
     def __init__(self, price=100.0):
         self.price = price
@@ -281,6 +397,21 @@ def test_scheduler_dry_run_adds_no_order_flag(monkeypatch):
     assert "--dry-run" in captured["cmd"]
 
 
+def test_scheduler_dry_run_premarket_keeps_dry_run_scope(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        scheduler.subprocess,
+        "run",
+        lambda cmd, **kwargs: captured.update(cmd=cmd) or type(
+            "R", (), {"returncode": 0}
+        )(),
+    )
+
+    scheduler.run_command(mode="premarket", live=False, dry_run=True)
+
+    assert captured["cmd"][-2:] == ["--dry-run", "--premarket"]
+
+
 def test_scheduler_simulation_uses_local_broker_flag(monkeypatch):
     captured = {}
     monkeypatch.setattr(
@@ -295,6 +426,28 @@ def test_scheduler_simulation_uses_local_broker_flag(monkeypatch):
     assert "--dry-run" not in captured["cmd"]
 
 
+def test_scheduler_treats_busy_trader_cycle_as_safe_skip(monkeypatch):
+    monkeypatch.setattr(
+        scheduler.subprocess,
+        "run",
+        lambda *args, **kwargs: type("R", (), {"returncode": 2})(),
+    )
+
+    assert scheduler.run_command(mode="intraday", dry_run=False) is False
+
+
+def test_scheduler_labels_candidate_suppression_separately_from_global_pause():
+    assert scheduler.operational_status_label("ORDER_SUPPRESSION") == (
+        "후보별 주문 안전차단 (ORDER_SUPPRESSION)"
+    )
+    assert scheduler.operational_status_label("ORDER_RECONCILIATION") == (
+        "미정산 주문 정산 중·전체 신규주문 일시정지 (ORDER_RECONCILIATION)"
+    )
+    assert scheduler.SUPPRESSION_REASON_LABELS["AMBIGUOUS_RESULT_SAME_DAY"] == (
+        "브로커 응답 불확실·당일 재시도 금지"
+    )
+
+
 def test_scheduler_eod_report_passes_mode_and_date(monkeypatch):
     captured = {}
     monkeypatch.setattr(
@@ -307,6 +460,33 @@ def test_scheduler_eod_report_passes_mode_and_date(monkeypatch):
 
     assert "core.analytics.trading_performance" in captured["cmd"]
     assert captured["cmd"][-3:] == ["PAPER", "--date", "2026-07-20"]
+
+
+def test_scheduler_claims_eod_date_before_report_execution():
+    report_date = datetime.date(2026, 7, 21)
+
+    claimed, last_run_date = scheduler.claim_daily_report(None, report_date)
+    repeated, repeated_date = scheduler.claim_daily_report(
+        last_run_date, report_date
+    )
+
+    assert claimed is True
+    assert last_run_date == report_date
+    assert repeated is False
+    assert repeated_date == report_date
+
+
+def test_scheduler_instance_lock_rejects_concurrent_process(tmp_path):
+    lock_path = tmp_path / "scheduler.instance.lock"
+    first = scheduler.SchedulerInstanceLock(lock_path, "PAPER").acquire()
+    try:
+        with pytest.raises(scheduler.SchedulerAlreadyRunning):
+            scheduler.SchedulerInstanceLock(lock_path, "PAPER").acquire()
+    finally:
+        first.release()
+
+    replacement = scheduler.SchedulerInstanceLock(lock_path, "DRY_RUN").acquire()
+    replacement.release()
 
 
 def test_unknown_order_recovery_requires_one_precise_match():
@@ -337,10 +517,60 @@ def test_unknown_order_reconciliation_waits_for_grace_period():
 
 def test_unresolved_order_circuit_breaker_blocks_trading():
     trader = object.__new__(LiveTrader)
+    trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.broker = SafeBroker()
     trader.db = type("DB", (), {"fetch_one": lambda *a, **k: {"count": 2}})()
 
     with pytest.raises(RuntimeError, match="2 open orders"):
         trader._assert_no_unresolved_orders()
+
+
+def test_unresolved_order_query_is_scoped_to_current_account():
+    calls = []
+
+    class DB:
+        def fetch_one(self, query, params):
+            calls.append((query, params))
+            return {"count": 0}
+
+    trader = object.__new__(LiveTrader)
+    trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.broker = SafeBroker()
+    trader.db = DB()
+
+    trader._assert_no_unresolved_orders()
+
+    query, params = calls[0]
+    assert "execution_venue_code = %s" in query
+    assert "account_scope = %s" in query
+    assert params == ("aggressive", "PAPER", "***1234-01")
+
+
+def test_open_order_reconciliation_queries_are_scoped():
+    calls = []
+
+    class DB:
+        def fetch_all(self, query, params):
+            calls.append((query, params))
+            return []
+
+    broker = SafeBroker()
+    broker.is_mock = False
+    trader = object.__new__(LiveTrader)
+    trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.broker = broker
+    trader.db = DB()
+
+    trader._reconcile_open_orders()
+
+    assert len(calls) == 2
+    for query, params in calls:
+        assert "execution_venue_code = %s" in query
+        assert "account_scope = %s" in query
+        assert params == ("aggressive", "PAPER", "***1234-01")
 
 
 def test_paper_fill_can_be_inferred_from_balance_change():

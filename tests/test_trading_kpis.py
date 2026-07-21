@@ -114,6 +114,55 @@ def test_operational_log_uses_last_daily_order_state_without_double_counting(tmp
     assert snapshot.observed_trading_days == 1
     assert snapshot.submitted_orders == 1
     assert snapshot.reconciled_orders == 1
+
+
+def test_order_suppression_counts_as_critical_incident(tmp_path):
+    log_path = tmp_path / "health.jsonl"
+    log_path.write_text(
+        json.dumps({
+            "timestamp": "2026-07-20T10:00:00+09:00",
+            "operational_status": "ORDER_SUPPRESSION",
+            "data_health": {
+                "expected_count": 1,
+                "fresh_count": 1,
+                "risk_checks_total": 1,
+                "risk_checks_completed": 1,
+            },
+            "actual_orders": {},
+        }),
+        encoding="utf-8",
+    )
+
+    snapshot = snapshot_from_operational_log(log_path)
+
+    assert snapshot.critical_incidents == 1
+
+
+def test_repeated_critical_status_counts_incident_episodes(tmp_path):
+    log_path = tmp_path / "health.jsonl"
+    rows = []
+    for minute, status in enumerate([
+        "ORDER_SUPPRESSION",
+        "ORDER_SUPPRESSION",
+        "NORMAL",
+        "ORDER_SUPPRESSION",
+    ]):
+        rows.append(json.dumps({
+            "timestamp": f"2026-07-20T10:0{minute}:00+09:00",
+            "operational_status": status,
+            "data_health": {
+                "expected_count": 1,
+                "fresh_count": 1,
+                "risk_checks_total": 1,
+                "risk_checks_completed": 1,
+            },
+            "actual_orders": {},
+        }))
+    log_path.write_text("\n".join(rows), encoding="utf-8")
+
+    snapshot = snapshot_from_operational_log(log_path)
+
+    assert snapshot.critical_incidents == 2
     assert snapshot.data_freshness_rate == 1.0
     assert snapshot.risk_check_coverage == 1.0
 
