@@ -1,22 +1,38 @@
 {
-  "validation_status": "BLOCKED",
-  "as_of": "2026-07-20",
-  "generated_at": "2026-07-20T13:06:46+09:00",
+  "baseline_date": "2026-07-20",
+  "through_date": "2026-07-21",
+  "performance_days": 2,
+  "baseline_total_asset": 463025590.0,
+  "ending_total_asset": 473802699.0,
+  "net_return": 0.02327540687330054,
+  "benchmark_return": 0.03555410918928059,
+  "excess_return": -0.01227870231598005,
+  "max_drawdown": 0.0,
+  "annualized_volatility": 0.26126579417296186,
+  "total_costs": -421857.40499999997,
+  "cost_drag": -0.0009110887478162923,
+  "benchmark_symbol": "^KS11",
+  "starting_capital_reference": 500000000.0,
+  "pnl_vs_starting_capital": -26197301.0,
+  "return_vs_starting_capital": -0.05239460200000001,
+  "post_baseline_pnl": 10777109.0,
+  "certified_benchmark_date": "2026-07-16",
+  "effective_benchmark_date": "2026-07-20",
+  "benchmark_anchor_adjusted": true,
+  "validation_status": "READY",
+  "as_of": "2026-07-21",
+  "generated_at": "2026-07-22T11:33:15+09:00",
   "mode": "PAPER",
   "promotion": {
     "target_mode": "REAL",
     "ready": false,
     "manual_approval_required": true,
     "blockers": [
-      "observed_trading_days 0 < 60",
-      "no operational scans were observed",
-      "critical_incidents 1 > 0",
-      "performance_validation_status BLOCKED != READY",
-      "submitted_orders 0 < 10",
-      "net_return and benchmark_return are required",
-      "max_drawdown is required",
-      "cost_drag is required"
+      "observed_trading_days 1 < 60",
+      "critical_incidents 3 > 0",
+      "submitted_orders 7 < 10",
+      "excess_return -0.0123 <= 0.0000"
     ]
   },
-  "source_report": "C:\\dev\\project\\Service_Stock_Analysis\\reports\\promotion\\paper\\daily\\2026-07-20.json"
+  "source_report": "C:\\dev\\project\\Service_Stock_Analysis\\reports\\promotion\\paper\\daily\\2026-07-21.json"
 }

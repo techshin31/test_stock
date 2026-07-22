@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "queried_at": "2026-07-22T12:20:00+09:00",
+  "mode": "PAPER",
+  "account_scope": "***9904-01",
+  "target_date": "2026-07-09",
+  "operation": "READ_ONLY_KIS_DAILY_ORDER_QUERY",
+  "broker_rows_returned": 15,
+  "missing_broker_order_ids_requested": [
+    "0000001539",
+    "0000001541",
+    "0000001568",
+    "0000001589",
+    "0000001607"
+  ],
+  "matched_rows": 0,
+  "result": "NOT_RECOVERABLE_FROM_CURRENT_KIS_DAILY_ORDER_RESPONSE",
+  "safety": {
+    "orders_created": 0,
+    "orders_cancelled": 0,
+    "account_mutations": 0,
+    "real_mode_used": false
+  }
+}

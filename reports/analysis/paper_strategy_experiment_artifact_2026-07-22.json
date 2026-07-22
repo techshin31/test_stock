@@ -1,0 +1,4701 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "PAPER 전략 수정 후보 실험 결과",
+    "description": "전체·최근 구간의 수익, 낙폭, 비용, 회전율과 과최적화 위험을 비교한 의사결정 보고서",
+    "generatedAt": "2026-07-22T10:32:11+09:00",
+    "sources": [
+      {
+        "id": "experiment_combined",
+        "label": "PAPER 전략 후보 전체·최근 구간 분석 노트북",
+        "path": "reports/analysis/paper_strategy_experiments_2026-07-22.ipynb",
+        "query": {
+          "engine": "PostgreSQL",
+          "language": "sql",
+          "description": "동일한 FA 선택·KOSPI/TA 조건·거래비용으로 전체 및 PASS/PUBLISHED 후보를 비교",
+          "sql": "WITH ranked AS (\n  SELECT r.*, ROW_NUMBER() OVER (\n    PARTITION BY r.analysis_month\n    ORDER BY CASE r.status_code WHEN 'PUBLISHED' THEN 0 WHEN 'PASS' THEN 1 ELSE 2 END,\n             r.run_version DESC, r.id DESC\n  ) AS rn\n  FROM fa_analysis_runs r\n  JOIN strategies s ON s.id = r.strategy_id\n  WHERE s.name = 'aggressive'\n    AND r.status_code IN ('PASS', 'WARNING', 'PUBLISHED')\n)\nSELECT r.id AS run_id, r.analysis_month, r.cutoff_date, r.effective_date,\n       r.status_code, c.stock_code, c.fa_score\nFROM ranked r\nJOIN fa_company_results c ON c.run_id = r.id\nWHERE r.rn = 1 AND c.is_selected = TRUE AND c.is_eligible = TRUE\nORDER BY r.effective_date, c.stock_code;\n\nSELECT stock_code, price_date, close\nFROM wics_constituent_prices\nWHERE close > 0\nORDER BY price_date, stock_code;",
+          "executed_at": "2026-07-22T10:32:11+09:00",
+          "tables_used": [
+            "reports/analysis/paper_strategy_experiments/full/metrics.json",
+            "reports/analysis/paper_strategy_experiments/pass_only/metrics.json",
+            "reports/analysis/paper_strategy_experiments/full/daily_returns.csv",
+            "reports/analysis/paper_strategy_experiments/full/events.csv"
+          ],
+          "filters": [
+            "strategy=aggressive",
+            "full window=2023-05-31..2026-07-09",
+            "recent window=PASS/PUBLISHED selections only, 2026-01-30..2026-07-09",
+            "REAL excluded"
+          ],
+          "metric_definitions": [
+            "총수익률 = 일별 비용 차감 수익률의 기하 누적 - 1",
+            "MDD = 누적 자산의 직전 고점 대비 최대 하락률",
+            "연환산 회전율 = 일평균 절대 비중 매매량 × 252",
+            "비용률 = 매수 0.115%, 매도 0.295%를 일별 비중 변화에 적용한 누적값"
+          ]
+        }
+      },
+      {
+        "id": "experiment_full",
+        "label": "PAPER 전략 후보 전체 구간 리플레이",
+        "path": "reports/analysis/paper_strategy_experiments/full/metrics.json",
+        "query": {
+          "engine": "PostgreSQL",
+          "language": "sql",
+          "description": "WARNING를 포함한 39개 월별 선택 실행과 757거래일 가격을 사용한 후보 리플레이",
+          "sql": "WITH ranked AS (\n  SELECT r.*, ROW_NUMBER() OVER (\n    PARTITION BY r.analysis_month\n    ORDER BY CASE r.status_code WHEN 'PUBLISHED' THEN 0 WHEN 'PASS' THEN 1 ELSE 2 END,\n             r.run_version DESC, r.id DESC\n  ) AS rn\n  FROM fa_analysis_runs r\n  JOIN strategies s ON s.id = r.strategy_id\n  WHERE s.name = 'aggressive'\n    AND r.status_code IN ('PASS', 'WARNING', 'PUBLISHED')\n)\nSELECT r.id AS run_id, r.analysis_month, r.cutoff_date, r.effective_date,\n       r.status_code, c.stock_code, c.fa_score\nFROM ranked r\nJOIN fa_company_results c ON c.run_id = r.id\nWHERE r.rn = 1 AND c.is_selected = TRUE AND c.is_eligible = TRUE\nORDER BY r.effective_date, c.stock_code;\n\nSELECT stock_code, price_date, close\nFROM wics_constituent_prices\nWHERE close > 0\nORDER BY price_date, stock_code;",
+          "executed_at": "2026-07-22T10:32:11+09:00",
+          "tables_used": [
+            "fa_analysis_runs",
+            "fa_company_results",
+            "wics_constituent_prices"
+          ],
+          "filters": [
+            "strategy=aggressive",
+            "status in PASS, WARNING, PUBLISHED",
+            "period=2023-05-31..2026-07-09"
+          ],
+          "metric_definitions": [
+            "주간 누적 자산 배수 = 일별 비용 차감 수익률을 기하 누적한 뒤 금요일 기준 마지막 값",
+            "후보별 수익과 위험은 동일한 데이터·비용 가정으로 계산"
+          ]
+        }
+      },
+      {
+        "id": "paper_actual",
+        "label": "PAPER 5억 원금 성과 진단",
+        "path": "reports/analysis/paper_performance_diagnostic_2026-07-22.ipynb"
+      }
+    ],
+    "cards": [
+      {
+        "id": "full_cagr",
+        "dataset": "headline",
+        "description": "현재 규칙 근사의 전체 757거래일 연복리 수익률",
+        "sourceId": "experiment_full",
+        "metrics": [
+          {
+            "label": "전체 CAGR",
+            "field": "full_cagr",
+            "format": "percent"
+          },
+          {
+            "label": "DSR 확률",
+            "field": "dsr_probability",
+            "format": "percent"
+          }
+        ]
+      },
+      {
+        "id": "full_mdd",
+        "dataset": "headline",
+        "description": "현재 규칙 근사의 전체 구간 최대낙폭",
+        "sourceId": "experiment_full",
+        "metrics": [
+          {
+            "label": "전체 MDD",
+            "field": "full_mdd",
+            "format": "percent",
+            "signed": true
+          },
+          {
+            "label": "PBO",
+            "field": "pbo",
+            "format": "percent"
+          }
+        ]
+      },
+      {
+        "id": "recent_return",
+        "dataset": "headline",
+        "description": "PASS/PUBLISHED 107거래일에서 현재 규칙 근사의 총수익률",
+        "sourceId": "experiment_combined",
+        "metrics": [
+          {
+            "label": "최근 총수익률",
+            "field": "recent_return",
+            "format": "percent",
+            "signed": true
+          }
+        ]
+      },
+      {
+        "id": "cost_ratio",
+        "dataset": "headline",
+        "description": "전체 구간의 고정 비용 가정 누적값",
+        "sourceId": "experiment_full",
+        "metrics": [
+          {
+            "label": "누적 비용률",
+            "field": "cost_ratio",
+            "format": "percent"
+          }
+        ]
+      }
+    ],
+    "charts": [
+      {
+        "id": "equity_curve",
+        "title": "후보별 누적 자산 배수",
+        "subtitle": "2023년 5월 31일~2026년 7월 9일, 주간 마지막 값",
+        "type": "line",
+        "intent": "trend",
+        "dataset": "equity_curve",
+        "sourceId": "experiment_full",
+        "encodings": {
+          "x": {
+            "field": "date",
+            "type": "temporal",
+            "label": "날짜"
+          },
+          "y": {
+            "field": "equity_multiple",
+            "type": "quantitative",
+            "label": "누적 자산 배수",
+            "format": "number"
+          },
+          "color": {
+            "field": "candidate",
+            "type": "nominal",
+            "label": "후보"
+          },
+          "tooltip": [
+            {
+              "field": "candidate",
+              "type": "text",
+              "label": "후보"
+            },
+            {
+              "field": "equity_multiple",
+              "type": "quantitative",
+              "label": "자산 배수",
+              "format": "number"
+            }
+          ]
+        },
+        "valueFormat": "number",
+        "layout": "full",
+        "settings": {
+          "legend": "bottom",
+          "valueLabels": "none"
+        },
+        "palette": {
+          "kind": "categorical"
+        }
+      },
+      {
+        "id": "risk_return",
+        "title": "연복리 수익률과 최대낙폭",
+        "subtitle": "원 크기는 평균 투자비중, 기존 연구 A0는 제외",
+        "type": "scatter",
+        "intent": "relationship",
+        "dataset": "risk_return",
+        "sourceId": "experiment_full",
+        "encodings": {
+          "x": {
+            "field": "mdd_abs",
+            "type": "quantitative",
+            "label": "MDD 절대값",
+            "format": "percent"
+          },
+          "y": {
+            "field": "cagr",
+            "type": "quantitative",
+            "label": "CAGR",
+            "format": "percent"
+          },
+          "size": {
+            "field": "average_exposure",
+            "type": "quantitative",
+            "label": "평균 투자비중",
+            "format": "percent"
+          },
+          "tooltip": [
+            {
+              "field": "candidate",
+              "type": "text",
+              "label": "후보"
+            },
+            {
+              "field": "average_exposure",
+              "type": "quantitative",
+              "label": "평균 투자비중",
+              "format": "percent"
+            }
+          ]
+        },
+        "layout": "full",
+        "settings": {
+          "valueLabels": "none"
+        },
+        "palette": {
+          "kind": "categorical"
+        }
+      }
+    ],
+    "tables": [
+      {
+        "id": "candidate_table",
+        "title": "후보별 전체·최근 성과",
+        "subtitle": "전체 757거래일과 PASS/PUBLISHED 107거래일 비교",
+        "dataset": "candidate_summary",
+        "sourceId": "experiment_combined",
+        "defaultSort": {
+          "field": "full_sharpe",
+          "direction": "desc"
+        },
+        "density": "dense",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "candidate",
+            "label": "후보",
+            "type": "text"
+          },
+          {
+            "field": "full_total_return",
+            "label": "전체 수익",
+            "format": "percent",
+            "movement": true
+          },
+          {
+            "field": "full_mdd",
+            "label": "전체 MDD",
+            "format": "percent",
+            "movement": true
+          },
+          {
+            "field": "full_sharpe",
+            "label": "전체 Sharpe",
+            "format": "number"
+          },
+          {
+            "field": "full_cost",
+            "label": "비용률",
+            "format": "percent"
+          },
+          {
+            "field": "annual_turnover",
+            "label": "연회전",
+            "format": "number",
+            "unit": "x"
+          },
+          {
+            "field": "average_exposure",
+            "label": "평균 투자",
+            "format": "percent"
+          },
+          {
+            "field": "recent_total_return",
+            "label": "최근 수익",
+            "format": "percent",
+            "movement": true
+          },
+          {
+            "field": "recent_mdd",
+            "label": "최근 MDD",
+            "format": "percent",
+            "movement": true
+          }
+        ]
+      },
+      {
+        "id": "stop_table",
+        "title": "손절·재진입과 회전율",
+        "subtitle": "전체 구간, 동일 종목의 다음 진입까지 달력일 기준",
+        "dataset": "stop_reentry",
+        "sourceId": "experiment_full",
+        "defaultSort": {
+          "field": "stops",
+          "direction": "desc"
+        },
+        "density": "dense",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "candidate",
+            "label": "후보",
+            "type": "text"
+          },
+          {
+            "field": "stops",
+            "label": "손절",
+            "format": "number"
+          },
+          {
+            "field": "reentry_within_5d",
+            "label": "5일 내 재진입",
+            "format": "number"
+          },
+          {
+            "field": "median_reentry_days",
+            "label": "재진입 중앙값",
+            "format": "number",
+            "unit": "일"
+          },
+          {
+            "field": "annual_turnover",
+            "label": "연회전",
+            "format": "number",
+            "unit": "x"
+          },
+          {
+            "field": "total_cost",
+            "label": "비용률",
+            "format": "percent"
+          }
+        ]
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# PAPER 전략 수정 후보 실험 결과"
+      },
+      {
+        "id": "executive_summary",
+        "type": "markdown",
+        "body": "## Executive Summary\n\n- **지금 PAPER 설정을 변경할 후보는 없습니다.** 현재 규칙 근사는 전체 구간에서 +22.31%였지만 최근 107거래일에서 -1.75%였고, 모든 운영 가능 후보가 최근 구간에서 손실이었습니다.\n- **8~10% 종목 상한은 낙폭을 줄이지만 수익 개선은 아닙니다.** 전체 MDD가 -16.73%와 -13.66%로 줄었지만 평균 투자비중도 33.7%와 27.3%로 낮아졌습니다.\n- **비용의 핵심은 리밸런싱 밴드보다 손절·재진입 반복입니다.** 현재 근사 규칙은 123회 손절 중 92회가 5일 안에 다시 진입했고 누적 비용률은 13.16%였습니다.\n- **결론의 신뢰도는 제한적입니다.** 전체 선택 실행의 82.1%가 WARNING이고 가격은 7월 9일에서 끝나며, 현재 규칙의 DSR 확률은 60.4%, 후보군 PBO는 37.1%입니다."
+      },
+      {
+        "id": "headline_metrics",
+        "type": "metric-strip",
+        "cardIds": [
+          "full_cagr",
+          "full_mdd",
+          "recent_return",
+          "cost_ratio"
+        ]
+      },
+      {
+        "id": "scope",
+        "type": "markdown",
+        "body": "## 비교 기준과 데이터 범위\n\n모든 후보는 동일한 월별 FA 선택, 일별 KOSPI/TA 조건, 매수 0.115%·매도 0.295% 비용 가정으로 비교했습니다. A0는 기존 연구 재현용이며 종목 상한과 가격 손절이 없어 운영 후보가 아닙니다. 전체 구간은 방향성 연구용, PASS/PUBLISHED 107거래일은 최근 스트레스 확인용입니다.",
+        "sourceId": "experiment_combined"
+      },
+      {
+        "id": "equity_interpretation",
+        "type": "markdown",
+        "body": "## 높은 과거수익 후보는 운영 규칙을 빠뜨렸습니다\n\n기존 연구 A0가 가장 높지만 실제 운영의 15% 종목 상한과 가격 손절을 반영하지 않습니다. 15% 상한만 적용한 진단 후보는 현재 규칙보다 비용과 수익이 좋았지만 MDD와 최악의 날 손실이 악화됐습니다. 이는 현재 손절 경로가 성과를 훼손한다는 증거이지 손절 제거의 근거는 아닙니다.",
+        "sourceId": "experiment_full"
+      },
+      {
+        "id": "equity_chart_block",
+        "type": "chart",
+        "chartId": "equity_curve"
+      },
+      {
+        "id": "risk_interpretation",
+        "type": "markdown",
+        "body": "## 작은 종목 상한은 알파보다 현금 효과가 큽니다\n\n10%와 8% 상한은 전체 MDD를 낮췄지만 평균 투자비중도 크게 낮췄습니다. 위험 예산을 줄이는 수단으로는 유효하지만, 동일 위험에서 더 나은 수익을 만드는 전략 개선으로 해석하면 안 됩니다.",
+        "sourceId": "experiment_full"
+      },
+      {
+        "id": "risk_chart_block",
+        "type": "chart",
+        "chartId": "risk_return"
+      },
+      {
+        "id": "churn_interpretation",
+        "type": "markdown",
+        "body": "## 손절 뒤 빠른 재진입이 비용을 지배합니다\n\n20% 밴드는 연환산 회전율을 21.4배에서 20.6배로만 낮췄습니다. 현재 근사 규칙의 손절 뒤 재진입 간격 중앙값은 1일이었습니다. 단순 5거래일 쿨다운은 회전율을 줄였지만 전체·최근 성과를 개선하지 못했고, 더 강한 손절도 최근 -7.27%로 악화됐습니다.",
+        "sourceId": "experiment_combined"
+      },
+      {
+        "id": "stop_table_block",
+        "type": "table",
+        "tableId": "stop_table"
+      },
+      {
+        "id": "candidate_interpretation",
+        "type": "markdown",
+        "body": "## 최근 구간에서는 모든 운영 후보가 탈락합니다\n\n동일 비중과 넓은 밴드는 현재 규칙과 사실상 같았고, 작은 상한은 낙폭만 줄였습니다. 최근 PASS/PUBLISHED 구간에서 운영 가능 후보가 모두 손실이므로, 현재 데이터로 최고 후보를 고르는 대신 잘못된 후보를 제거하는 데 결과를 사용해야 합니다.",
+        "sourceId": "experiment_combined"
+      },
+      {
+        "id": "candidate_table_block",
+        "type": "table",
+        "tableId": "candidate_table"
+      },
+      {
+        "id": "recommendations",
+        "type": "markdown",
+        "body": "## Recommended Next Steps\n\n1. **PAPER 파라미터는 유지합니다.** REAL은 계속 제외합니다.\n2. **최신 가격과 운영 체결 규칙을 리플레이에 넣습니다.** 정수 주식, 장중 고점, 부분체결, 거절, 모호한 주문 결과를 포함해야 합니다.\n3. **다음 손절 실험은 히스테리시스 방식으로 제한합니다.** 손절 뒤 기존 진입 조건보다 강한 재확인 조건을 요구하고 단순 쿨다운·손절 강화는 제외합니다.\n4. **8~10% 상한은 위험 예산 시나리오로만 유지합니다.** 목표 MDD와 허용 수익 저하를 먼저 정한 뒤 판단합니다.\n5. **5억 원금 손익 원장을 복원합니다.** 백테스트는 현재 -5.95% 손실의 실제 주문·종목별 원인을 대신 설명하지 못합니다."
+      },
+      {
+        "id": "questions",
+        "type": "markdown",
+        "body": "## Further Questions\n\n- 최신 가격과 실제 PAPER 주문 상태를 반영하면 손절·재진입 횟수가 얼마나 달라지는가?\n- 현재 -5.95% 손실 중 종목 선택, 청산, 거절·재주문, 비용이 각각 얼마인가?\n- 허용 가능한 PAPER MDD와 평균 투자비중 하한을 얼마로 정할 것인가?"
+      },
+      {
+        "id": "caveats",
+        "type": "markdown",
+        "body": "## Caveats & Assumptions\n\n- 전체 구간 데이터 품질은 LOW이고 최근 구간은 짧은 표본 때문에 MEDIUM입니다.\n- 일별 종가와 비례 비중은 장중·정수주식·부분체결을 근사할 뿐입니다.\n- 고정 비용률은 실제 세금 누락과 주문 실패 비용을 완전히 반영하지 못합니다.\n- 이 보고서는 PAPER 분석용이며 REAL 실행 근거가 아닙니다."
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-07-22T10:32:11+09:00",
+    "status": "partial",
+    "accessIssues": [
+      {
+        "id": "stale_prices",
+        "scope": "strategy experiment",
+        "sourceId": "experiment_full",
+        "dataset": "candidate_summary",
+        "message": "구성종목 가격 이력이 2026-07-09에서 끝나 2026-07-22 현재 PAPER 상태까지 검증하지 못했습니다."
+      },
+      {
+        "id": "execution_parity_gap",
+        "scope": "execution replay",
+        "sourceId": "experiment_combined",
+        "dataset": "stop_reentry",
+        "message": "장중 손절, 정수 주식, 부분체결, 거절과 모호한 주문 결과를 일별 비중 리플레이가 완전히 재현하지 못합니다."
+      }
+    ],
+    "datasets": {
+      "headline": [
+        {
+          "full_cagr": 0.06933611937130868,
+          "full_mdd": -0.23194361453143086,
+          "recent_return": -0.017502667640842073,
+          "cost_ratio": 0.13164018907087205,
+          "pbo": 0.37142857142857144,
+          "dsr_probability": 0.6035413028200182
+        }
+      ],
+      "candidate_summary": [
+        {
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "full_total_return": 0.6591553936941934,
+          "full_cagr": 0.1835833955934547,
+          "full_mdd": -0.23268325310144233,
+          "full_sharpe": 0.7932907793168696,
+          "full_cost": 0.11445948410332232,
+          "annual_turnover": 18.705464982198528,
+          "average_exposure": 0.558668563620542,
+          "recent_total_return": 0.21111938267113772,
+          "recent_mdd": -0.16990471116196604,
+          "recent_sharpe": 1.2156735968955916
+        },
+        {
+          "variant": "X_CAP15_ONLY",
+          "candidate": "진단: 15% 상한만",
+          "full_total_return": 0.36968859487375916,
+          "full_cagr": 0.11040255864107751,
+          "full_mdd": -0.24508209855785912,
+          "full_sharpe": 0.5878203556984448,
+          "full_cost": 0.07087333751113851,
+          "annual_turnover": 11.580633793428662,
+          "average_exposure": 0.4680217203333746,
+          "recent_total_return": 0.036546648802253,
+          "recent_mdd": -0.17605098817708342,
+          "recent_sharpe": 0.4124203827186624
+        },
+        {
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "full_total_return": 0.22308951136886512,
+          "full_cagr": 0.06933611937130868,
+          "full_mdd": -0.23194361453143086,
+          "full_sharpe": 0.43091956778185736,
+          "full_cost": 0.13164018907087205,
+          "annual_turnover": 21.429224283800533,
+          "average_exposure": 0.44840279984394765,
+          "recent_total_return": -0.017502667640842073,
+          "recent_mdd": -0.1906481376690169,
+          "recent_sharpe": 0.07865296709554467
+        },
+        {
+          "variant": "X_COOLDOWN5",
+          "candidate": "진단: 현재+5일 재진입 금지",
+          "full_total_return": 0.1807704507224186,
+          "full_cagr": 0.05687440824907952,
+          "full_mdd": -0.2040381660145829,
+          "full_sharpe": 0.4030624472453906,
+          "full_cost": 0.10868499381022306,
+          "annual_turnover": 17.69388595138633,
+          "average_exposure": 0.3979270938739564,
+          "recent_total_return": -0.045459155100310955,
+          "recent_mdd": -0.19773177089912508,
+          "recent_sharpe": -0.18549791824387912
+        },
+        {
+          "variant": "B_EQUAL",
+          "candidate": "동일 비중",
+          "full_total_return": 0.22244014502735698,
+          "full_cagr": 0.06914709084192916,
+          "full_mdd": -0.23300601574496183,
+          "full_sharpe": 0.43395058080200205,
+          "full_cost": 0.12876903853557375,
+          "annual_turnover": 20.962909361020074,
+          "average_exposure": 0.4476346653343272,
+          "recent_total_return": -0.0050010411087980655,
+          "recent_mdd": -0.18630964791298033,
+          "recent_sharpe": 0.1555435354396618
+        },
+        {
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "full_total_return": 0.1606934776304776,
+          "full_cagr": 0.05085795764518575,
+          "full_mdd": -0.16729994803781667,
+          "full_sharpe": 0.4087160667535533,
+          "full_cost": 0.08441774904348925,
+          "annual_turnover": 13.73599390314243,
+          "average_exposure": 0.33735857863265106,
+          "recent_total_return": -0.018322004021282035,
+          "recent_mdd": -0.14940224010256054,
+          "recent_sharpe": -0.023238706964627404
+        },
+        {
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "full_total_return": 0.13220300374108573,
+          "full_cagr": 0.042199889632127396,
+          "full_mdd": -0.1365999280098562,
+          "full_sharpe": 0.4052346154214284,
+          "full_cost": 0.06600708713789195,
+          "annual_turnover": 10.738022336185217,
+          "average_exposure": 0.2725759025632214,
+          "recent_total_return": -0.012852581828408316,
+          "recent_mdd": -0.12047355017527128,
+          "recent_sharpe": -0.031188917222089715
+        },
+        {
+          "variant": "D_BAND20",
+          "candidate": "리밸런싱 밴드 20%",
+          "full_total_return": 0.22244351165347664,
+          "full_cagr": 0.06914807102908149,
+          "full_mdd": -0.23779108034826868,
+          "full_sharpe": 0.4290415539833725,
+          "full_cost": 0.1264536077627286,
+          "annual_turnover": 20.591628193708594,
+          "average_exposure": 0.44930211330580294,
+          "recent_total_return": -0.006032499770802002,
+          "recent_mdd": -0.18685993630156894,
+          "recent_sharpe": 0.15133944483582662
+        },
+        {
+          "variant": "E_VOL_RISK",
+          "candidate": "변동성 조절·강화 손절",
+          "full_total_return": 0.01340204840166015,
+          "full_cagr": 0.004441651288403126,
+          "full_mdd": -0.19251304866111463,
+          "full_sharpe": 0.09700775392792305,
+          "full_cost": 0.08313231328106335,
+          "annual_turnover": 13.518118991361849,
+          "average_exposure": 0.26522141779150593,
+          "recent_total_return": -0.07273451715151524,
+          "recent_mdd": -0.17655414447043127,
+          "recent_sharpe": -0.7278875648594836
+        }
+      ],
+      "equity_curve": [
+        {
+          "date": "2023-06-02",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-02",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-02",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-02",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-09",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-09",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-09",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-09",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-16",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-16",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-16",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-16",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-23",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-23",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-23",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-23",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-30",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-30",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-30",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-06-30",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-07-07",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-07-07",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-07-07",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-07-07",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-07-14",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-07-14",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-07-14",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-07-14",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-07-21",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-07-21",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-07-21",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-07-21",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-07-28",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-07-28",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-07-28",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-07-28",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-08-04",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-08-04",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-08-04",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-08-04",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-08-11",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-08-11",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-08-11",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-08-11",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-08-18",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-08-18",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-08-18",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-08-18",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-08-25",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-08-25",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-08-25",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-08-25",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-01",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-01",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-01",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-01",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-08",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-08",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-08",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-08",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-15",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-15",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-15",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-15",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-22",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-22",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-22",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-22",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-29",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-29",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-29",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-09-29",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-10-06",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-10-06",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-10-06",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-10-06",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-10-13",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-10-13",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-10-13",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-10-13",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-10-20",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-10-20",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-10-20",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-10-20",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-10-27",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-10-27",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-10-27",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-10-27",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-11-03",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-11-03",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-11-03",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-11-03",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-11-10",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-11-10",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-11-10",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-11-10",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-11-17",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-11-17",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-11-17",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-11-17",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0
+        },
+        {
+          "date": "2023-11-24",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.9837483248541646
+        },
+        {
+          "date": "2023-11-24",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.9930210883946975
+        },
+        {
+          "date": "2023-11-24",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.9953481001192144
+        },
+        {
+          "date": "2023-11-24",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9962787056031007
+        },
+        {
+          "date": "2023-12-01",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.9642354085328402
+        },
+        {
+          "date": "2023-12-01",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.9834914782400316
+        },
+        {
+          "date": "2023-12-01",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.9889772462075556
+        },
+        {
+          "date": "2023-12-01",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9911763307250047
+        },
+        {
+          "date": "2023-12-08",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.9656427379002097
+        },
+        {
+          "date": "2023-12-08",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.9838264809294255
+        },
+        {
+          "date": "2023-12-08",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.9892008856261292
+        },
+        {
+          "date": "2023-12-08",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9913553371929044
+        },
+        {
+          "date": "2023-12-15",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.961765297240529
+        },
+        {
+          "date": "2023-12-15",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.9858240101161282
+        },
+        {
+          "date": "2023-12-15",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.9905398464278914
+        },
+        {
+          "date": "2023-12-15",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.992428838809336
+        },
+        {
+          "date": "2023-12-22",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.9916277116816063
+        },
+        {
+          "date": "2023-12-22",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0089882440331943
+        },
+        {
+          "date": "2023-12-22",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0060670294218992
+        },
+        {
+          "date": "2023-12-22",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.004950278518818
+        },
+        {
+          "date": "2023-12-29",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.037130239914898
+        },
+        {
+          "date": "2023-12-29",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0384499951330537
+        },
+        {
+          "date": "2023-12-29",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.025071929113363
+        },
+        {
+          "date": "2023-12-29",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0198051302355422
+        },
+        {
+          "date": "2024-01-05",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.040976208852308
+        },
+        {
+          "date": "2024-01-05",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.032744268773347
+        },
+        {
+          "date": "2024-01-05",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0230158245915475
+        },
+        {
+          "date": "2024-01-05",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0181169302303401
+        },
+        {
+          "date": "2024-01-12",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0111766636017234
+        },
+        {
+          "date": "2024-01-12",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0152592864961791
+        },
+        {
+          "date": "2024-01-12",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.011484716487172
+        },
+        {
+          "date": "2024-01-12",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0089386279286359
+        },
+        {
+          "date": "2024-01-19",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0111766636017234
+        },
+        {
+          "date": "2024-01-19",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0152592864961791
+        },
+        {
+          "date": "2024-01-19",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.011484716487172
+        },
+        {
+          "date": "2024-01-19",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0089386279286359
+        },
+        {
+          "date": "2024-01-26",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0111766636017234
+        },
+        {
+          "date": "2024-01-26",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0152592864961791
+        },
+        {
+          "date": "2024-01-26",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.011484716487172
+        },
+        {
+          "date": "2024-01-26",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0089386279286359
+        },
+        {
+          "date": "2024-02-02",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0168800198962231
+        },
+        {
+          "date": "2024-02-02",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0303923982999958
+        },
+        {
+          "date": "2024-02-02",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0215360397025153
+        },
+        {
+          "date": "2024-02-02",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0169594704710163
+        },
+        {
+          "date": "2024-02-09",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.005413425983408
+        },
+        {
+          "date": "2024-02-09",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0177669069671094
+        },
+        {
+          "date": "2024-02-09",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.013188724710356
+        },
+        {
+          "date": "2024-02-09",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0103106803956623
+        },
+        {
+          "date": "2024-02-16",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0487287388523134
+        },
+        {
+          "date": "2024-02-16",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0385536195552214
+        },
+        {
+          "date": "2024-02-16",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0269649961759402
+        },
+        {
+          "date": "2024-02-16",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0212943828446734
+        },
+        {
+          "date": "2024-02-23",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0870546938055854
+        },
+        {
+          "date": "2024-02-23",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0547251102453585
+        },
+        {
+          "date": "2024-02-23",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0376986110969062
+        },
+        {
+          "date": "2024-02-23",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0297894704463428
+        },
+        {
+          "date": "2024-03-01",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0505226975792057
+        },
+        {
+          "date": "2024-03-01",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0424331838368757
+        },
+        {
+          "date": "2024-03-01",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0295323399497545
+        },
+        {
+          "date": "2024-03-01",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0240569118590437
+        },
+        {
+          "date": "2024-03-08",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0636179097664946
+        },
+        {
+          "date": "2024-03-08",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0604551933733433
+        },
+        {
+          "date": "2024-03-08",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0414278676262867
+        },
+        {
+          "date": "2024-03-08",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0335274591605796
+        },
+        {
+          "date": "2024-03-15",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0504360312716128
+        },
+        {
+          "date": "2024-03-15",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.051929678094506
+        },
+        {
+          "date": "2024-03-15",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0357840921197228
+        },
+        {
+          "date": "2024-03-15",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0290289118747404
+        },
+        {
+          "date": "2024-03-22",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0625768762524515
+        },
+        {
+          "date": "2024-03-22",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0535565032325296
+        },
+        {
+          "date": "2024-03-22",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0368436804830818
+        },
+        {
+          "date": "2024-03-22",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.029871015122479
+        },
+        {
+          "date": "2024-03-29",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0584412296926509
+        },
+        {
+          "date": "2024-03-29",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0518995174541275
+        },
+        {
+          "date": "2024-03-29",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.035901574410535
+        },
+        {
+          "date": "2024-03-29",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0291282562342132
+        },
+        {
+          "date": "2024-04-05",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0250157732537868
+        },
+        {
+          "date": "2024-04-05",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0424775411318197
+        },
+        {
+          "date": "2024-04-05",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0293189777503262
+        },
+        {
+          "date": "2024-04-05",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.023887126532438
+        },
+        {
+          "date": "2024-04-12",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.036270197991502
+        },
+        {
+          "date": "2024-04-12",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0452067971497596
+        },
+        {
+          "date": "2024-04-12",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0311270406218866
+        },
+        {
+          "date": "2024-04-12",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0253320061728892
+        },
+        {
+          "date": "2024-04-19",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.9902711658868925
+        },
+        {
+          "date": "2024-04-19",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0112189581979634
+        },
+        {
+          "date": "2024-04-19",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0087441574880698
+        },
+        {
+          "date": "2024-04-19",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.007517713035043
+        },
+        {
+          "date": "2024-04-26",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.00820503727757
+        },
+        {
+          "date": "2024-04-26",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0091206580846452
+        },
+        {
+          "date": "2024-04-26",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0073713984714656
+        },
+        {
+          "date": "2024-04-26",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0064280743201126
+        },
+        {
+          "date": "2024-05-03",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0047616885411272
+        },
+        {
+          "date": "2024-05-03",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0054982058306443
+        },
+        {
+          "date": "2024-05-03",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0049380505628895
+        },
+        {
+          "date": "2024-05-03",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.004476052154659
+        },
+        {
+          "date": "2024-05-10",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.9984304032801746
+        },
+        {
+          "date": "2024-05-10",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0075133339500228
+        },
+        {
+          "date": "2024-05-10",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0062863485582234
+        },
+        {
+          "date": "2024-05-10",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0055559316729283
+        },
+        {
+          "date": "2024-05-17",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0027474488134054
+        },
+        {
+          "date": "2024-05-17",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0052739426869681
+        },
+        {
+          "date": "2024-05-17",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0048052193087884
+        },
+        {
+          "date": "2024-05-17",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0043750728239287
+        },
+        {
+          "date": "2024-05-24",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.9573747483411106
+        },
+        {
+          "date": "2024-05-24",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.9878999603121558
+        },
+        {
+          "date": "2024-05-24",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.9932526019129647
+        },
+        {
+          "date": "2024-05-24",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9951345926529027
+        },
+        {
+          "date": "2024-05-31",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0143510071259128
+        },
+        {
+          "date": "2024-05-31",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.9936854802255546
+        },
+        {
+          "date": "2024-05-31",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.997198885371084
+        },
+        {
+          "date": "2024-05-31",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.998306433442713
+        },
+        {
+          "date": "2024-06-07",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.9899555682894768
+        },
+        {
+          "date": "2024-06-07",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.9674210985389662
+        },
+        {
+          "date": "2024-06-07",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.9759163874649697
+        },
+        {
+          "date": "2024-06-07",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9812628831413744
+        },
+        {
+          "date": "2024-06-14",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.002568448592891
+        },
+        {
+          "date": "2024-06-14",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.9716275984055738
+        },
+        {
+          "date": "2024-06-14",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.9799320339617265
+        },
+        {
+          "date": "2024-06-14",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9845099111196891
+        },
+        {
+          "date": "2024-06-21",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.035167985371924
+        },
+        {
+          "date": "2024-06-21",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0007075005425539
+        },
+        {
+          "date": "2024-06-21",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.000183578265339
+        },
+        {
+          "date": "2024-06-21",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0007977782438098
+        },
+        {
+          "date": "2024-06-28",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0366059291524778
+        },
+        {
+          "date": "2024-06-28",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0003862148182334
+        },
+        {
+          "date": "2024-06-28",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.9970959126997957
+        },
+        {
+          "date": "2024-06-28",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9981197011102242
+        },
+        {
+          "date": "2024-07-05",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0025172974876082
+        },
+        {
+          "date": "2024-07-05",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.9672549374900024
+        },
+        {
+          "date": "2024-07-05",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.9652135397092091
+        },
+        {
+          "date": "2024-07-05",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9723283810728839
+        },
+        {
+          "date": "2024-07-12",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0118282905175389
+        },
+        {
+          "date": "2024-07-12",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.9849901132260268
+        },
+        {
+          "date": "2024-07-12",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.991075042346909
+        },
+        {
+          "date": "2024-07-12",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9931540837098216
+        },
+        {
+          "date": "2024-07-19",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.9847543562068307
+        },
+        {
+          "date": "2024-07-19",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.9429434696782841
+        },
+        {
+          "date": "2024-07-19",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.9563714572220063
+        },
+        {
+          "date": "2024-07-19",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9652779922342539
+        },
+        {
+          "date": "2024-07-26",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.9630467382139315
+        },
+        {
+          "date": "2024-07-26",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.9270921119793549
+        },
+        {
+          "date": "2024-07-26",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.9448226209251522
+        },
+        {
+          "date": "2024-07-26",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9552853425831377
+        },
+        {
+          "date": "2024-08-02",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.9073189351891584
+        },
+        {
+          "date": "2024-08-02",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.9030612303087261
+        },
+        {
+          "date": "2024-08-02",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.9284643875424075
+        },
+        {
+          "date": "2024-08-02",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9420497709037816
+        },
+        {
+          "date": "2024-08-09",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8465180721477504
+        },
+        {
+          "date": "2024-08-09",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8588183053683442
+        },
+        {
+          "date": "2024-08-09",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8985563667492448
+        },
+        {
+          "date": "2024-08-09",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.917926911754014
+        },
+        {
+          "date": "2024-08-16",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8557559325541951
+        },
+        {
+          "date": "2024-08-16",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8603817969225245
+        },
+        {
+          "date": "2024-08-16",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.89964699226884
+        },
+        {
+          "date": "2024-08-16",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9188182434609893
+        },
+        {
+          "date": "2024-08-23",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8929396816936644
+        },
+        {
+          "date": "2024-08-23",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8666750029223043
+        },
+        {
+          "date": "2024-08-23",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.9040368462654255
+        },
+        {
+          "date": "2024-08-23",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9224059170301421
+        },
+        {
+          "date": "2024-08-30",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.9004054301043158
+        },
+        {
+          "date": "2024-08-30",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8687356528679715
+        },
+        {
+          "date": "2024-08-30",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.9054710985899046
+        },
+        {
+          "date": "2024-08-30",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.923577045416563
+        },
+        {
+          "date": "2024-09-06",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8841299796470056
+        },
+        {
+          "date": "2024-09-06",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8573788220483011
+        },
+        {
+          "date": "2024-09-06",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8975811149497381
+        },
+        {
+          "date": "2024-09-06",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9171392913921265
+        },
+        {
+          "date": "2024-09-13",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8841299796470056
+        },
+        {
+          "date": "2024-09-13",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8573788220483011
+        },
+        {
+          "date": "2024-09-13",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8975811149497381
+        },
+        {
+          "date": "2024-09-13",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9171392913921265
+        },
+        {
+          "date": "2024-09-20",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8841299796470056
+        },
+        {
+          "date": "2024-09-20",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8573788220483011
+        },
+        {
+          "date": "2024-09-20",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8975811149497381
+        },
+        {
+          "date": "2024-09-20",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9171392913921265
+        },
+        {
+          "date": "2024-09-27",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2024-09-27",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2024-09-27",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2024-09-27",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2024-10-04",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2024-10-04",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2024-10-04",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2024-10-04",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2024-10-11",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2024-10-11",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2024-10-11",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2024-10-11",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2024-10-18",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2024-10-18",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2024-10-18",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2024-10-18",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2024-10-25",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2024-10-25",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2024-10-25",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2024-10-25",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2024-11-01",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2024-11-01",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2024-11-01",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2024-11-01",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2024-11-08",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2024-11-08",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2024-11-08",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2024-11-08",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2024-11-15",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2024-11-15",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2024-11-15",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2024-11-15",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2024-11-22",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2024-11-22",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2024-11-22",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2024-11-22",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2024-11-29",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2024-11-29",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2024-11-29",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2024-11-29",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2024-12-06",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2024-12-06",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2024-12-06",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2024-12-06",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2024-12-13",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2024-12-13",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2024-12-13",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2024-12-13",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2024-12-20",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2024-12-20",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2024-12-20",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2024-12-20",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2024-12-27",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2024-12-27",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2024-12-27",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2024-12-27",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2025-01-03",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2025-01-03",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2025-01-03",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2025-01-03",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2025-01-10",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2025-01-10",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2025-01-10",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2025-01-10",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2025-01-17",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2025-01-17",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2025-01-17",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2025-01-17",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2025-01-24",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2025-01-24",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2025-01-24",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2025-01-24",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2025-01-31",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2025-01-31",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2025-01-31",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2025-01-31",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2025-02-07",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2025-02-07",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2025-02-07",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2025-02-07",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2025-02-14",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8710271912836194
+        },
+        {
+          "date": "2025-02-14",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8493389404357595
+        },
+        {
+          "date": "2025-02-14",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8919711179345674
+        },
+        {
+          "date": "2025-02-14",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9125539071083005
+        },
+        {
+          "date": "2025-02-21",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8797412747719611
+        },
+        {
+          "date": "2025-02-21",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8544554250758318
+        },
+        {
+          "date": "2025-02-21",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8955555598908863
+        },
+        {
+          "date": "2025-02-21",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9154883645491242
+        },
+        {
+          "date": "2025-02-28",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8725451355084639
+        },
+        {
+          "date": "2025-02-28",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8431090262476233
+        },
+        {
+          "date": "2025-02-28",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8876647574038654
+        },
+        {
+          "date": "2025-02-28",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9090473104943021
+        },
+        {
+          "date": "2025-03-07",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8725451355084639
+        },
+        {
+          "date": "2025-03-07",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8431090262476233
+        },
+        {
+          "date": "2025-03-07",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8876647574038654
+        },
+        {
+          "date": "2025-03-07",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9090473104943021
+        },
+        {
+          "date": "2025-03-14",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8725451355084639
+        },
+        {
+          "date": "2025-03-14",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8431090262476233
+        },
+        {
+          "date": "2025-03-14",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8876647574038654
+        },
+        {
+          "date": "2025-03-14",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9090473104943021
+        },
+        {
+          "date": "2025-03-21",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8785086133678165
+        },
+        {
+          "date": "2025-03-21",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8482551464426746
+        },
+        {
+          "date": "2025-03-21",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8912782494770893
+        },
+        {
+          "date": "2025-03-21",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9120082113672414
+        },
+        {
+          "date": "2025-03-28",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8598080246478952
+        },
+        {
+          "date": "2025-03-28",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8290457211333864
+        },
+        {
+          "date": "2025-03-28",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8771567374526957
+        },
+        {
+          "date": "2025-03-28",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9004450536220734
+        },
+        {
+          "date": "2025-04-04",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8598080246478952
+        },
+        {
+          "date": "2025-04-04",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8290457211333864
+        },
+        {
+          "date": "2025-04-04",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8771567374526957
+        },
+        {
+          "date": "2025-04-04",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9004450536220734
+        },
+        {
+          "date": "2025-04-11",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8598080246478952
+        },
+        {
+          "date": "2025-04-11",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8290457211333864
+        },
+        {
+          "date": "2025-04-11",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8771567374526957
+        },
+        {
+          "date": "2025-04-11",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9004450536220734
+        },
+        {
+          "date": "2025-04-18",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8598080246478952
+        },
+        {
+          "date": "2025-04-18",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8290457211333864
+        },
+        {
+          "date": "2025-04-18",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8771567374526957
+        },
+        {
+          "date": "2025-04-18",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9004450536220734
+        },
+        {
+          "date": "2025-04-25",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8598080246478952
+        },
+        {
+          "date": "2025-04-25",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8290457211333864
+        },
+        {
+          "date": "2025-04-25",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8771567374526957
+        },
+        {
+          "date": "2025-04-25",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9004450536220734
+        },
+        {
+          "date": "2025-05-02",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8598080246478952
+        },
+        {
+          "date": "2025-05-02",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8290457211333864
+        },
+        {
+          "date": "2025-05-02",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8771567374526957
+        },
+        {
+          "date": "2025-05-02",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9004450536220734
+        },
+        {
+          "date": "2025-05-09",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8587406100838034
+        },
+        {
+          "date": "2025-05-09",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8270360372370016
+        },
+        {
+          "date": "2025-05-09",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8757387697700254
+        },
+        {
+          "date": "2025-05-09",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.8992804214227332
+        },
+        {
+          "date": "2025-05-16",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8704690394255032
+        },
+        {
+          "date": "2025-05-16",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8369031231078806
+        },
+        {
+          "date": "2025-05-16",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8829620515414959
+        },
+        {
+          "date": "2025-05-16",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9052992183746235
+        },
+        {
+          "date": "2025-05-23",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.8709630229269055
+        },
+        {
+          "date": "2025-05-23",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8370139358946008
+        },
+        {
+          "date": "2025-05-23",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.8830375734621809
+        },
+        {
+          "date": "2025-05-23",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9053605126740769
+        },
+        {
+          "date": "2025-05-30",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.904813683057329
+        },
+        {
+          "date": "2025-05-30",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8692527569214447
+        },
+        {
+          "date": "2025-05-30",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.9037584430490307
+        },
+        {
+          "date": "2025-05-30",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.922411699004188
+        },
+        {
+          "date": "2025-06-06",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.9316334318350196
+        },
+        {
+          "date": "2025-06-06",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.8948622013815106
+        },
+        {
+          "date": "2025-06-06",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.925683970170615
+        },
+        {
+          "date": "2025-06-06",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9403318711695967
+        },
+        {
+          "date": "2025-06-13",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.9748481549589673
+        },
+        {
+          "date": "2025-06-13",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.9353842200369709
+        },
+        {
+          "date": "2025-06-13",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.9573420733939083
+        },
+        {
+          "date": "2025-06-13",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9662463185380185
+        },
+        {
+          "date": "2025-06-20",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0211363724463751
+        },
+        {
+          "date": "2025-06-20",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.9799325437348869
+        },
+        {
+          "date": "2025-06-20",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0020538011947049
+        },
+        {
+          "date": "2025-06-20",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0016425492765753
+        },
+        {
+          "date": "2025-06-27",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0148627470373701
+        },
+        {
+          "date": "2025-06-27",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.9736520663733361
+        },
+        {
+          "date": "2025-06-27",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.9942223056847163
+        },
+        {
+          "date": "2025-06-27",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9953918873786908
+        },
+        {
+          "date": "2025-07-04",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 0.998651847834651
+        },
+        {
+          "date": "2025-07-04",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.9617093071084711
+        },
+        {
+          "date": "2025-07-04",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 0.9837570762526833
+        },
+        {
+          "date": "2025-07-04",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 0.9891429464672318
+        },
+        {
+          "date": "2025-07-11",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0566760651135216
+        },
+        {
+          "date": "2025-07-11",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0070279284928245
+        },
+        {
+          "date": "2025-07-11",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.028213143191595
+        },
+        {
+          "date": "2025-07-11",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0296535416790702
+        },
+        {
+          "date": "2025-07-18",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.058960205521429
+        },
+        {
+          "date": "2025-07-18",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.00969363446307
+        },
+        {
+          "date": "2025-07-18",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.030784201089806
+        },
+        {
+          "date": "2025-07-18",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.032795597369171
+        },
+        {
+          "date": "2025-07-25",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0791892285797826
+        },
+        {
+          "date": "2025-07-25",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0288629137150194
+        },
+        {
+          "date": "2025-07-25",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.052265687915612
+        },
+        {
+          "date": "2025-07-25",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0493926353576015
+        },
+        {
+          "date": "2025-08-01",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0381426909561282
+        },
+        {
+          "date": "2025-08-01",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 0.9872978028261167
+        },
+        {
+          "date": "2025-08-01",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0090129299824686
+        },
+        {
+          "date": "2025-08-01",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0084086720336087
+        },
+        {
+          "date": "2025-08-08",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.10992207793054
+        },
+        {
+          "date": "2025-08-08",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.052630862714361
+        },
+        {
+          "date": "2025-08-08",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0697083471437865
+        },
+        {
+          "date": "2025-08-08",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0566918797204399
+        },
+        {
+          "date": "2025-08-15",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.099836225444975
+        },
+        {
+          "date": "2025-08-15",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0375638312505897
+        },
+        {
+          "date": "2025-08-15",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0587113563620665
+        },
+        {
+          "date": "2025-08-15",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0480246623553
+        },
+        {
+          "date": "2025-08-22",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.0987984219152929
+        },
+        {
+          "date": "2025-08-22",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.031426250773894
+        },
+        {
+          "date": "2025-08-22",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0491528556460175
+        },
+        {
+          "date": "2025-08-22",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.040822959646062
+        },
+        {
+          "date": "2025-08-29",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.1573185827443548
+        },
+        {
+          "date": "2025-08-29",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0742864460983987
+        },
+        {
+          "date": "2025-08-29",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0788316128292665
+        },
+        {
+          "date": "2025-08-29",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.064705485228061
+        },
+        {
+          "date": "2025-09-05",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.151506610937348
+        },
+        {
+          "date": "2025-09-05",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0800979756131497
+        },
+        {
+          "date": "2025-09-05",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0822964078527646
+        },
+        {
+          "date": "2025-09-05",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.06748131548501
+        },
+        {
+          "date": "2025-09-12",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.1537237389369248
+        },
+        {
+          "date": "2025-09-12",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.082623971373158
+        },
+        {
+          "date": "2025-09-12",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0837215054879634
+        },
+        {
+          "date": "2025-09-12",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0686396911313178
+        },
+        {
+          "date": "2025-09-19",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.155775773747519
+        },
+        {
+          "date": "2025-09-19",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0900699792786088
+        },
+        {
+          "date": "2025-09-19",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.088602839795737
+        },
+        {
+          "date": "2025-09-19",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0726555935527924
+        },
+        {
+          "date": "2025-09-26",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.127302226272085
+        },
+        {
+          "date": "2025-09-26",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0534368984683875
+        },
+        {
+          "date": "2025-09-26",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0617263290995733
+        },
+        {
+          "date": "2025-09-26",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.051463987388926
+        },
+        {
+          "date": "2025-10-03",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.2237369290456355
+        },
+        {
+          "date": "2025-10-03",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.1339706088443795
+        },
+        {
+          "date": "2025-10-03",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1151888558263068
+        },
+        {
+          "date": "2025-10-03",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.093687384085436
+        },
+        {
+          "date": "2025-10-10",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.2215212349258862
+        },
+        {
+          "date": "2025-10-10",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.1273349892216789
+        },
+        {
+          "date": "2025-10-10",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1107403290105866
+        },
+        {
+          "date": "2025-10-10",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0901570587974063
+        },
+        {
+          "date": "2025-10-17",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.207016890953029
+        },
+        {
+          "date": "2025-10-17",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.1048506296343603
+        },
+        {
+          "date": "2025-10-17",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0956735278699794
+        },
+        {
+          "date": "2025-10-17",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0782540994799799
+        },
+        {
+          "date": "2025-10-24",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.268151128200913
+        },
+        {
+          "date": "2025-10-24",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.1636600683398362
+        },
+        {
+          "date": "2025-10-24",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1343570713267923
+        },
+        {
+          "date": "2025-10-24",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.1089955186161935
+        },
+        {
+          "date": "2025-10-31",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.293949530669572
+        },
+        {
+          "date": "2025-10-31",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.1997949354470925
+        },
+        {
+          "date": "2025-10-31",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1552040534639232
+        },
+        {
+          "date": "2025-10-31",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.1254792088817158
+        },
+        {
+          "date": "2025-11-07",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.2394719292198921
+        },
+        {
+          "date": "2025-11-07",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.1217765943496771
+        },
+        {
+          "date": "2025-11-07",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1055211614201816
+        },
+        {
+          "date": "2025-11-07",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0869322334379026
+        },
+        {
+          "date": "2025-11-14",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.2522838351412464
+        },
+        {
+          "date": "2025-11-14",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.128768937257866
+        },
+        {
+          "date": "2025-11-14",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.105423435294311
+        },
+        {
+          "date": "2025-11-14",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.086816840348744
+        },
+        {
+          "date": "2025-11-21",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.2415624707679076
+        },
+        {
+          "date": "2025-11-21",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.1048314786864986
+        },
+        {
+          "date": "2025-11-21",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0870208360171614
+        },
+        {
+          "date": "2025-11-21",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0724053884612892
+        },
+        {
+          "date": "2025-11-28",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.2783221563191134
+        },
+        {
+          "date": "2025-11-28",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.1120672147122537
+        },
+        {
+          "date": "2025-11-28",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0917417365376216
+        },
+        {
+          "date": "2025-11-28",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0761621061428064
+        },
+        {
+          "date": "2025-12-05",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.3143015673064937
+        },
+        {
+          "date": "2025-12-05",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.1277536484832016
+        },
+        {
+          "date": "2025-12-05",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1020478599115544
+        },
+        {
+          "date": "2025-12-05",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.084302138285828
+        },
+        {
+          "date": "2025-12-12",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.2845936310750083
+        },
+        {
+          "date": "2025-12-12",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.1330122403618519
+        },
+        {
+          "date": "2025-12-12",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1055084401368698
+        },
+        {
+          "date": "2025-12-12",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0870371313767606
+        },
+        {
+          "date": "2025-12-19",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.247655444610242
+        },
+        {
+          "date": "2025-12-19",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0785515878830327
+        },
+        {
+          "date": "2025-12-19",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0698550331290695
+        },
+        {
+          "date": "2025-12-19",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0589180561272595
+        },
+        {
+          "date": "2025-12-26",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.200122862004225
+        },
+        {
+          "date": "2025-12-26",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0450187106051996
+        },
+        {
+          "date": "2025-12-26",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0464406580695909
+        },
+        {
+          "date": "2025-12-26",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0404370974886072
+        },
+        {
+          "date": "2026-01-02",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.21626158977394
+        },
+        {
+          "date": "2026-01-02",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.0557789636202475
+        },
+        {
+          "date": "2026-01-02",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.0535203162975237
+        },
+        {
+          "date": "2026-01-02",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.046015963414157
+        },
+        {
+          "date": "2026-01-09",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.2479570790392343
+        },
+        {
+          "date": "2026-01-09",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.1337580492737311
+        },
+        {
+          "date": "2026-01-09",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1051679542292028
+        },
+        {
+          "date": "2026-01-09",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.0868869353241157
+        },
+        {
+          "date": "2026-01-16",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.3283743467215876
+        },
+        {
+          "date": "2026-01-16",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.2054147846421956
+        },
+        {
+          "date": "2026-01-16",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1507586513864636
+        },
+        {
+          "date": "2026-01-16",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.1229435788320494
+        },
+        {
+          "date": "2026-01-23",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.3786137561758822
+        },
+        {
+          "date": "2026-01-23",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.2485420396907803
+        },
+        {
+          "date": "2026-01-23",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1781180011103787
+        },
+        {
+          "date": "2026-01-23",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.144358247458719
+        },
+        {
+          "date": "2026-01-30",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.351103753838928
+        },
+        {
+          "date": "2026-01-30",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.2431687678797854
+        },
+        {
+          "date": "2026-01-30",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1802491606928787
+        },
+        {
+          "date": "2026-01-30",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.146184482738176
+        },
+        {
+          "date": "2026-02-06",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.3299987460103473
+        },
+        {
+          "date": "2026-02-06",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.2295853772874294
+        },
+        {
+          "date": "2026-02-06",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.170967045687864
+        },
+        {
+          "date": "2026-02-06",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.139315741327057
+        },
+        {
+          "date": "2026-02-13",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.3929955031029613
+        },
+        {
+          "date": "2026-02-13",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.287527656957701
+        },
+        {
+          "date": "2026-02-13",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.2153758094315397
+        },
+        {
+          "date": "2026-02-13",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.174169287748803
+        },
+        {
+          "date": "2026-02-20",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.4757547781441802
+        },
+        {
+          "date": "2026-02-20",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.3611911684231752
+        },
+        {
+          "date": "2026-02-20",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.2741503337619542
+        },
+        {
+          "date": "2026-02-20",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.2197171602552297
+        },
+        {
+          "date": "2026-02-27",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.531542133117349
+        },
+        {
+          "date": "2026-02-27",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.4029667441934959
+        },
+        {
+          "date": "2026-02-27",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.3052803975684886
+        },
+        {
+          "date": "2026-02-27",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.2445477772580997
+        },
+        {
+          "date": "2026-03-06",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.419478984665937
+        },
+        {
+          "date": "2026-03-06",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.3042237445912193
+        },
+        {
+          "date": "2026-03-06",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.241782951348453
+        },
+        {
+          "date": "2026-03-06",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.1951021200870011
+        },
+        {
+          "date": "2026-03-13",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.4032117881672657
+        },
+        {
+          "date": "2026-03-13",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.2514395207534283
+        },
+        {
+          "date": "2026-03-13",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1990879699803674
+        },
+        {
+          "date": "2026-03-13",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.1620592172057191
+        },
+        {
+          "date": "2026-03-20",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.4452493484583113
+        },
+        {
+          "date": "2026-03-20",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.2693053963087972
+        },
+        {
+          "date": "2026-03-20",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.2115137215352012
+        },
+        {
+          "date": "2026-03-20",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.1717207950936612
+        },
+        {
+          "date": "2026-03-27",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.3817936158724422
+        },
+        {
+          "date": "2026-03-27",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.186822366477183
+        },
+        {
+          "date": "2026-03-27",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1494542700194916
+        },
+        {
+          "date": "2026-03-27",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.1236582773568613
+        },
+        {
+          "date": "2026-04-03",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.3462291416231753
+        },
+        {
+          "date": "2026-04-03",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.163130852207968
+        },
+        {
+          "date": "2026-04-03",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1341905872774254
+        },
+        {
+          "date": "2026-04-03",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.1117772753447142
+        },
+        {
+          "date": "2026-04-10",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.490470965170728
+        },
+        {
+          "date": "2026-04-10",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.1939380672964601
+        },
+        {
+          "date": "2026-04-10",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1540729330874486
+        },
+        {
+          "date": "2026-04-10",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.1273234733724515
+        },
+        {
+          "date": "2026-04-17",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.6328000292865892
+        },
+        {
+          "date": "2026-04-17",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.2506111744174073
+        },
+        {
+          "date": "2026-04-17",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1902098107203483
+        },
+        {
+          "date": "2026-04-17",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.1554408305674995
+        },
+        {
+          "date": "2026-04-24",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.7485822826981496
+        },
+        {
+          "date": "2026-04-24",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.3118144910432448
+        },
+        {
+          "date": "2026-04-24",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.2292159849234225
+        },
+        {
+          "date": "2026-04-24",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.1858547548369511
+        },
+        {
+          "date": "2026-05-01",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.7608295861957142
+        },
+        {
+          "date": "2026-05-01",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.3244439747381223
+        },
+        {
+          "date": "2026-05-01",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.236325055545318
+        },
+        {
+          "date": "2026-05-01",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.1912945399158905
+        },
+        {
+          "date": "2026-05-08",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.8427783136177063
+        },
+        {
+          "date": "2026-05-08",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.3744824532519917
+        },
+        {
+          "date": "2026-05-08",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.2684585183231745
+        },
+        {
+          "date": "2026-05-08",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.215984347304646
+        },
+        {
+          "date": "2026-05-15",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.7736098921034371
+        },
+        {
+          "date": "2026-05-15",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.3117720817776435
+        },
+        {
+          "date": "2026-05-15",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.2227686634928598
+        },
+        {
+          "date": "2026-05-15",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.1810941975476341
+        },
+        {
+          "date": "2026-05-22",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.8341684357342953
+        },
+        {
+          "date": "2026-05-22",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.3822365231502611
+        },
+        {
+          "date": "2026-05-22",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.272611772850874
+        },
+        {
+          "date": "2026-05-22",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.2198661751454616
+        },
+        {
+          "date": "2026-05-29",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.857122595876239
+        },
+        {
+          "date": "2026-05-29",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.4359975397624953
+        },
+        {
+          "date": "2026-05-29",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.3073312322333936
+        },
+        {
+          "date": "2026-05-29",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.244984647723762
+        },
+        {
+          "date": "2026-06-05",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.7880622675199416
+        },
+        {
+          "date": "2026-06-05",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.3868473958700744
+        },
+        {
+          "date": "2026-06-05",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.2669187565338607
+        },
+        {
+          "date": "2026-06-05",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.215133311050521
+        },
+        {
+          "date": "2026-06-12",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.7338773509565915
+        },
+        {
+          "date": "2026-06-12",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.324239060544945
+        },
+        {
+          "date": "2026-06-12",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.2295955040120912
+        },
+        {
+          "date": "2026-06-12",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.1867753615621368
+        },
+        {
+          "date": "2026-06-19",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.7577885256494694
+        },
+        {
+          "date": "2026-06-19",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.319306660166859
+        },
+        {
+          "date": "2026-06-19",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.2191713720383166
+        },
+        {
+          "date": "2026-06-19",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.178479789983941
+        },
+        {
+          "date": "2026-06-26",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.6908740946433838
+        },
+        {
+          "date": "2026-06-26",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.258551592398115
+        },
+        {
+          "date": "2026-06-26",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1814205308599637
+        },
+        {
+          "date": "2026-06-26",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.1483766133691047
+        },
+        {
+          "date": "2026-07-03",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.752349754643396
+        },
+        {
+          "date": "2026-07-03",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.2732575791015908
+        },
+        {
+          "date": "2026-07-03",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1905927694222822
+        },
+        {
+          "date": "2026-07-03",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.1555528268842579
+        },
+        {
+          "date": "2026-07-10",
+          "variant": "A0_LEGACY",
+          "candidate": "기존 연구 리플레이",
+          "equity_multiple": 1.659155393694191
+        },
+        {
+          "date": "2026-07-10",
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "equity_multiple": 1.2230895113688607
+        },
+        {
+          "date": "2026-07-10",
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "equity_multiple": 1.1606934776304771
+        },
+        {
+          "date": "2026-07-10",
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "equity_multiple": 1.1322030037410877
+        }
+      ],
+      "risk_return": [
+        {
+          "variant": "X_CAP15_ONLY",
+          "candidate": "진단: 15% 상한만",
+          "mdd_abs": 0.24508209855785912,
+          "cagr": 0.11040255864107751,
+          "average_exposure": 0.4680217203333746
+        },
+        {
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "mdd_abs": 0.23194361453143086,
+          "cagr": 0.06933611937130868,
+          "average_exposure": 0.44840279984394765
+        },
+        {
+          "variant": "X_COOLDOWN5",
+          "candidate": "진단: 현재+5일 재진입 금지",
+          "mdd_abs": 0.2040381660145829,
+          "cagr": 0.05687440824907952,
+          "average_exposure": 0.3979270938739564
+        },
+        {
+          "variant": "B_EQUAL",
+          "candidate": "동일 비중",
+          "mdd_abs": 0.23300601574496183,
+          "cagr": 0.06914709084192916,
+          "average_exposure": 0.4476346653343272
+        },
+        {
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "mdd_abs": 0.16729994803781667,
+          "cagr": 0.05085795764518575,
+          "average_exposure": 0.33735857863265106
+        },
+        {
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "mdd_abs": 0.1365999280098562,
+          "cagr": 0.042199889632127396,
+          "average_exposure": 0.2725759025632214
+        },
+        {
+          "variant": "D_BAND20",
+          "candidate": "리밸런싱 밴드 20%",
+          "mdd_abs": 0.23779108034826868,
+          "cagr": 0.06914807102908149,
+          "average_exposure": 0.44930211330580294
+        },
+        {
+          "variant": "E_VOL_RISK",
+          "candidate": "변동성 조절·강화 손절",
+          "mdd_abs": 0.19251304866111463,
+          "cagr": 0.004441651288403126,
+          "average_exposure": 0.26522141779150593
+        }
+      ],
+      "stop_reentry": [
+        {
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "stops": 123,
+          "reentry_within_5d": 92,
+          "median_reentry_days": 1.0,
+          "annual_turnover": 21.429224283800533,
+          "total_cost": 0.13164018907087205
+        },
+        {
+          "variant": "X_COOLDOWN5",
+          "candidate": "진단: 현재+5일 재진입 금지",
+          "stops": 100,
+          "reentry_within_5d": 0,
+          "median_reentry_days": 10.0,
+          "annual_turnover": 17.69388595138633,
+          "total_cost": 0.10868499381022306
+        },
+        {
+          "variant": "B_EQUAL",
+          "candidate": "동일 비중",
+          "stops": 123,
+          "reentry_within_5d": 92,
+          "median_reentry_days": 1.0,
+          "annual_turnover": 20.962909361020074,
+          "total_cost": 0.12876903853557375
+        },
+        {
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "stops": 123,
+          "reentry_within_5d": 92,
+          "median_reentry_days": 1.0,
+          "annual_turnover": 13.73599390314243,
+          "total_cost": 0.08441774904348925
+        },
+        {
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "stops": 123,
+          "reentry_within_5d": 92,
+          "median_reentry_days": 1.0,
+          "annual_turnover": 10.738022336185217,
+          "total_cost": 0.06600708713789195
+        },
+        {
+          "variant": "D_BAND20",
+          "candidate": "리밸런싱 밴드 20%",
+          "stops": 123,
+          "reentry_within_5d": 92,
+          "median_reentry_days": 1.0,
+          "annual_turnover": 20.591628193708594,
+          "total_cost": 0.1264536077627286
+        },
+        {
+          "variant": "E_VOL_RISK",
+          "candidate": "변동성 조절·강화 손절",
+          "stops": 143,
+          "reentry_within_5d": 0,
+          "median_reentry_days": 9.0,
+          "annual_turnover": 13.518118991361849,
+          "total_cost": 0.08313231328106335
+        }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "experiment_combined",
+      "label": "PAPER 전략 후보 전체·최근 구간 분석 노트북",
+      "path": "reports/analysis/paper_strategy_experiments_2026-07-22.ipynb",
+      "query": {
+        "engine": "PostgreSQL",
+        "language": "sql",
+        "description": "동일한 FA 선택·KOSPI/TA 조건·거래비용으로 전체 및 PASS/PUBLISHED 후보를 비교",
+        "sql": "WITH ranked AS (\n  SELECT r.*, ROW_NUMBER() OVER (\n    PARTITION BY r.analysis_month\n    ORDER BY CASE r.status_code WHEN 'PUBLISHED' THEN 0 WHEN 'PASS' THEN 1 ELSE 2 END,\n             r.run_version DESC, r.id DESC\n  ) AS rn\n  FROM fa_analysis_runs r\n  JOIN strategies s ON s.id = r.strategy_id\n  WHERE s.name = 'aggressive'\n    AND r.status_code IN ('PASS', 'WARNING', 'PUBLISHED')\n)\nSELECT r.id AS run_id, r.analysis_month, r.cutoff_date, r.effective_date,\n       r.status_code, c.stock_code, c.fa_score\nFROM ranked r\nJOIN fa_company_results c ON c.run_id = r.id\nWHERE r.rn = 1 AND c.is_selected = TRUE AND c.is_eligible = TRUE\nORDER BY r.effective_date, c.stock_code;\n\nSELECT stock_code, price_date, close\nFROM wics_constituent_prices\nWHERE close > 0\nORDER BY price_date, stock_code;",
+        "executed_at": "2026-07-22T10:32:11+09:00",
+        "tables_used": [
+          "reports/analysis/paper_strategy_experiments/full/metrics.json",
+          "reports/analysis/paper_strategy_experiments/pass_only/metrics.json",
+          "reports/analysis/paper_strategy_experiments/full/daily_returns.csv",
+          "reports/analysis/paper_strategy_experiments/full/events.csv"
+        ],
+        "filters": [
+          "strategy=aggressive",
+          "full window=2023-05-31..2026-07-09",
+          "recent window=PASS/PUBLISHED selections only, 2026-01-30..2026-07-09",
+          "REAL excluded"
+        ],
+        "metric_definitions": [
+          "총수익률 = 일별 비용 차감 수익률의 기하 누적 - 1",
+          "MDD = 누적 자산의 직전 고점 대비 최대 하락률",
+          "연환산 회전율 = 일평균 절대 비중 매매량 × 252",
+          "비용률 = 매수 0.115%, 매도 0.295%를 일별 비중 변화에 적용한 누적값"
+        ]
+      }
+    },
+    {
+      "id": "experiment_full",
+      "label": "PAPER 전략 후보 전체 구간 리플레이",
+      "path": "reports/analysis/paper_strategy_experiments/full/metrics.json",
+      "query": {
+        "engine": "PostgreSQL",
+        "language": "sql",
+        "description": "WARNING를 포함한 39개 월별 선택 실행과 757거래일 가격을 사용한 후보 리플레이",
+        "sql": "WITH ranked AS (\n  SELECT r.*, ROW_NUMBER() OVER (\n    PARTITION BY r.analysis_month\n    ORDER BY CASE r.status_code WHEN 'PUBLISHED' THEN 0 WHEN 'PASS' THEN 1 ELSE 2 END,\n             r.run_version DESC, r.id DESC\n  ) AS rn\n  FROM fa_analysis_runs r\n  JOIN strategies s ON s.id = r.strategy_id\n  WHERE s.name = 'aggressive'\n    AND r.status_code IN ('PASS', 'WARNING', 'PUBLISHED')\n)\nSELECT r.id AS run_id, r.analysis_month, r.cutoff_date, r.effective_date,\n       r.status_code, c.stock_code, c.fa_score\nFROM ranked r\nJOIN fa_company_results c ON c.run_id = r.id\nWHERE r.rn = 1 AND c.is_selected = TRUE AND c.is_eligible = TRUE\nORDER BY r.effective_date, c.stock_code;\n\nSELECT stock_code, price_date, close\nFROM wics_constituent_prices\nWHERE close > 0\nORDER BY price_date, stock_code;",
+        "executed_at": "2026-07-22T10:32:11+09:00",
+        "tables_used": [
+          "fa_analysis_runs",
+          "fa_company_results",
+          "wics_constituent_prices"
+        ],
+        "filters": [
+          "strategy=aggressive",
+          "status in PASS, WARNING, PUBLISHED",
+          "period=2023-05-31..2026-07-09"
+        ],
+        "metric_definitions": [
+          "주간 누적 자산 배수 = 일별 비용 차감 수익률을 기하 누적한 뒤 금요일 기준 마지막 값",
+          "후보별 수익과 위험은 동일한 데이터·비용 가정으로 계산"
+        ]
+      }
+    },
+    {
+      "id": "paper_actual",
+      "label": "PAPER 5억 원금 성과 진단",
+      "path": "reports/analysis/paper_performance_diagnostic_2026-07-22.ipynb"
+    }
+  ]
+}

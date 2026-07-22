@@ -1,6 +1,8 @@
 import datetime
+import json
 import sys
 from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 import requests
@@ -76,6 +78,41 @@ def test_cli_rejects_conflicting_one_shot_actions(monkeypatch):
         trader_main()
 
     assert caught.value.code == 2
+
+
+def test_direct_live_trading_requires_complete_paper_system_before_broker(
+    monkeypatch,
+):
+    monkeypatch.setattr(sys, "argv", ["run_live_trader.py", "--live"])
+    monkeypatch.setattr(
+        "run_live_trader._assert_real_system_ready",
+        lambda: (_ for _ in ()).throw(PermissionError("PAPER incomplete")),
+    )
+    monkeypatch.setattr(
+        "run_live_trader.LiveTrader",
+        lambda *args, **kwargs: pytest.fail("broker must not initialize"),
+    )
+
+    with pytest.raises(PermissionError, match="PAPER incomplete"):
+        trader_main()
+
+
+def test_live_snapshot_and_emergency_liquidation_keep_separate_safety_paths(
+    monkeypatch,
+):
+    source = Path("run_live_trader.py").read_text(encoding="utf-8")
+    assert "args.live and not args.snapshot_only and not args.liquidate" in source
+
+
+def test_live_scheduler_requires_full_system_gate_before_legacy_kpi_gate():
+    batch = Path("run_scheduler.bat").read_text(encoding="utf-8")
+    completion = (
+        "core.analytics.system_readiness --require-complete "
+        "--for-real-activation"
+    )
+    legacy = "core.analytics.trading_kpis --target REAL"
+    assert completion in batch
+    assert batch.index(completion) < batch.index(legacy)
 
 
 def test_mock_mode_is_safe_default_even_with_real_marker(monkeypatch):
@@ -164,6 +201,57 @@ def test_daily_order_http_error_does_not_chain_raw_account_details():
     assert "12345678" not in str(caught.value)
     assert "CANO=***" in str(caught.value)
     assert caught.value.__cause__ is None
+
+
+def test_daily_order_query_follows_mock_f_continuation_pages():
+    broker = object.__new__(KisBroker)
+    broker.key = "app-key"
+    broker.secret = "app-secret"
+    broker.is_mock = True
+    broker.broker = type("Client", (), {
+        "base_url": "https://example.test",
+        "access_token": "access-token",
+        "acc_no_prefix": "12345678",
+        "acc_no_postfix": "01",
+    })()
+    calls = []
+
+    class Response:
+        def __init__(self, payload, continuation):
+            self._payload = payload
+            self.headers = {"tr_cont": continuation}
+
+        def json(self):
+            return self._payload
+
+    responses = [
+        Response(
+            {
+                "rt_cd": "0",
+                "output1": [{"odno": "1"}],
+                "ctx_area_fk100": "next-fk",
+                "ctx_area_nk100": "next-nk",
+            },
+            "F",
+        ),
+        Response({"rt_cd": "0", "output1": [{"odno": "2"}]}, ""),
+    ]
+
+    def request(*args, **kwargs):
+        calls.append({
+            "headers": dict(kwargs["headers"]),
+            "params": dict(kwargs["params"]),
+        })
+        return responses.pop(0)
+
+    broker._safe_request = request
+
+    rows = broker.fetch_daily_orders(datetime.date(2026, 7, 9))
+
+    assert [row["odno"] for row in rows] == ["1", "2"]
+    assert calls[1]["headers"]["tr_cont"] == "N"
+    assert calls[1]["params"]["CTX_AREA_FK100"] == "next-fk"
+    assert calls[1]["params"]["CTX_AREA_NK100"] == "next-nk"
 
 
 def test_balance_failure_is_not_converted_to_empty_account():
@@ -448,8 +536,9 @@ def test_scheduler_labels_candidate_suppression_separately_from_global_pause():
     )
 
 
-def test_scheduler_eod_report_passes_mode_and_date(monkeypatch):
+def test_scheduler_eod_report_passes_mode_and_date(tmp_path, monkeypatch):
     captured = {}
+    monkeypatch.setattr(scheduler, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(
         scheduler.subprocess,
         "run",
@@ -460,20 +549,107 @@ def test_scheduler_eod_report_passes_mode_and_date(monkeypatch):
 
     assert "core.analytics.trading_performance" in captured["cmd"]
     assert captured["cmd"][-3:] == ["PAPER", "--date", "2026-07-20"]
+    status = json.loads(
+        (tmp_path / "logs/paper/eod_report_status.json").read_text(encoding="utf-8")
+    )
+    assert status["status"] == "READY"
+    assert status["report_date"] == "2026-07-20"
 
 
-def test_scheduler_claims_eod_date_before_report_execution():
-    report_date = datetime.date(2026, 7, 21)
-
-    claimed, last_run_date = scheduler.claim_daily_report(None, report_date)
-    repeated, repeated_date = scheduler.claim_daily_report(
-        last_run_date, report_date
+def test_scheduler_eod_failure_persists_actionable_diagnostic(tmp_path, monkeypatch):
+    monkeypatch.setattr(scheduler, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        scheduler.subprocess,
+        "run",
+        lambda *args, **kwargs: type(
+            "R",
+            (),
+            {"returncode": 1, "stdout": "", "stderr": "trace\nroot cause"},
+        )(),
     )
 
-    assert claimed is True
-    assert last_run_date == report_date
-    assert repeated is False
-    assert repeated_date == report_date
+    with pytest.raises(RuntimeError, match="root cause"):
+        scheduler.run_end_of_day_report(datetime.date(2026, 7, 21), "PAPER")
+
+    status = json.loads(
+        (tmp_path / "logs/paper/eod_report_status.json").read_text(encoding="utf-8")
+    )
+    assert status["status"] == "FAILED"
+    assert status["return_code"] == 1
+    assert status["stderr_tail"].endswith("root cause")
+
+
+def test_scheduler_backfills_oldest_missing_completed_paper_report(tmp_path):
+    operational = tmp_path / "logs/paper/operational_health.jsonl"
+    operational.parent.mkdir(parents=True, exist_ok=True)
+    operational.write_text(
+        "\n".join(
+            json.dumps(
+                {
+                    "timestamp": f"{day}T15:20:00+09:00",
+                    "operational_status": "NORMAL",
+                }
+            )
+            for day in ("2026-07-20", "2026-07-21")
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    daily = tmp_path / "reports/promotion/paper/daily"
+    daily.mkdir(parents=True, exist_ok=True)
+    (daily / "2026-07-20.json").write_text(
+        json.dumps(
+            {
+                "report_date": "2026-07-20",
+                "mode": "PAPER",
+                "report_status": "FINAL",
+                "validation": {"status": "READY"},
+                "operations": {
+                    "data_freshness_rate": 1.0,
+                    "risk_check_coverage": 1.0,
+                    "order_reconciliation_rate": 1.0,
+                    "operational_integrity": 1.0,
+                },
+                "trading": {"open_order_count": 0},
+            }
+        ),
+        encoding="utf-8",
+    )
+    now = datetime.datetime(2026, 7, 22, 9, 0)
+
+    assert scheduler.pending_paper_eod_report_date(now, tmp_path) == (
+        datetime.date(2026, 7, 21)
+    )
+    assert scheduler.due_end_of_day_report_date(now, "PAPER", tmp_path) == (
+        datetime.date(2026, 7, 21)
+    )
+
+
+def test_scheduler_retries_failed_eod_after_bounded_delay():
+    report_date = datetime.date(2026, 7, 21)
+    first_attempt = datetime.datetime(2026, 7, 21, 15, 30)
+
+    assert scheduler.should_attempt_daily_report(
+        None, report_date, None, first_attempt
+    ) is True
+    assert scheduler.should_attempt_daily_report(
+        None,
+        report_date,
+        first_attempt,
+        first_attempt + datetime.timedelta(minutes=4, seconds=59),
+    ) is False
+    assert scheduler.should_attempt_daily_report(
+        None,
+        report_date,
+        first_attempt,
+        first_attempt + datetime.timedelta(minutes=5),
+    ) is True
+    assert scheduler.should_attempt_daily_report(
+        report_date,
+        report_date,
+        first_attempt,
+        first_attempt + datetime.timedelta(minutes=10),
+    ) is False
 
 
 def test_scheduler_instance_lock_rejects_concurrent_process(tmp_path):
@@ -546,6 +722,57 @@ def test_unresolved_order_query_is_scoped_to_current_account():
     assert "execution_venue_code = %s" in query
     assert "account_scope = %s" in query
     assert params == ("aggressive", "PAPER", "***1234-01")
+
+
+def test_daily_execution_ledger_health_requires_linked_matching_quantities():
+    calls = []
+
+    class DB:
+        def fetch_one(self, query, params):
+            calls.append((query, params))
+            return {
+                "filled_order_count": 3,
+                "execution_linked_order_count": 2,
+                "quantity_matched_order_count": 1,
+            }
+
+    trader = object.__new__(LiveTrader)
+    trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.broker = SafeBroker()
+    trader.db = DB()
+
+    health = trader._daily_execution_ledger_health()
+
+    assert health == {
+        "status": "BLOCKED",
+        "filled_order_count": 3,
+        "execution_linked_order_count": 2,
+        "quantity_matched_order_count": 1,
+        "missing_execution_order_count": 1,
+        "quantity_mismatch_order_count": 2,
+        "execution_link_coverage": pytest.approx(2 / 3),
+        "quantity_match_rate": pytest.approx(1 / 3),
+    }
+    query, params = calls[0]
+    assert "execution_venue_code = %s" in query
+    assert "account_scope = %s" in query
+    assert "ABS(COALESCE(x.execution_qty, 0) - f.filled_qty)" in query
+    assert params == ("aggressive", "PAPER", "***1234-01")
+
+
+def test_daily_execution_ledger_health_is_ready_when_no_orders_exist():
+    trader = object.__new__(LiveTrader)
+    trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.broker = SafeBroker()
+    trader.db = type("DB", (), {"fetch_one": lambda *a, **k: {}})()
+
+    health = trader._daily_execution_ledger_health()
+
+    assert health["status"] == "READY"
+    assert health["execution_link_coverage"] == 1.0
+    assert health["quantity_match_rate"] == 1.0
 
 
 def test_open_order_reconciliation_queries_are_scoped():

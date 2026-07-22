@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-22T13:12:04+09:00",
+  "mode": "PAPER",
+  "observe_only": true,
+  "broker_write_permission": "DENIED_BY_DESIGN",
+  "method": "observed order-result event replay with explicit opening-balance calibration",
+  "starting_capital": 500000000.0,
+  "endpoint": {
+    "cash": 191381629.0,
+    "positions": {
+      "021240": 753.0,
+      "161390": 1001.0,
+      "383220": 915.0,
+      "483650": 299.0
+    }
+  },
+  "raw_replay": {
+    "ending_cash": 191773077.69499996,
+    "cash_difference_vs_endpoint": 391448.69499996305,
+    "ending_positions": {
+      "021240": 753.0,
+      "161390": 1001.0,
+      "383220": 915.0,
+      "483650": 299.0
+    },
+    "position_gaps": []
+  },
+  "calibration": {
+    "opening_cash_required": 499608551.30500025,
+    "opening_cash_difference_vs_500m": -391448.6949997544,
+    "cash_tolerance": 500000.0,
+    "cash_tolerance_ratio": 0.001,
+    "reconciled_from_starting_capital_within_tolerance": true,
+    "opening_position_balancing_entries": {},
+    "opening_position_balancing_abs_qty": 0,
+    "note": "These are reconciliation balances, not fabricated trades."
+  },
+  "calibrated_replay": {
+    "ending_cash": 191381629.0000002,
+    "cash_difference_vs_endpoint": 2.086162567138672e-07,
+    "ending_positions": {
+      "021240": 753.0,
+      "161390": 1001.0,
+      "383220": 915.0,
+      "483650": 299.0
+    },
+    "position_gaps": [],
+    "exact_endpoint_parity": true
+  },
+  "data_quality": {
+    "order_rows": 547,
+    "filled_order_rows": 201,
+    "priced_fill_event_count": 201,
+    "priced_fill_event_coverage": 1.0,
+    "issues": []
+  },
+  "promotion_gate": {
+    "ready": true,
+    "exact_endpoint_parity": true,
+    "calibration_free_from_500m": false,
+    "reconciled_from_500m_within_tolerance": true,
+    "opening_cash_difference_abs": 391448.6949997544,
+    "opening_cash_tolerance": 500000.0,
+    "full_priced_fill_coverage": true,
+    "blockers": []
+  }
+}

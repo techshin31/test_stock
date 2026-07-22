@@ -1,0 +1,1090 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "PAPER 자동매매 원장 복원·실험·준비도 보고서",
+    "description": "5억원 기준 실제 PAPER 손익, 주문결과 원장 복원, 재진입 확인 조건 실험의 의사결정 보고서",
+    "generatedAt": "2026-07-22T14:10:34+09:00",
+    "sources": [
+      {
+        "id": "paper_ledger",
+        "label": "PAPER 주문·손익 복원 원장",
+        "path": "reports/analysis/paper_ledger_latest/summary.json",
+        "query": {
+          "engine": "PostgreSQL",
+          "language": "sql",
+          "description": "동일 PAPER 계좌의 risk_neutral→aggressive 전략 계보와 KIS 주문 감사를 컷오프까지 읽기 전용으로 결합",
+          "sql": "SELECT o.*, s.name FROM orders o JOIN strategies s ON s.id=o.strategy_id WHERE s.name IN ('risk_neutral','aggressive') AND ((o.execution_venue='PAPER' AND o.account_scope=%(account_scope)s) OR o.execution_venue='UNKNOWN') AND o.created_at <= %(cutoff)s ORDER BY o.created_at;\nSELECT e.* FROM executions e JOIN orders o ON o.id=e.order_id JOIN strategies s ON s.id=o.strategy_id WHERE s.name IN ('risk_neutral','aggressive') AND ((o.execution_venue='PAPER' AND o.account_scope=%(account_scope)s) OR o.execution_venue='UNKNOWN') AND e.executed_at <= %(cutoff)s ORDER BY e.executed_at;\nSELECT bh.* FROM balance_history bh JOIN strategies s ON s.id=bh.strategy_id WHERE s.name IN ('risk_neutral','aggressive') AND ((bh.execution_venue='PAPER' AND bh.account_scope=%(account_scope)s) OR bh.execution_venue='UNKNOWN') AND bh.recorded_at <= %(cutoff)s ORDER BY bh.recorded_at;",
+          "executed_at": "2026-07-22T13:10:56+09:00",
+          "tables_used": [
+            "orders",
+            "executions",
+            "balance_history",
+            "strategies",
+            "companies"
+          ],
+          "filters": [
+            "cutoff=2026-07-22T13:10:47+09:00",
+            "strategy lineage=risk_neutral,aggressive",
+            "PAPER account scope + UNKNOWN legacy",
+            "REAL excluded"
+          ],
+          "metric_definitions": [
+            "총손익 = 컷오프 PAPER 총평가액 - 500,000,000원",
+            "현금 잔차 = 500,000,000원 직접 주문결과 재생 종료현금 - 브로커 종료현금",
+            "체결률 = FILLED 주문 수 / 전체 종결 주문 수",
+            "수량 조정항목 = 컷오프 실제 수량 - 알려진 체결의 순수량"
+          ]
+        }
+      },
+      {
+        "id": "reentry_experiments",
+        "label": "재진입 확인 조건 전체·최근 구간 실험",
+        "path": "reports/analysis/paper_reentry_experiments/full/metrics.json",
+        "query": {
+          "engine": "PostgreSQL",
+          "language": "sql",
+          "description": "월별 FA 선택과 일별 가격을 사용한 현재 규칙 및 청산 사유별 재진입 확인 조건 비교",
+          "sql": "WITH ranked AS (SELECT r.*, ROW_NUMBER() OVER (PARTITION BY r.analysis_month ORDER BY CASE r.status_code WHEN 'PUBLISHED' THEN 0 WHEN 'PASS' THEN 1 ELSE 2 END, r.run_version DESC, r.id DESC) rn FROM fa_analysis_runs r JOIN strategies s ON s.id=r.strategy_id WHERE s.name='aggressive' AND r.status_code IN ('PASS','WARNING','PUBLISHED')) SELECT r.id run_id,r.effective_date,r.status_code,c.stock_code,c.fa_score FROM ranked r JOIN fa_company_results c ON c.run_id=r.id WHERE r.rn=1 AND c.is_selected=TRUE AND c.is_eligible=TRUE ORDER BY r.effective_date,c.stock_code;\nSELECT stock_code,price_date,close FROM wics_constituent_prices WHERE close>0 ORDER BY price_date,stock_code;",
+          "executed_at": "2026-07-22T11:00:32+09:00",
+          "tables_used": [
+            "fa_analysis_runs",
+            "fa_company_results",
+            "wics_constituent_prices"
+          ],
+          "filters": [
+            "strategy=aggressive",
+            "full period=2023-05-31..2026-07-09",
+            "recent period=PASS/PUBLISHED only, 2026-01-30..2026-07-09",
+            "REAL excluded"
+          ],
+          "metric_definitions": [
+            "총수익률 = 일별 비용 차감 수익률의 기하 누적 - 1",
+            "MDD = 누적자산의 직전 고점 대비 최대 하락률",
+            "연환산 회전율 = 일평균 절대 비중 매매량 × 252",
+            "매수 비용 0.115%, 매도 비용 0.295%를 적용"
+          ]
+        }
+      },
+      {
+        "id": "system_readiness",
+        "label": "PAPER 자동매매 시스템 준비도 감사",
+        "path": "reports/analysis/automated_trading_system_readiness.json",
+        "query": {
+          "engine": "PostgreSQL",
+          "language": "sql",
+          "description": "준비도 JSON에서 검토한 안전검사와 완료 증거검사를 재현하는 값 테이블",
+          "sql": "WITH readiness_gate(criterion, passed, detail, status_rank) AS (VALUES\n        ('paper_mode', TRUE, 'PAPER', 1),\n        ('scheduler_instance_scope', TRUE, 'pid=2644, mode=PAPER, label=scheduler', 1),\n        ('scheduler_supervisor_runtime', TRUE, 'pid=7004, mode=PAPER, event=ATTACHED_TO_EXISTING, detail=pid=2644, poll_seconds=5', 1),\n        ('certified_account_scope', TRUE, 'dashboard=***9904-01, baseline=***9904-01', 1),\n        ('daily_execution_ledger', TRUE, 'status=READY, link=100.00%, qty=100.00%', 1),\n        ('market_data_health', TRUE, 'fresh=52/52, stale=0, missing=0, dependencies=0, held_stale=0', 1),\n        ('held_position_risk_coverage', TRUE, 'completed=4/4, coverage=100.00%', 1),\n        ('no_unresolved_runtime_orders', TRUE, 'daily_open=0, actual_open=0', 1),\n        ('runtime_error_free', TRUE, 'last_error=none, dependency_errors=0, entry_circuit_breaker=none', 1),\n        ('dashboard_freshness', TRUE, 'age_seconds=6, limit=300', 1),\n        ('real_environment_disabled', TRUE, 'KIS_ENV=unset, ALLOW_LIVE_ORDER=unset', 1),\n        ('shadow_order_disconnected', TRUE, 'observe_only=True, permission=DENIED_BY_DESIGN', 1),\n        ('latest_final_report', TRUE, 'date=2026-07-21, expected=2026-07-21, status=FINAL, validation=READY', 1),\n        ('daily_final_report_coverage', TRUE, 'covered=1/1, missing=[], invalid=0', 1),\n        ('latest_eod_operational_integrity', TRUE, 'data=1.0, risk=1.0, reconciliation=1.0, integrity=1.0, open_orders=0', 1),\n        ('scheduler_recovery_self_test', TRUE, 'status=READY, attempts=2, exit_codes=[1, 0], REAL_auto_restart=False', 1),\n        ('broker_history_audit', TRUE, 'complete=True, unresolved=0, through=2026-07-22', 1),\n        ('historical_fill_evidence', TRUE, '100.00%', 1),\n        ('historical_held_quantity_match', TRUE, '100.00%', 1),\n        ('order_result_parity', TRUE, 'exact=True, inception_reconciled=True, priced_coverage=100.00%', 1),\n        ('execution_stress_evidence_integrity', TRUE, 'ledger_orders=547, stress_orders=547, BUY=5/30, SELL=4/30, declared_ready=False', 1),\n        ('execution_stress_robustness', FALSE, 'sample_ready=False, risk_fallbacks=[''C_CAP10'', ''C_CAP08'']', 0),\n        ('shadow_observation_integrity', TRUE, 'declared=1, unique=1, covered_by_operations=1, covered_by_reports=1, errors=[]', 1),\n        ('shadow_observation_window', FALSE, '1/10 verified sessions', 0),\n        ('paper_operating_window', FALSE, '1/60 completed PAPER sessions', 0),\n        ('paper_final_report_window', FALSE, '1/60 FINAL/READY daily reports', 0)\n) SELECT criterion, passed, detail, status_rank FROM readiness_gate ORDER BY status_rank ASC, criterion;",
+          "executed_at": "2026-07-22T14:10:34+09:00",
+          "tables_used": [],
+          "filters": [
+            "scope=PAPER_AUTOMATED_TRADING_SYSTEM",
+            "REAL authorization always false"
+          ],
+          "metric_definitions": [
+            "안전검사 통과율 = passed 안전검사 수 / 전체 안전검사 수",
+            "증거검사 통과율 = passed 완료 증거검사 수 / 전체 완료 증거검사 수"
+          ]
+        }
+      },
+      {
+        "id": "broker_history",
+        "label": "KIS PAPER 주문 원장 전수 감사",
+        "path": "reports/analysis/paper_broker_history/latest.json"
+      },
+      {
+        "id": "final_daily_report",
+        "label": "2026-07-21 PAPER FINAL·READY 일일 보고서",
+        "path": "reports/promotion/paper/daily/2026-07-21.json"
+      }
+    ],
+    "cards": [
+      {
+        "id": "total_loss",
+        "dataset": "headline",
+        "description": "컷오프 총평가액과 5억원의 차이",
+        "sourceId": "paper_ledger",
+        "metrics": [
+          {
+            "label": "5억원 대비 총손익",
+            "field": "total_pnl",
+            "format": "number",
+            "unit": "원",
+            "signed": true
+          },
+          {
+            "label": "총수익률",
+            "field": "total_return",
+            "format": "percent",
+            "signed": true
+          }
+        ]
+      },
+      {
+        "id": "post_baseline",
+        "dataset": "headline",
+        "description": "7월 20일 인증 기준선 이후 수익률",
+        "sourceId": "paper_ledger",
+        "metrics": [
+          {
+            "label": "기준선 이후",
+            "field": "post_baseline_return",
+            "format": "percent",
+            "signed": true
+          }
+        ]
+      },
+      {
+        "id": "fill_rate",
+        "dataset": "headline",
+        "description": "종결 주문 중 FILLED 비중",
+        "sourceId": "paper_ledger",
+        "metrics": [
+          {
+            "label": "실제 체결률",
+            "field": "fill_rate",
+            "format": "percent"
+          }
+        ]
+      },
+      {
+        "id": "position_match",
+        "dataset": "headline",
+        "description": "현재 보유 4종목 중 알려진 체결 순수량과 일치한 비율",
+        "sourceId": "paper_ledger",
+        "metrics": [
+          {
+            "label": "보유수량 일치율",
+            "field": "held_position_match_rate",
+            "format": "percent"
+          }
+        ]
+      }
+    ],
+    "charts": [
+      {
+        "id": "pnl_bridge",
+        "title": "5억원 손익 관련 금액 비교",
+        "subtitle": "2026-07-22 13:10 KST 컷오프, 단위 백만원; 항목은 가산식이 아님",
+        "type": "bar",
+        "intent": "comparison",
+        "dataset": "pnl_bridge",
+        "sourceId": "paper_ledger",
+        "encodings": {
+          "x": {
+            "field": "component",
+            "type": "nominal",
+            "label": "구성 항목"
+          },
+          "y": {
+            "field": "amount_million",
+            "type": "quantitative",
+            "label": "백만원",
+            "format": "number"
+          },
+          "color": {
+            "field": "classification",
+            "type": "nominal",
+            "label": "분류"
+          },
+          "tooltip": [
+            {
+              "field": "classification",
+              "type": "text",
+              "label": "분류"
+            },
+            {
+              "field": "amount_million",
+              "type": "quantitative",
+              "label": "백만원",
+              "format": "number"
+            }
+          ]
+        },
+        "layout": "full",
+        "settings": {
+          "legend": "bottom",
+          "valueLabels": "auto"
+        },
+        "palette": {
+          "kind": "categorical"
+        }
+      },
+      {
+        "id": "order_status",
+        "title": "실제 주문 최종상태",
+        "subtitle": "컷오프까지 547건, 부분체결을 별도 상태로 표시",
+        "type": "bar",
+        "intent": "comparison",
+        "dataset": "order_status",
+        "sourceId": "paper_ledger",
+        "encodings": {
+          "x": {
+            "field": "status",
+            "type": "nominal",
+            "label": "상태"
+          },
+          "y": {
+            "field": "orders",
+            "type": "quantitative",
+            "label": "주문 수",
+            "format": "number"
+          },
+          "tooltip": [
+            {
+              "field": "share",
+              "type": "quantitative",
+              "label": "비중",
+              "format": "percent"
+            }
+          ]
+        },
+        "layout": "full",
+        "settings": {
+          "legend": "none",
+          "valueLabels": "auto"
+        },
+        "palette": {
+          "kind": "categorical"
+        }
+      },
+      {
+        "id": "reentry_returns",
+        "title": "재진입 후보 전체·최근 수익률",
+        "subtitle": "최근은 PASS/PUBLISHED 107거래일, 전체는 757거래일",
+        "type": "bar",
+        "intent": "comparison",
+        "dataset": "reentry_results",
+        "sourceId": "reentry_experiments",
+        "encodings": {
+          "x": {
+            "field": "candidate",
+            "type": "nominal",
+            "label": "후보"
+          },
+          "y": {
+            "field": "total_return",
+            "type": "quantitative",
+            "label": "총수익률",
+            "format": "percent"
+          },
+          "color": {
+            "field": "scope",
+            "type": "nominal",
+            "label": "구간"
+          },
+          "tooltip": [
+            {
+              "field": "mdd",
+              "type": "quantitative",
+              "label": "MDD",
+              "format": "percent"
+            },
+            {
+              "field": "annualized_turnover",
+              "type": "quantitative",
+              "label": "연환산 회전율",
+              "format": "number"
+            }
+          ]
+        },
+        "layout": "full",
+        "settings": {
+          "legend": "bottom",
+          "valueLabels": "none"
+        },
+        "palette": {
+          "kind": "categorical"
+        }
+      }
+    ],
+    "tables": [
+      {
+        "id": "position_gaps",
+        "title": "보유·리플레이 수량 대사",
+        "subtitle": "한글 종목명을 주표기로, 종목코드를 보조 표기로 표시",
+        "dataset": "position_gaps",
+        "sourceId": "paper_ledger",
+        "defaultSort": {
+          "field": "gap_abs",
+          "direction": "desc"
+        },
+        "density": "dense",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "stock_name",
+            "label": "종목명",
+            "type": "text"
+          },
+          {
+            "field": "symbol",
+            "label": "코드",
+            "type": "text"
+          },
+          {
+            "field": "known_fill_net_qty",
+            "label": "알려진 순수량",
+            "format": "number"
+          },
+          {
+            "field": "actual_endpoint_qty",
+            "label": "실제 수량",
+            "format": "number"
+          },
+          {
+            "field": "qty_gap_balancing_entry",
+            "label": "조정 수량",
+            "format": "number",
+            "movement": true
+          },
+          {
+            "field": "exact_qty_match",
+            "label": "일치",
+            "type": "boolean"
+          },
+          {
+            "field": "gap_abs",
+            "label": "절대 차이",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "reentry_table",
+        "title": "재진입 후보 성과 비교",
+        "subtitle": "전체 성과와 최근 스트레스 구간을 함께 비교",
+        "dataset": "reentry_table",
+        "sourceId": "reentry_experiments",
+        "defaultSort": {
+          "field": "recent_return",
+          "direction": "desc"
+        },
+        "density": "dense",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "candidate",
+            "label": "후보",
+            "type": "text"
+          },
+          {
+            "field": "full_return",
+            "label": "전체 수익",
+            "format": "percent",
+            "movement": true
+          },
+          {
+            "field": "full_mdd",
+            "label": "전체 MDD",
+            "format": "percent",
+            "movement": true
+          },
+          {
+            "field": "recent_return",
+            "label": "최근 수익",
+            "format": "percent",
+            "movement": true
+          },
+          {
+            "field": "recent_mdd",
+            "label": "최근 MDD",
+            "format": "percent",
+            "movement": true
+          },
+          {
+            "field": "recent_turnover",
+            "label": "최근 회전율",
+            "format": "number"
+          },
+          {
+            "field": "confirmed_reentries",
+            "label": "확인 재진입",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "shadow_gate",
+        "title": "PAPER 자동매매 전체 준비도 게이트",
+        "subtitle": "안전·원장·리플레이·체결표본·shadow·60세션 근거를 함께 판정",
+        "dataset": "shadow_gate",
+        "sourceId": "system_readiness",
+        "defaultSort": {
+          "field": "status_rank",
+          "direction": "asc"
+        },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "criterion",
+            "label": "기준",
+            "type": "text"
+          },
+          {
+            "field": "passed",
+            "label": "통과",
+            "type": "boolean"
+          },
+          {
+            "field": "detail",
+            "label": "근거",
+            "type": "text"
+          },
+          {
+            "field": "status_rank",
+            "label": "상태 순위",
+            "format": "number"
+          }
+        ]
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# PAPER 자동매매 원장 복원·실험·준비도 보고서"
+      },
+      {
+        "id": "executive_summary",
+        "type": "markdown",
+        "body": "## Technical Summary\n\n- **5억원 대비 손실은 실제입니다.** 컷오프 총평가액은 472.0백만원으로 총수익률은 -5.60%입니다. 다만 7월 20일 인증 기준선 이후에는 1.93%입니다.\n- **5억원 원장 대사는 운영 기준을 통과했습니다.** 547개 주문과 201개 실제 체결을 재생했고, 전체 23개 종목 수량이 모두 맞습니다. 현금 잔차는 391,449원으로 500,000원 한도 안입니다.\n- **수익개선 후보는 아직 주문 규칙으로 승격하지 않습니다.** C_CAP10·C_CAP08은 세 스트레스 시나리오를 통과했지만, R_TREND_REARM은 보수 시나리오에서 실패했습니다.\n- **PAPER 런타임은 안전하지만 전체 시스템은 관측 중입니다.** 안전검사 12/12, 증거검사 10/14입니다. BUY/SELL 30건, shadow 10세션, PAPER 및 FINAL 보고서 60세션 전에는 REAL을 승인하지 않습니다."
+      },
+      {
+        "id": "headline_metrics",
+        "type": "metric-strip",
+        "cardIds": [
+          "total_loss",
+          "post_baseline",
+          "fill_rate",
+          "position_match"
+        ]
+      },
+      {
+        "id": "ledger_scope",
+        "type": "markdown",
+        "body": "## 종료 계좌는 대사됐지만 거래별 실현손익은 낮은 신뢰도로 남습니다\n\n총평가액과 종료 보유수량은 브로커 PAPER 스냅샷으로 직접 관측됩니다. KIS 주문행 216건을 감사해 잘못된 DB 체결 7건과 DB에 없던 브로커 체결 5건을 분석 원장에서 대사했습니다. 체결 가격·수량 근거와 현재 및 전체 종목 수량은 100%입니다. 다만 과거 execution 테이블 연결률은 75.12%이고 실제 수수료·세금이 기록되지 않아 거래별 실현손익은 저신뢰 진단값입니다."
+      },
+      {
+        "id": "pnl_chart_block",
+        "type": "chart",
+        "chartId": "pnl_bridge"
+      },
+      {
+        "id": "order_results",
+        "type": "markdown",
+        "body": "## 높은 회전과 낮은 체결률이 손실 확대 가능성을 보여줍니다\n\n전체 547개 주문 중 실제 체결 이벤트는 201개이고 체결률은 36.75%입니다. 누적 체결대금은 4591.2백만원으로 시작자금의 9.18배입니다. 이 규모는 손실을 종목 선택만의 문제로 해석하기 어렵게 하며 반복 진입·거절·체결비용을 계속 감시해야 한다는 근거입니다.",
+        "sourceId": "paper_ledger"
+      },
+      {
+        "id": "order_chart_block",
+        "type": "chart",
+        "chartId": "order_status"
+      },
+      {
+        "id": "position_interpretation",
+        "type": "markdown",
+        "body": "## 한글 종목명을 복구했고 모든 종목 수량이 일치합니다\n\n현재 보유 종목은 코웨이, 한국타이어앤테크놀로지, F&F, 달바글로벌을 주표기로 표시하고 종목코드는 보조 표기로 유지합니다. 현재 보유 4/4종목과 전체 23/23종목의 주문결과 재생 수량이 브로커 계좌와 일치하며, 시작재고 추정과 수량 조정항목은 0주입니다.",
+        "sourceId": "paper_ledger"
+      },
+      {
+        "id": "position_table_block",
+        "type": "table",
+        "tableId": "position_gaps"
+      },
+      {
+        "id": "reentry_interpretation",
+        "type": "markdown",
+        "body": "## 추세 재무장 조건은 최근 방어 후보지만 장기 승자는 아닙니다\n\n추세 재무장 3일 확인은 최근 107거래일 수익률을 -1.75%에서 -0.03%, MDD를 -19.06%에서 -17.16%, 회전율을 45.8배에서 23.7배로 개선했습니다. 그러나 전체 757거래일 수익률은 +22.31%에서 +10.87%로 낮아지고 MDD는 -23.19%에서 -27.06%로 악화됐습니다.",
+        "sourceId": "reentry_experiments"
+      },
+      {
+        "id": "reentry_chart_block",
+        "type": "chart",
+        "chartId": "reentry_returns"
+      },
+      {
+        "id": "reentry_table_block",
+        "type": "table",
+        "tableId": "reentry_table"
+      },
+      {
+        "id": "implementation_result",
+        "type": "markdown",
+        "body": "## REAL 사전 게이트는 현재 전체 완료를 거부합니다\n\n현재 준비도는 안전검사 12/12, 증거검사 10/14입니다. 전체 증거가 완료되기 전에는 배치와 직접 REAL 주문 경로가 모두 브로커 초기화 전에 실패합니다.",
+        "sourceId": "system_readiness"
+      },
+      {
+        "id": "eod_report_integrity",
+        "type": "markdown",
+        "body": "## 최근 완료 세션 보고서는 운영 무결성을 충족합니다\n\n2026-07-21 최종 일별 보고서는 주문 7건과 체결 실행 12건을 읽었습니다. 데이터 신선도·위험점검·주문 대사·운영 무결성이 각각 100%이고 미종결 주문은 0건이라 FINAL·READY 증거로 인정됩니다.",
+        "sourceId": "final_daily_report"
+      },
+      {
+        "id": "shadow_gate_block",
+        "type": "table",
+        "tableId": "shadow_gate"
+      },
+      {
+        "id": "recommendations",
+        "type": "markdown",
+        "body": "## Recommended Next Steps\n\n1. **현재 PAPER 주문 규칙을 유지합니다.** C_CAP10·C_CAP08은 비상 위험후보로만 보존하고 주문 규칙에는 아직 반영하지 않습니다.\n2. **체결 표본을 자동 누적합니다.** 현재 BUY 5/30, SELL 4/30이며 동일 스트레스 조건으로 다시 평가합니다.\n3. **shadow와 운영기간을 채웁니다.** shadow 1/10, 완료 PAPER 1/60, FINAL·READY 보고서 1/60을 날짜별로 대조합니다.\n4. **매 EOD 원장과 브로커 감사를 재생성합니다.** 실패하면 성공 처리하지 않고 5분 간격 재시도 경로로 보냅니다.\n5. **REAL은 실행하지 않습니다.** 전체 준비도, 기존 KPI, 환경 잠금, 수동 승인을 모두 통과하기 전에는 실행을 거부합니다."
+      },
+      {
+        "id": "methodology",
+        "type": "markdown",
+        "body": "## 원장과 준비도는 원본을 바꾸지 않는 방식으로 계산했습니다\n\n주문 원장은 DB 기록, KIS PAPER 일별 주문 전체 페이지, executions, 잔고 스냅샷을 날짜와 브로커 주문번호로 결합합니다. KIS가 미체결로 확인한 DB FILLED는 분석 레이어에서만 EXPIRED_UNFILLED로 분류하며 원본 DB와 계좌는 수정하지 않습니다. 주문결과 리플레이는 관측된 체결·부분체결·거절·취소만 재생하고, 준비도는 완료 세션 날짜와 같은 날짜의 FINAL·READY 보고서를 교차 검증합니다."
+      },
+      {
+        "id": "caveats",
+        "type": "markdown",
+        "body": "## Caveats & Assumptions\n\n- 7월 22일 값은 13:10 KST 컷오프라 15:30 최종 보고서에서 달라질 수 있습니다.\n- 총평가액과 5억원 대비 손익은 브로커 스냅샷 직접 관측값이지만 종목별 실현손익은 과거 execution 누락과 실제 비용 미기록 때문에 저신뢰입니다.\n- 391,449원 현금 잔차는 0.10% 허용한도 안이지만 정확한 입출금·수수료 명세가 없어 원인을 특정하지 않습니다.\n- 7월 21일 이전 UNKNOWN 범위는 전환 직전·직후 현금 연속성을 근거로 동일 PAPER 계보로 추정했습니다.\n- 체결 스트레스 표본은 BUY 5건, SELL 4건으로 작고 전략 승격이나 REAL 승인 근거가 아닙니다.\n- 전체 완료 판정은 실제 10 shadow 세션과 60 완료 PAPER 세션·60 FINAL 보고서가 쌓이기 전까지 유지되지 않습니다."
+      },
+      {
+        "id": "further_questions",
+        "type": "markdown",
+        "body": "## Further Questions\n\n- 391,449원 현금 잔차를 입출금·실제 수수료·평가시점 중 어느 항목으로 설명할 수 있는가?\n- BUY/SELL 각 30건 이후에도 C_CAP10과 C_CAP08이 Wilson 하한 시나리오를 통과하는가?\n- 10세션 shadow에서 R_TREND_REARM이 실제 재진입 후보를 만들고도 현행 규칙보다 낙폭과 회전율을 줄이는가?\n- 60세션 동안 FINAL 보고서 연속성과 무중단 복구 증거가 유지되는가?"
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-07-22T14:10:34+09:00",
+    "status": "ready",
+    "datasets": {
+      "headline": [
+        {
+          "total_pnl": -28021371.0,
+          "total_return": -0.056042742,
+          "post_baseline_return": 0.019335948581157253,
+          "fill_rate": 0.36745886654478976,
+          "held_position_match_rate": 1.0,
+          "unresolved_pnl": -391447.75081163645
+        }
+      ],
+      "pnl_bridge": [
+        {
+          "component": "전체 손익",
+          "amount_million": -28.021371,
+          "classification": "확정"
+        },
+        {
+          "component": "현재 평가손익",
+          "amount_million": 7.513987,
+          "classification": "브로커"
+        },
+        {
+          "component": "부분 매칭 실현손익",
+          "amount_million": -30.596487944188365,
+          "classification": "부분 추정"
+        },
+        {
+          "component": "추정 수수료·세금",
+          "amount_million": -4.5474223049999996,
+          "classification": "모형"
+        },
+        {
+          "component": "5억원 재생 현금 잔차",
+          "amount_million": -0.39144775081163646,
+          "classification": "허용범위"
+        }
+      ],
+      "order_status": [
+        {
+          "status": "REJECTED",
+          "orders": 325,
+          "share": 0.5941499085923218
+        },
+        {
+          "status": "FILLED",
+          "orders": 197,
+          "share": 0.360146252285192
+        },
+        {
+          "status": "CANCELLED",
+          "orders": 14,
+          "share": 0.025594149908592323
+        },
+        {
+          "status": "EXPIRED_UNFILLED",
+          "orders": 7,
+          "share": 0.012797074954296161
+        },
+        {
+          "status": "PARTIAL",
+          "orders": 4,
+          "share": 0.007312614259597806
+        }
+      ],
+      "position_gaps": [
+        {
+          "stock_name": "코웨이",
+          "symbol": "021240",
+          "known_fill_net_qty": 753.0,
+          "actual_endpoint_qty": 753.0,
+          "qty_gap_balancing_entry": 0.0,
+          "exact_qty_match": true,
+          "gap_abs": 0.0
+        },
+        {
+          "stock_name": "한국타이어앤테크놀로지",
+          "symbol": "161390",
+          "known_fill_net_qty": 1001.0,
+          "actual_endpoint_qty": 1001.0,
+          "qty_gap_balancing_entry": 0.0,
+          "exact_qty_match": true,
+          "gap_abs": 0.0
+        },
+        {
+          "stock_name": "F&F",
+          "symbol": "383220",
+          "known_fill_net_qty": 915.0,
+          "actual_endpoint_qty": 915.0,
+          "qty_gap_balancing_entry": 0.0,
+          "exact_qty_match": true,
+          "gap_abs": 0.0
+        },
+        {
+          "stock_name": "달바글로벌",
+          "symbol": "483650",
+          "known_fill_net_qty": 299.0,
+          "actual_endpoint_qty": 299.0,
+          "qty_gap_balancing_entry": 0.0,
+          "exact_qty_match": true,
+          "gap_abs": 0.0
+        }
+      ],
+      "reentry_results": [
+        {
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "scope": "전체",
+          "total_return": 0.22308951136886512,
+          "mdd": -0.23194361453143086,
+          "annualized_turnover": 21.429224283800533,
+          "average_exposure": 0.44840279984394765
+        },
+        {
+          "variant": "A_CURRENT",
+          "candidate": "현재 규칙 근사",
+          "scope": "최근",
+          "total_return": -0.017502667640842073,
+          "mdd": -0.1906481376690169,
+          "annualized_turnover": 45.83367107763751,
+          "average_exposure": 0.7000170138908755
+        },
+        {
+          "variant": "X_COOLDOWN5",
+          "candidate": "진단: 현재+5일 재진입 금지",
+          "scope": "전체",
+          "total_return": 0.1807704507224186,
+          "mdd": -0.2040381660145829,
+          "annualized_turnover": 17.69388595138633,
+          "average_exposure": 0.3979270938739564
+        },
+        {
+          "variant": "X_COOLDOWN5",
+          "candidate": "진단: 현재+5일 재진입 금지",
+          "scope": "최근",
+          "total_return": -0.045459155100310955,
+          "mdd": -0.19773177089912508,
+          "annualized_turnover": 34.23460459136201,
+          "average_exposure": 0.5684597670597767
+        },
+        {
+          "variant": "R_EXIT_RECOVERY",
+          "candidate": "청산가 회복 2일 확인",
+          "scope": "전체",
+          "total_return": 0.18808107425937592,
+          "mdd": -0.23924747412968705,
+          "annualized_turnover": 15.139397103923127,
+          "average_exposure": 0.34487312540618736
+        },
+        {
+          "variant": "R_EXIT_RECOVERY",
+          "candidate": "청산가 회복 2일 확인",
+          "scope": "최근",
+          "total_return": -0.03457011469458815,
+          "mdd": -0.19039511264849096,
+          "annualized_turnover": 27.839521560777612,
+          "average_exposure": 0.4723165832079084
+        },
+        {
+          "variant": "R_TREND_REARM",
+          "candidate": "추세 재무장 3일 확인",
+          "scope": "전체",
+          "total_return": 0.10874157104691817,
+          "mdd": -0.27055932719942977,
+          "annualized_turnover": 13.429763570683443,
+          "average_exposure": 0.31576217084553176
+        },
+        {
+          "variant": "R_TREND_REARM",
+          "candidate": "추세 재무장 3일 확인",
+          "scope": "최근",
+          "total_return": -0.000305977118945866,
+          "mdd": -0.1716468902972471,
+          "annualized_turnover": 23.653884299835617,
+          "average_exposure": 0.40589809737242744
+        },
+        {
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "scope": "전체",
+          "total_return": 0.1606934776304776,
+          "mdd": -0.16729994803781667,
+          "annualized_turnover": 13.73599390314243,
+          "average_exposure": 0.33735857863265106
+        },
+        {
+          "variant": "C_CAP10",
+          "candidate": "종목 상한 10%",
+          "scope": "최근",
+          "total_return": -0.018322004021282035,
+          "mdd": -0.14940224010256054,
+          "annualized_turnover": 28.68158190071761,
+          "average_exposure": 0.5116100471856762
+        },
+        {
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "scope": "전체",
+          "total_return": 0.13220300374108573,
+          "mdd": -0.1365999280098562,
+          "annualized_turnover": 10.738022336185217,
+          "average_exposure": 0.2725759025632214
+        },
+        {
+          "variant": "C_CAP08",
+          "candidate": "종목 상한 8%",
+          "scope": "최근",
+          "total_return": -0.012852581828408316,
+          "mdd": -0.12047355017527128,
+          "annualized_turnover": 22.934248088279176,
+          "average_exposure": 0.40880604547563754
+        }
+      ],
+      "reentry_table": [
+        {
+          "candidate": "현재 규칙 근사",
+          "full_return": 0.22308951136886512,
+          "full_mdd": -0.23194361453143086,
+          "recent_return": -0.017502667640842073,
+          "recent_mdd": -0.1906481376690169,
+          "recent_turnover": 45.83367107763751,
+          "confirmed_reentries": 0
+        },
+        {
+          "candidate": "진단: 현재+5일 재진입 금지",
+          "full_return": 0.1807704507224186,
+          "full_mdd": -0.2040381660145829,
+          "recent_return": -0.045459155100310955,
+          "recent_mdd": -0.19773177089912508,
+          "recent_turnover": 34.23460459136201,
+          "confirmed_reentries": 0
+        },
+        {
+          "candidate": "청산가 회복 2일 확인",
+          "full_return": 0.18808107425937592,
+          "full_mdd": -0.23924747412968705,
+          "recent_return": -0.03457011469458815,
+          "recent_mdd": -0.19039511264849096,
+          "recent_turnover": 27.839521560777612,
+          "confirmed_reentries": 20
+        },
+        {
+          "candidate": "추세 재무장 3일 확인",
+          "full_return": 0.10874157104691817,
+          "full_mdd": -0.27055932719942977,
+          "recent_return": -0.000305977118945866,
+          "recent_mdd": -0.1716468902972471,
+          "recent_turnover": 23.653884299835617,
+          "confirmed_reentries": 14
+        },
+        {
+          "candidate": "종목 상한 10%",
+          "full_return": 0.1606934776304776,
+          "full_mdd": -0.16729994803781667,
+          "recent_return": -0.018322004021282035,
+          "recent_mdd": -0.14940224010256054,
+          "recent_turnover": 28.68158190071761,
+          "confirmed_reentries": 0
+        },
+        {
+          "candidate": "종목 상한 8%",
+          "full_return": 0.13220300374108573,
+          "full_mdd": -0.1365999280098562,
+          "recent_return": -0.012852581828408316,
+          "recent_mdd": -0.12047355017527128,
+          "recent_turnover": 22.934248088279176,
+          "confirmed_reentries": 0
+        }
+      ],
+      "implementation_result": [
+        {
+          "total_asset": 471978629.0,
+          "return_vs_500m": -0.056042742,
+          "post_baseline_return": 0.019335948581157253,
+          "fill_rate": 0.36745886654478976,
+          "auditable_fill_coverage": 1.0,
+          "held_quantity_match_rate": 1.0,
+          "safety_checks_passed": 12,
+          "evidence_checks_passed": 10
+        }
+      ],
+      "shadow_gate": [
+        {
+          "criterion": "paper_mode",
+          "passed": true,
+          "detail": "PAPER",
+          "status_rank": 1
+        },
+        {
+          "criterion": "scheduler_instance_scope",
+          "passed": true,
+          "detail": "pid=2644, mode=PAPER, label=scheduler",
+          "status_rank": 1
+        },
+        {
+          "criterion": "scheduler_supervisor_runtime",
+          "passed": true,
+          "detail": "pid=7004, mode=PAPER, event=ATTACHED_TO_EXISTING, detail=pid=2644, poll_seconds=5",
+          "status_rank": 1
+        },
+        {
+          "criterion": "certified_account_scope",
+          "passed": true,
+          "detail": "dashboard=***9904-01, baseline=***9904-01",
+          "status_rank": 1
+        },
+        {
+          "criterion": "daily_execution_ledger",
+          "passed": true,
+          "detail": "status=READY, link=100.00%, qty=100.00%",
+          "status_rank": 1
+        },
+        {
+          "criterion": "market_data_health",
+          "passed": true,
+          "detail": "fresh=52/52, stale=0, missing=0, dependencies=0, held_stale=0",
+          "status_rank": 1
+        },
+        {
+          "criterion": "held_position_risk_coverage",
+          "passed": true,
+          "detail": "completed=4/4, coverage=100.00%",
+          "status_rank": 1
+        },
+        {
+          "criterion": "no_unresolved_runtime_orders",
+          "passed": true,
+          "detail": "daily_open=0, actual_open=0",
+          "status_rank": 1
+        },
+        {
+          "criterion": "runtime_error_free",
+          "passed": true,
+          "detail": "last_error=none, dependency_errors=0, entry_circuit_breaker=none",
+          "status_rank": 1
+        },
+        {
+          "criterion": "dashboard_freshness",
+          "passed": true,
+          "detail": "age_seconds=6, limit=300",
+          "status_rank": 1
+        },
+        {
+          "criterion": "real_environment_disabled",
+          "passed": true,
+          "detail": "KIS_ENV=unset, ALLOW_LIVE_ORDER=unset",
+          "status_rank": 1
+        },
+        {
+          "criterion": "shadow_order_disconnected",
+          "passed": true,
+          "detail": "observe_only=True, permission=DENIED_BY_DESIGN",
+          "status_rank": 1
+        },
+        {
+          "criterion": "latest_final_report",
+          "passed": true,
+          "detail": "date=2026-07-21, expected=2026-07-21, status=FINAL, validation=READY",
+          "status_rank": 1
+        },
+        {
+          "criterion": "daily_final_report_coverage",
+          "passed": true,
+          "detail": "covered=1/1, missing=[], invalid=0",
+          "status_rank": 1
+        },
+        {
+          "criterion": "latest_eod_operational_integrity",
+          "passed": true,
+          "detail": "data=1.0, risk=1.0, reconciliation=1.0, integrity=1.0, open_orders=0",
+          "status_rank": 1
+        },
+        {
+          "criterion": "scheduler_recovery_self_test",
+          "passed": true,
+          "detail": "status=READY, attempts=2, exit_codes=[1, 0], REAL_auto_restart=False",
+          "status_rank": 1
+        },
+        {
+          "criterion": "broker_history_audit",
+          "passed": true,
+          "detail": "complete=True, unresolved=0, through=2026-07-22",
+          "status_rank": 1
+        },
+        {
+          "criterion": "historical_fill_evidence",
+          "passed": true,
+          "detail": "100.00%",
+          "status_rank": 1
+        },
+        {
+          "criterion": "historical_held_quantity_match",
+          "passed": true,
+          "detail": "100.00%",
+          "status_rank": 1
+        },
+        {
+          "criterion": "order_result_parity",
+          "passed": true,
+          "detail": "exact=True, inception_reconciled=True, priced_coverage=100.00%",
+          "status_rank": 1
+        },
+        {
+          "criterion": "execution_stress_evidence_integrity",
+          "passed": true,
+          "detail": "ledger_orders=547, stress_orders=547, BUY=5/30, SELL=4/30, declared_ready=False",
+          "status_rank": 1
+        },
+        {
+          "criterion": "execution_stress_robustness",
+          "passed": false,
+          "detail": "sample_ready=False, risk_fallbacks=['C_CAP10', 'C_CAP08']",
+          "status_rank": 0
+        },
+        {
+          "criterion": "shadow_observation_integrity",
+          "passed": true,
+          "detail": "declared=1, unique=1, covered_by_operations=1, covered_by_reports=1, errors=[]",
+          "status_rank": 1
+        },
+        {
+          "criterion": "shadow_observation_window",
+          "passed": false,
+          "detail": "1/10 verified sessions",
+          "status_rank": 0
+        },
+        {
+          "criterion": "paper_operating_window",
+          "passed": false,
+          "detail": "1/60 completed PAPER sessions",
+          "status_rank": 0
+        },
+        {
+          "criterion": "paper_final_report_window",
+          "passed": false,
+          "detail": "1/60 FINAL/READY daily reports",
+          "status_rank": 0
+        }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "paper_ledger",
+      "label": "PAPER 주문·손익 복원 원장",
+      "path": "reports/analysis/paper_ledger_latest/summary.json",
+      "query": {
+        "engine": "PostgreSQL",
+        "language": "sql",
+        "description": "동일 PAPER 계좌의 risk_neutral→aggressive 전략 계보와 KIS 주문 감사를 컷오프까지 읽기 전용으로 결합",
+        "sql": "SELECT o.*, s.name FROM orders o JOIN strategies s ON s.id=o.strategy_id WHERE s.name IN ('risk_neutral','aggressive') AND ((o.execution_venue='PAPER' AND o.account_scope=%(account_scope)s) OR o.execution_venue='UNKNOWN') AND o.created_at <= %(cutoff)s ORDER BY o.created_at;\nSELECT e.* FROM executions e JOIN orders o ON o.id=e.order_id JOIN strategies s ON s.id=o.strategy_id WHERE s.name IN ('risk_neutral','aggressive') AND ((o.execution_venue='PAPER' AND o.account_scope=%(account_scope)s) OR o.execution_venue='UNKNOWN') AND e.executed_at <= %(cutoff)s ORDER BY e.executed_at;\nSELECT bh.* FROM balance_history bh JOIN strategies s ON s.id=bh.strategy_id WHERE s.name IN ('risk_neutral','aggressive') AND ((bh.execution_venue='PAPER' AND bh.account_scope=%(account_scope)s) OR bh.execution_venue='UNKNOWN') AND bh.recorded_at <= %(cutoff)s ORDER BY bh.recorded_at;",
+        "executed_at": "2026-07-22T13:10:56+09:00",
+        "tables_used": [
+          "orders",
+          "executions",
+          "balance_history",
+          "strategies",
+          "companies"
+        ],
+        "filters": [
+          "cutoff=2026-07-22T13:10:47+09:00",
+          "strategy lineage=risk_neutral,aggressive",
+          "PAPER account scope + UNKNOWN legacy",
+          "REAL excluded"
+        ],
+        "metric_definitions": [
+          "총손익 = 컷오프 PAPER 총평가액 - 500,000,000원",
+          "현금 잔차 = 500,000,000원 직접 주문결과 재생 종료현금 - 브로커 종료현금",
+          "체결률 = FILLED 주문 수 / 전체 종결 주문 수",
+          "수량 조정항목 = 컷오프 실제 수량 - 알려진 체결의 순수량"
+        ]
+      }
+    },
+    {
+      "id": "reentry_experiments",
+      "label": "재진입 확인 조건 전체·최근 구간 실험",
+      "path": "reports/analysis/paper_reentry_experiments/full/metrics.json",
+      "query": {
+        "engine": "PostgreSQL",
+        "language": "sql",
+        "description": "월별 FA 선택과 일별 가격을 사용한 현재 규칙 및 청산 사유별 재진입 확인 조건 비교",
+        "sql": "WITH ranked AS (SELECT r.*, ROW_NUMBER() OVER (PARTITION BY r.analysis_month ORDER BY CASE r.status_code WHEN 'PUBLISHED' THEN 0 WHEN 'PASS' THEN 1 ELSE 2 END, r.run_version DESC, r.id DESC) rn FROM fa_analysis_runs r JOIN strategies s ON s.id=r.strategy_id WHERE s.name='aggressive' AND r.status_code IN ('PASS','WARNING','PUBLISHED')) SELECT r.id run_id,r.effective_date,r.status_code,c.stock_code,c.fa_score FROM ranked r JOIN fa_company_results c ON c.run_id=r.id WHERE r.rn=1 AND c.is_selected=TRUE AND c.is_eligible=TRUE ORDER BY r.effective_date,c.stock_code;\nSELECT stock_code,price_date,close FROM wics_constituent_prices WHERE close>0 ORDER BY price_date,stock_code;",
+        "executed_at": "2026-07-22T11:00:32+09:00",
+        "tables_used": [
+          "fa_analysis_runs",
+          "fa_company_results",
+          "wics_constituent_prices"
+        ],
+        "filters": [
+          "strategy=aggressive",
+          "full period=2023-05-31..2026-07-09",
+          "recent period=PASS/PUBLISHED only, 2026-01-30..2026-07-09",
+          "REAL excluded"
+        ],
+        "metric_definitions": [
+          "총수익률 = 일별 비용 차감 수익률의 기하 누적 - 1",
+          "MDD = 누적자산의 직전 고점 대비 최대 하락률",
+          "연환산 회전율 = 일평균 절대 비중 매매량 × 252",
+          "매수 비용 0.115%, 매도 비용 0.295%를 적용"
+        ]
+      }
+    },
+    {
+      "id": "system_readiness",
+      "label": "PAPER 자동매매 시스템 준비도 감사",
+      "path": "reports/analysis/automated_trading_system_readiness.json",
+      "query": {
+        "engine": "PostgreSQL",
+        "language": "sql",
+        "description": "준비도 JSON에서 검토한 안전검사와 완료 증거검사를 재현하는 값 테이블",
+        "sql": "WITH readiness_gate(criterion, passed, detail, status_rank) AS (VALUES\n        ('paper_mode', TRUE, 'PAPER', 1),\n        ('scheduler_instance_scope', TRUE, 'pid=2644, mode=PAPER, label=scheduler', 1),\n        ('scheduler_supervisor_runtime', TRUE, 'pid=7004, mode=PAPER, event=ATTACHED_TO_EXISTING, detail=pid=2644, poll_seconds=5', 1),\n        ('certified_account_scope', TRUE, 'dashboard=***9904-01, baseline=***9904-01', 1),\n        ('daily_execution_ledger', TRUE, 'status=READY, link=100.00%, qty=100.00%', 1),\n        ('market_data_health', TRUE, 'fresh=52/52, stale=0, missing=0, dependencies=0, held_stale=0', 1),\n        ('held_position_risk_coverage', TRUE, 'completed=4/4, coverage=100.00%', 1),\n        ('no_unresolved_runtime_orders', TRUE, 'daily_open=0, actual_open=0', 1),\n        ('runtime_error_free', TRUE, 'last_error=none, dependency_errors=0, entry_circuit_breaker=none', 1),\n        ('dashboard_freshness', TRUE, 'age_seconds=6, limit=300', 1),\n        ('real_environment_disabled', TRUE, 'KIS_ENV=unset, ALLOW_LIVE_ORDER=unset', 1),\n        ('shadow_order_disconnected', TRUE, 'observe_only=True, permission=DENIED_BY_DESIGN', 1),\n        ('latest_final_report', TRUE, 'date=2026-07-21, expected=2026-07-21, status=FINAL, validation=READY', 1),\n        ('daily_final_report_coverage', TRUE, 'covered=1/1, missing=[], invalid=0', 1),\n        ('latest_eod_operational_integrity', TRUE, 'data=1.0, risk=1.0, reconciliation=1.0, integrity=1.0, open_orders=0', 1),\n        ('scheduler_recovery_self_test', TRUE, 'status=READY, attempts=2, exit_codes=[1, 0], REAL_auto_restart=False', 1),\n        ('broker_history_audit', TRUE, 'complete=True, unresolved=0, through=2026-07-22', 1),\n        ('historical_fill_evidence', TRUE, '100.00%', 1),\n        ('historical_held_quantity_match', TRUE, '100.00%', 1),\n        ('order_result_parity', TRUE, 'exact=True, inception_reconciled=True, priced_coverage=100.00%', 1),\n        ('execution_stress_evidence_integrity', TRUE, 'ledger_orders=547, stress_orders=547, BUY=5/30, SELL=4/30, declared_ready=False', 1),\n        ('execution_stress_robustness', FALSE, 'sample_ready=False, risk_fallbacks=[''C_CAP10'', ''C_CAP08'']', 0),\n        ('shadow_observation_integrity', TRUE, 'declared=1, unique=1, covered_by_operations=1, covered_by_reports=1, errors=[]', 1),\n        ('shadow_observation_window', FALSE, '1/10 verified sessions', 0),\n        ('paper_operating_window', FALSE, '1/60 completed PAPER sessions', 0),\n        ('paper_final_report_window', FALSE, '1/60 FINAL/READY daily reports', 0)\n) SELECT criterion, passed, detail, status_rank FROM readiness_gate ORDER BY status_rank ASC, criterion;",
+        "executed_at": "2026-07-22T14:10:34+09:00",
+        "tables_used": [],
+        "filters": [
+          "scope=PAPER_AUTOMATED_TRADING_SYSTEM",
+          "REAL authorization always false"
+        ],
+        "metric_definitions": [
+          "안전검사 통과율 = passed 안전검사 수 / 전체 안전검사 수",
+          "증거검사 통과율 = passed 완료 증거검사 수 / 전체 완료 증거검사 수"
+        ]
+      }
+    },
+    {
+      "id": "broker_history",
+      "label": "KIS PAPER 주문 원장 전수 감사",
+      "path": "reports/analysis/paper_broker_history/latest.json"
+    },
+    {
+      "id": "final_daily_report",
+      "label": "2026-07-21 PAPER FINAL·READY 일일 보고서",
+      "path": "reports/promotion/paper/daily/2026-07-21.json"
+    }
+  ]
+}

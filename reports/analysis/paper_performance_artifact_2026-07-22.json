@@ -1,0 +1,734 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "PAPER 수익률·손실 진단",
+    "description": "5억 원금 기준 성과를 복원하고 손실 원인과 수익 개선 우선순위를 정리한 의사결정 리포트",
+    "generatedAt": "2026-07-22T09:59:17+09:00",
+    "sources": [
+      {
+        "id": "paper_reconciliation",
+        "label": "PAPER 계좌 대사 노트북 (5억 원금·기준선·현재 스냅샷)",
+        "path": "reports/analysis/paper_performance_diagnostic_2026-07-22.ipynb",
+        "query": {
+          "engine": "PostgreSQL",
+          "language": "sql",
+          "description": "지정 시각 이전의 최신 PAPER 잔고를 5억 원금 및 2026-07-20 인증 기준선과 대사",
+          "sql": "WITH latest AS (SELECT bh.total_value::numeric AS current_total FROM balance_history bh JOIN strategies s ON s.id = bh.strategy_id WHERE s.name = 'aggressive' AND bh.execution_venue_code = 'PAPER' AND bh.account_scope = '***9904-01' AND (bh.recorded_at AT TIME ZONE 'Asia/Seoul') <= TIMESTAMP '2026-07-22 09:59:17' ORDER BY bh.recorded_at DESC LIMIT 1) SELECT current_total, current_total - 500000000 AS inception_pnl, current_total / 500000000 - 1 AS return_vs_start, current_total - 463025590 AS post_baseline_pnl, current_total / 463025590 - 1 AS return_vs_baseline FROM latest;",
+          "executed_at": "2026-07-22T09:59:17+09:00",
+          "tables_used": [
+            "balance_history",
+            "strategies"
+          ],
+          "filters": [
+            "strategy=aggressive",
+            "execution_venue_code=PAPER",
+            "account_scope=***9904-01",
+            "recorded_at <= 2026-07-22 09:59:17 KST"
+          ],
+          "metric_definitions": [
+            "최초 원금 수익률 = 현재 평가액 / 500,000,000 - 1; 입출금이 없다는 가정",
+            "공식 기준선 수익률 = 현재 평가액 / 463,025,590 - 1"
+          ]
+        }
+      },
+      {
+        "id": "paper_orders",
+        "label": "PostgreSQL PAPER 주문 이력",
+        "path": "reports/analysis/paper_performance_diagnostic_2026-07-22.ipynb",
+        "query": {
+          "engine": "PostgreSQL",
+          "language": "sql",
+          "description": "aggressive 전략의 일자별 주문 상태와 체결금액 집계",
+          "sql": "SELECT (o.created_at AT TIME ZONE 'Asia/Seoul')::date AS trade_date, COUNT(*) AS orders, COUNT(*) FILTER (WHERE o.order_status_code = 'FILLED') AS filled, COUNT(*) FILTER (WHERE o.order_status_code = 'REJECTED') AS rejected, COUNT(*) FILTER (WHERE o.order_status_code = 'CANCELLED') AS cancelled, SUM(COALESCE(o.filled_qty, 0) * COALESCE(o.avg_fill_price, 0)) AS filled_notional, COUNT(DISTINCT REPLACE(o.symbol, '.KS', '')) AS symbols FROM orders o JOIN strategies s ON s.id = o.strategy_id WHERE s.name = 'aggressive' GROUP BY 1 ORDER BY 1;",
+          "executed_at": "2026-07-22T09:59:17+09:00",
+          "tables_used": [
+            "orders",
+            "strategies"
+          ],
+          "filters": [
+            "strategy=aggressive",
+            "all available order dates through 2026-07-22 09:59 KST"
+          ],
+          "metric_definitions": [
+            "체결금액 = Σ(filled_qty × avg_fill_price), 매수와 매도의 절대 체결금액 합계",
+            "원금 대비 회전 = 일 체결금액 / 500,000,000"
+          ]
+        }
+      },
+      {
+        "id": "execution_state",
+        "label": "PAPER 의사결정·주문 상태",
+        "path": "logs/paper/decision_history.jsonl"
+      },
+      {
+        "id": "pbo_paper",
+        "label": "Probability of Backtest Overfitting",
+        "href": "https://papers.ssrn.com/sol3/Papers.cfm?abstract_id=2326253"
+      },
+      {
+        "id": "dsr_paper",
+        "label": "Deflated Sharpe Ratio",
+        "href": "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2460551"
+      },
+      {
+        "id": "kis_official",
+        "label": "한국투자증권 Open API 공식 저장소",
+        "href": "https://github.com/koreainvestment/open-trading-api"
+      },
+      {
+        "id": "holdings_snapshot",
+        "label": "PAPER 보유 종목 장중 스냅샷",
+        "path": "logs/paper/dashboard_state.json",
+        "query": {
+          "engine": "PostgreSQL-compatible VALUES",
+          "language": "sql",
+          "description": "2026-07-22 09:59:17 KST 대시보드 스냅샷의 보유 종목 원가·현재가를 재계산",
+          "sql": "WITH p(name,ticker,qty,avg_price,current_price) AS (VALUES ('F&F','383220.KS',915,78891.083,73200.0), ('코웨이','021240.KS',753,95021.912,92700.0), ('한국타이어앤테크놀로지','161390.KS',1001,69400.916,72200.0), ('달바글로벌','483650.KS',299,200253.691,233500.0)) SELECT name,ticker,qty,avg_price,current_price,qty*current_price AS market_value,(current_price-avg_price)*qty AS unrealized_pnl,current_price/avg_price-1 AS return_rate FROM p;",
+          "executed_at": "2026-07-22T09:59:17+09:00",
+          "tables_used": [
+            "logs/paper/dashboard_state.json"
+          ],
+          "filters": [
+            "mode=PAPER",
+            "account_scope=***9904-01",
+            "snapshot=2026-07-22 09:59:17 KST"
+          ],
+          "metric_definitions": [
+            "미실현 손익 = (현재가 - 평균단가) × 수량",
+            "종목 수익률 = 현재가 / 평균단가 - 1"
+          ]
+        }
+      }
+    ],
+    "cards": [
+      {
+        "id": "current_asset",
+        "dataset": "headline",
+        "description": "2026-07-22 09:59 KST 장중 PAPER 계좌 평가액",
+        "sourceId": "paper_reconciliation",
+        "metrics": [
+          {
+            "label": "현재 평가액",
+            "field": "current_total",
+            "format": "currency"
+          },
+          {
+            "label": "5억 대비",
+            "field": "return_vs_start",
+            "format": "percent",
+            "signed": true
+          }
+        ]
+      },
+      {
+        "id": "inception_loss",
+        "dataset": "headline",
+        "description": "최초 원금 5억 원 대비 장중 누적 손익",
+        "sourceId": "paper_reconciliation",
+        "metrics": [
+          {
+            "label": "원금 대비 손익",
+            "field": "inception_pnl",
+            "format": "currency",
+            "signed": true
+          },
+          {
+            "label": "수익률",
+            "field": "return_vs_start",
+            "format": "percent",
+            "signed": true
+          }
+        ]
+      },
+      {
+        "id": "baseline_return",
+        "dataset": "headline",
+        "description": "2026-07-20 인증 기준선 이후 성과",
+        "sourceId": "paper_reconciliation",
+        "metrics": [
+          {
+            "label": "기준선 이후 손익",
+            "field": "post_baseline_pnl",
+            "format": "currency",
+            "signed": true
+          },
+          {
+            "label": "수익률",
+            "field": "return_vs_baseline",
+            "format": "percent",
+            "signed": true
+          }
+        ]
+      },
+      {
+        "id": "unrealized",
+        "dataset": "headline",
+        "description": "현재 4개 보유 종목의 원가 대비 미실현 손익 합계",
+        "sourceId": "holdings_snapshot",
+        "metrics": [
+          {
+            "label": "현재 미실현 손익",
+            "field": "unrealized_pnl",
+            "format": "currency",
+            "signed": true
+          },
+          {
+            "label": "보유 종목",
+            "field": "position_count",
+            "format": "number"
+          }
+        ]
+      }
+    ],
+    "charts": [
+      {
+        "id": "capital_bridge_chart",
+        "title": "5억 원금에서 현재 평가액까지의 자본 대사",
+        "subtitle": "공식 기준선 이전 손실이 이후 회복분보다 훨씬 크다.",
+        "type": "waterfall",
+        "intent": "decomposition",
+        "dataset": "capital_bridge",
+        "sourceId": "paper_reconciliation",
+        "encodings": {
+          "x": {
+            "field": "component",
+            "type": "nominal",
+            "label": "구간"
+          },
+          "y": {
+            "field": "amount_krw",
+            "type": "quantitative",
+            "label": "금액",
+            "format": "currency",
+            "unit": "원"
+          },
+          "tooltip": [
+            {
+              "field": "ending_balance",
+              "type": "quantitative",
+              "label": "구간 종료 잔고",
+              "format": "currency",
+              "unit": "원"
+            },
+            {
+              "field": "return_vs_start",
+              "type": "quantitative",
+              "label": "5억 대비",
+              "format": "percent"
+            }
+          ]
+        },
+        "valueFormat": "currency",
+        "unit": "원",
+        "layout": "full",
+        "settings": {
+          "showValues": true,
+          "sort": "custom"
+        },
+        "palette": {
+          "kind": "semantic"
+        }
+      },
+      {
+        "id": "holdings_pnl_chart",
+        "title": "현재 보유 종목 미실현 손익",
+        "subtitle": "달바글로벌과 한국타이어 이익이 F&F·코웨이 손실을 상쇄하고 있다.",
+        "type": "horizontalBar",
+        "intent": "comparison",
+        "dataset": "holdings",
+        "sourceId": "holdings_snapshot",
+        "encodings": {
+          "x": {
+            "field": "name",
+            "type": "nominal",
+            "label": "종목"
+          },
+          "y": {
+            "field": "unrealized_pnl",
+            "type": "quantitative",
+            "label": "미실현 손익",
+            "format": "currency",
+            "unit": "원"
+          },
+          "tooltip": [
+            {
+              "field": "ticker",
+              "type": "text",
+              "label": "종목코드"
+            },
+            {
+              "field": "weight",
+              "type": "quantitative",
+              "label": "계좌 비중",
+              "format": "percent"
+            },
+            {
+              "field": "return_rate",
+              "type": "quantitative",
+              "label": "종목 수익률",
+              "format": "percent"
+            },
+            {
+              "field": "market_value",
+              "type": "quantitative",
+              "label": "평가금액",
+              "format": "currency",
+              "unit": "원"
+            }
+          ]
+        },
+        "valueFormat": "currency",
+        "unit": "원",
+        "layout": "full",
+        "settings": {
+          "showValues": true,
+          "sort": "ascending"
+        },
+        "palette": {
+          "kind": "semantic"
+        }
+      }
+    ],
+    "tables": [
+      {
+        "id": "orders_table",
+        "title": "일자별 주문 활동",
+        "subtitle": "7월 9일 주문 밀도와 거절 건수가 비정상적으로 높다.",
+        "dataset": "orders",
+        "sourceId": "paper_orders",
+        "defaultSort": {
+          "field": "trade_date",
+          "direction": "asc"
+        },
+        "density": "dense",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "trade_date",
+            "label": "일자",
+            "type": "date"
+          },
+          {
+            "field": "orders",
+            "label": "주문",
+            "format": "number"
+          },
+          {
+            "field": "filled",
+            "label": "체결",
+            "format": "number"
+          },
+          {
+            "field": "rejected",
+            "label": "거절",
+            "format": "number"
+          },
+          {
+            "field": "cancelled",
+            "label": "취소",
+            "format": "number"
+          },
+          {
+            "field": "filled_notional",
+            "label": "체결금액",
+            "format": "currency"
+          },
+          {
+            "field": "turnover_vs_start",
+            "label": "원금 대비 회전",
+            "format": "percent"
+          }
+        ]
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# PAPER 수익률·손실 진단"
+      },
+      {
+        "id": "executive_summary",
+        "type": "markdown",
+        "body": "## Executive Summary\n\n최초 원금이 5억 원이고 입출금이 없었다면 현재 약 **-5.95%**는 짧은 운용기간 기준으로 문제로 봐야 합니다. 공식 리포트가 플러스로 보이는 이유는 7월 20일에 **4억 6,302만 원**으로 기준선을 늦게 잡아 그 이전 손실을 제외했기 때문입니다.\n\n지금은 매수 공격성을 높일 때가 아닙니다. 신규 진입을 잠시 멈추고, 원금 기준 성과를 복원하며, 과도한 회전과 주문 실패를 먼저 제어하는 것이 수익 개선의 출발점입니다."
+      },
+      {
+        "id": "headline_metrics",
+        "type": "metric-strip",
+        "cardIds": [
+          "current_asset",
+          "inception_loss",
+          "baseline_return",
+          "unrealized"
+        ]
+      },
+      {
+        "id": "findings",
+        "type": "markdown",
+        "body": "## Key Findings\n\n- 현재 4종목의 미실현 손익은 약 **+579만 원**입니다. 총손실 약 **-2,975만 원**의 주된 원인은 현재 포지션이 아니라 과거 청산손익·초기 평가손실·비용 구간입니다.\n- 기준선 이전 차이는 **-3,697만 원**, 기준선 이후 회복은 **+723만 원**입니다. 공식 기준선 수익률만 보면 실제 원금 훼손을 놓칩니다.\n- 7월 9일 주문은 **240건**, 체결금액은 **19.53억 원(원금의 3.91배)**, 거절은 **192건**이었습니다. 신호 품질보다 회전율과 실행 신뢰성이 손익을 지배할 수 있는 수준입니다.\n- 현재 F&F는 트레일링 스톱 신호가 발생했지만 모의 API 불명 결과 뒤 주문이 거절되어 청산되지 않았습니다."
+      },
+      {
+        "id": "capital_bridge_block",
+        "type": "chart",
+        "chartId": "capital_bridge_chart"
+      },
+      {
+        "id": "holdings_block",
+        "type": "chart",
+        "chartId": "holdings_pnl_chart"
+      },
+      {
+        "id": "orders_block",
+        "type": "table",
+        "tableId": "orders_table"
+      },
+      {
+        "id": "recommendations",
+        "type": "markdown",
+        "body": "## Recommendations\n\n1. **PAPER 신규 진입 일시정지:** 매도·위험청산은 유지하고 신규 매수만 멈춘 뒤 손익 원장을 복원합니다.\n2. **성과 기준 이중화:** 인증 기준선은 보존하되 모든 일일 리포트에 `최초 원금 5억` 기준 누적손익과 MDD를 추가합니다.\n3. **주문 예산 도입:** 동일 종목 당일 재주문 횟수, 일일 체결금액/원금 비율, 최소 리밸런싱 괴리폭을 제한합니다. 불명 주문은 신규 주문보다 조회·정산을 우선합니다.\n4. **위험 한도 후보 검증:** 종목당 8~10%, 일손실 1~1.5%, 포트폴리오 고점 대비 5% 신규진입 중지 후보를 거래비용 포함 워크포워드로 비교합니다.\n5. **전략 승인 기준 강화:** 충분한 분리 검증구간과 PBO·Deflated Sharpe를 통과한 후보만 PAPER에 반영합니다."
+      },
+      {
+        "id": "questions",
+        "type": "markdown",
+        "body": "## Further Questions\n\n- 최초 5억 원 이후 입출금이나 수동 주문이 있었는가?\n- 7월 9일 이전 계좌 원장과 체결 원본을 확보할 수 있는가?\n- 허용 가능한 PAPER 최대낙폭과 일손실 한도는 얼마인가?"
+      },
+      {
+        "id": "caveats",
+        "type": "markdown",
+        "body": "## Caveats & Assumptions\n\n- 5억 원은 사용자 제공값이며 입출금이 없다고 가정했습니다.\n- 신뢰 가능한 파일 시계열은 7월 13일부터, 인증 기준선은 7월 20일부터입니다. 7월 9~10일 DB에는 과거 스코프 마이그레이션 전 `UNKNOWN` 값과 일부 0원 잔고가 섞여 있습니다.\n- DB 수수료·세금이 0으로 기록되어 비용 귀속을 확정할 수 없습니다.\n- 현재 평가는 장중 스냅샷입니다. 백테스트 후보를 많이 시험한 뒤 최고 결과만 고르면 과최적화 가능성이 커지므로 PBO와 Deflated Sharpe 같은 보정이 필요합니다."
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-07-22T09:59:17+09:00",
+    "status": "partial",
+    "accessIssues": [
+      {
+        "id": "prebaseline_ledger_gap",
+        "scope": "capital reconciliation",
+        "sourceId": "paper_reconciliation",
+        "dataset": "capital_bridge",
+        "message": "7월 9일 이전의 완전한 계좌 원장과 5억 원 입금 증빙이 없어 기준선 이전 손실의 종목별 원인을 확정할 수 없습니다."
+      }
+    ],
+    "datasets": {
+      "headline": [
+        {
+          "current_total": 470251429,
+          "inception_pnl": -29748571,
+          "return_vs_start": -0.059497142,
+          "post_baseline_pnl": 7225839,
+          "return_vs_baseline": 0.015605701,
+          "unrealized_pnl": 5786789,
+          "position_count": 4,
+          "baseline_total": 463025590,
+          "starting_capital": 500000000,
+          "as_of": "2026-07-22 09:59:17 KST"
+        }
+      ],
+      "capital_bridge": [
+        {
+          "sequence": 1,
+          "component": "최초 원금",
+          "amount_krw": 500000000,
+          "ending_balance": 500000000,
+          "return_vs_start": 0,
+          "source_type": "사용자 제공 원금"
+        },
+        {
+          "sequence": 2,
+          "component": "기준선 이전 차이",
+          "amount_krw": -36974410,
+          "ending_balance": 463025590,
+          "return_vs_start": -0.07394882,
+          "source_type": "인증 기준선 대사"
+        },
+        {
+          "sequence": 3,
+          "component": "기준선 이후 변화",
+          "amount_krw": 7225839,
+          "ending_balance": 470251429,
+          "return_vs_start": -0.059497142,
+          "source_type": "장중 계좌 스냅샷"
+        }
+      ],
+      "holdings": [
+        {
+          "rank_by_pnl": 1,
+          "name": "F&F",
+          "ticker": "383220.KS",
+          "qty": 915,
+          "avg_price": 78891.083,
+          "current_price": 73200,
+          "market_value": 66978000,
+          "weight": 0.14243,
+          "unrealized_pnl": -5207340.945,
+          "return_rate": -0.0721
+        },
+        {
+          "rank_by_pnl": 2,
+          "name": "코웨이",
+          "ticker": "021240.KS",
+          "qty": 753,
+          "avg_price": 95021.912,
+          "current_price": 92700,
+          "market_value": 69803100,
+          "weight": 0.148438,
+          "unrealized_pnl": -1748399.736,
+          "return_rate": -0.0244
+        },
+        {
+          "rank_by_pnl": 3,
+          "name": "한국타이어앤테크놀로지",
+          "ticker": "161390.KS",
+          "qty": 1001,
+          "avg_price": 69400.916,
+          "current_price": 72200,
+          "market_value": 72272200,
+          "weight": 0.153688,
+          "unrealized_pnl": 2801883.084,
+          "return_rate": 0.0403
+        },
+        {
+          "rank_by_pnl": 4,
+          "name": "달바글로벌",
+          "ticker": "483650.KS",
+          "qty": 299,
+          "avg_price": 200253.691,
+          "current_price": 233500,
+          "market_value": 69816500,
+          "weight": 0.148466,
+          "unrealized_pnl": 9940646.391,
+          "return_rate": 0.166
+        }
+      ],
+      "orders": [
+        {
+          "trade_date": "2026-07-09",
+          "orders": 240,
+          "filled": 48,
+          "rejected": 192,
+          "cancelled": 0,
+          "filled_notional": 1953105060,
+          "turnover_vs_start": 3.90621,
+          "symbols": 24
+        },
+        {
+          "trade_date": "2026-07-10",
+          "orders": 165,
+          "filled": 44,
+          "rejected": 121,
+          "cancelled": 0,
+          "filled_notional": 372529004.794,
+          "turnover_vs_start": 0.745058,
+          "symbols": 20
+        },
+        {
+          "trade_date": "2026-07-13",
+          "orders": 25,
+          "filled": 12,
+          "rejected": 1,
+          "cancelled": 12,
+          "filled_notional": 242289953,
+          "turnover_vs_start": 0.48458,
+          "symbols": 16
+        },
+        {
+          "trade_date": "2026-07-14",
+          "orders": 17,
+          "filled": 11,
+          "rejected": 6,
+          "cancelled": 0,
+          "filled_notional": 203787613,
+          "turnover_vs_start": 0.407575,
+          "symbols": 11
+        },
+        {
+          "trade_date": "2026-07-15",
+          "orders": 9,
+          "filled": 7,
+          "rejected": 2,
+          "cancelled": 0,
+          "filled_notional": 251266162,
+          "turnover_vs_start": 0.502532,
+          "symbols": 6
+        },
+        {
+          "trade_date": "2026-07-21",
+          "orders": 7,
+          "filled": 5,
+          "rejected": 2,
+          "cancelled": 0,
+          "filled_notional": 231378768,
+          "turnover_vs_start": 0.462758,
+          "symbols": 5
+        },
+        {
+          "trade_date": "2026-07-22",
+          "orders": 2,
+          "filled": 1,
+          "rejected": 1,
+          "cancelled": 0,
+          "filled_notional": 31518813,
+          "turnover_vs_start": 0.063038,
+          "symbols": 2
+        }
+      ],
+      "daily_equity": [
+        {
+          "date": "2026-07-13",
+          "first_total": 471192447,
+          "last_total": 467535484,
+          "low_total": 467193684,
+          "high_total": 472286534,
+          "observations": 58,
+          "return_vs_start": -0.064929
+        },
+        {
+          "date": "2026-07-14",
+          "first_total": 464818484,
+          "last_total": 461267310,
+          "low_total": 450500325,
+          "high_total": 467149495,
+          "observations": 237,
+          "return_vs_start": -0.077465
+        },
+        {
+          "date": "2026-07-15",
+          "first_total": 462758810,
+          "last_total": 471467490,
+          "low_total": 462758810,
+          "high_total": 474781773,
+          "observations": 366,
+          "return_vs_start": -0.057065
+        },
+        {
+          "date": "2026-07-20",
+          "first_total": 463025590,
+          "last_total": 463025590,
+          "low_total": 463025590,
+          "high_total": 463025590,
+          "observations": 1,
+          "return_vs_start": -0.073949
+        },
+        {
+          "date": "2026-07-21",
+          "first_total": 466693490,
+          "last_total": 473802699,
+          "low_total": 466630980,
+          "high_total": 476619199,
+          "observations": 368,
+          "return_vs_start": -0.052395
+        },
+        {
+          "date": "2026-07-22",
+          "first_total": 469598999,
+          "last_total": 470251429,
+          "low_total": 469312129,
+          "high_total": 474271329,
+          "observations": 57,
+          "return_vs_start": -0.059497
+        }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "paper_reconciliation",
+      "label": "PAPER 계좌 대사 노트북 (5억 원금·기준선·현재 스냅샷)",
+      "path": "reports/analysis/paper_performance_diagnostic_2026-07-22.ipynb",
+      "query": {
+        "engine": "PostgreSQL",
+        "language": "sql",
+        "description": "지정 시각 이전의 최신 PAPER 잔고를 5억 원금 및 2026-07-20 인증 기준선과 대사",
+        "sql": "WITH latest AS (SELECT bh.total_value::numeric AS current_total FROM balance_history bh JOIN strategies s ON s.id = bh.strategy_id WHERE s.name = 'aggressive' AND bh.execution_venue_code = 'PAPER' AND bh.account_scope = '***9904-01' AND (bh.recorded_at AT TIME ZONE 'Asia/Seoul') <= TIMESTAMP '2026-07-22 09:59:17' ORDER BY bh.recorded_at DESC LIMIT 1) SELECT current_total, current_total - 500000000 AS inception_pnl, current_total / 500000000 - 1 AS return_vs_start, current_total - 463025590 AS post_baseline_pnl, current_total / 463025590 - 1 AS return_vs_baseline FROM latest;",
+        "executed_at": "2026-07-22T09:59:17+09:00",
+        "tables_used": [
+          "balance_history",
+          "strategies"
+        ],
+        "filters": [
+          "strategy=aggressive",
+          "execution_venue_code=PAPER",
+          "account_scope=***9904-01",
+          "recorded_at <= 2026-07-22 09:59:17 KST"
+        ],
+        "metric_definitions": [
+          "최초 원금 수익률 = 현재 평가액 / 500,000,000 - 1; 입출금이 없다는 가정",
+          "공식 기준선 수익률 = 현재 평가액 / 463,025,590 - 1"
+        ]
+      }
+    },
+    {
+      "id": "paper_orders",
+      "label": "PostgreSQL PAPER 주문 이력",
+      "path": "reports/analysis/paper_performance_diagnostic_2026-07-22.ipynb",
+      "query": {
+        "engine": "PostgreSQL",
+        "language": "sql",
+        "description": "aggressive 전략의 일자별 주문 상태와 체결금액 집계",
+        "sql": "SELECT (o.created_at AT TIME ZONE 'Asia/Seoul')::date AS trade_date, COUNT(*) AS orders, COUNT(*) FILTER (WHERE o.order_status_code = 'FILLED') AS filled, COUNT(*) FILTER (WHERE o.order_status_code = 'REJECTED') AS rejected, COUNT(*) FILTER (WHERE o.order_status_code = 'CANCELLED') AS cancelled, SUM(COALESCE(o.filled_qty, 0) * COALESCE(o.avg_fill_price, 0)) AS filled_notional, COUNT(DISTINCT REPLACE(o.symbol, '.KS', '')) AS symbols FROM orders o JOIN strategies s ON s.id = o.strategy_id WHERE s.name = 'aggressive' GROUP BY 1 ORDER BY 1;",
+        "executed_at": "2026-07-22T09:59:17+09:00",
+        "tables_used": [
+          "orders",
+          "strategies"
+        ],
+        "filters": [
+          "strategy=aggressive",
+          "all available order dates through 2026-07-22 09:59 KST"
+        ],
+        "metric_definitions": [
+          "체결금액 = Σ(filled_qty × avg_fill_price), 매수와 매도의 절대 체결금액 합계",
+          "원금 대비 회전 = 일 체결금액 / 500,000,000"
+        ]
+      }
+    },
+    {
+      "id": "execution_state",
+      "label": "PAPER 의사결정·주문 상태",
+      "path": "logs/paper/decision_history.jsonl"
+    },
+    {
+      "id": "pbo_paper",
+      "label": "Probability of Backtest Overfitting",
+      "href": "https://papers.ssrn.com/sol3/Papers.cfm?abstract_id=2326253"
+    },
+    {
+      "id": "dsr_paper",
+      "label": "Deflated Sharpe Ratio",
+      "href": "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2460551"
+    },
+    {
+      "id": "kis_official",
+      "label": "한국투자증권 Open API 공식 저장소",
+      "href": "https://github.com/koreainvestment/open-trading-api"
+    },
+    {
+      "id": "holdings_snapshot",
+      "label": "PAPER 보유 종목 장중 스냅샷",
+      "path": "logs/paper/dashboard_state.json",
+      "query": {
+        "engine": "PostgreSQL-compatible VALUES",
+        "language": "sql",
+        "description": "2026-07-22 09:59:17 KST 대시보드 스냅샷의 보유 종목 원가·현재가를 재계산",
+        "sql": "WITH p(name,ticker,qty,avg_price,current_price) AS (VALUES ('F&F','383220.KS',915,78891.083,73200.0), ('코웨이','021240.KS',753,95021.912,92700.0), ('한국타이어앤테크놀로지','161390.KS',1001,69400.916,72200.0), ('달바글로벌','483650.KS',299,200253.691,233500.0)) SELECT name,ticker,qty,avg_price,current_price,qty*current_price AS market_value,(current_price-avg_price)*qty AS unrealized_pnl,current_price/avg_price-1 AS return_rate FROM p;",
+        "executed_at": "2026-07-22T09:59:17+09:00",
+        "tables_used": [
+          "logs/paper/dashboard_state.json"
+        ],
+        "filters": [
+          "mode=PAPER",
+          "account_scope=***9904-01",
+          "snapshot=2026-07-22 09:59:17 KST"
+        ],
+        "metric_definitions": [
+          "미실현 손익 = (현재가 - 평균단가) × 수량",
+          "종목 수익률 = 현재가 / 평균단가 - 1"
+        ]
+      }
+    }
+  ]
+}

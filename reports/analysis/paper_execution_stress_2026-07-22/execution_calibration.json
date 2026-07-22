@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "mode": "PAPER",
+  "observe_only": true,
+  "stabilized_since": "2026-07-21",
+  "minimum_side_sample": 30,
+  "full_history": {
+    "BUY": {
+      "side": "BUY",
+      "orders": 398,
+      "filled_orders": 77,
+      "rejected_orders": 321,
+      "cancelled_orders": 0,
+      "status_counts": {
+        "REJECTED": 321,
+        "FILLED": 77
+      },
+      "order_fill_rate": 0.1934673366834171,
+      "quantity_fill_rate": 0.060797361386112615,
+      "beta_1_1_posterior_mean_fill_rate": 0.195,
+      "wilson_95_lower_fill_rate": 0.15766400119534724,
+      "wilson_95_upper_fill_rate": 0.23513156800405877,
+      "sample_sufficient": true
+    },
+    "SELL": {
+      "side": "SELL",
+      "orders": 67,
+      "filled_orders": 51,
+      "rejected_orders": 4,
+      "cancelled_orders": 12,
+      "status_counts": {
+        "FILLED": 51,
+        "CANCELLED": 12,
+        "REJECTED": 4
+      },
+      "order_fill_rate": 0.7611940298507462,
+      "quantity_fill_rate": 0.743989731944513,
+      "beta_1_1_posterior_mean_fill_rate": 0.7536231884057971,
+      "wilson_95_lower_fill_rate": 0.6467400924582429,
+      "wilson_95_upper_fill_rate": 0.8473198948938214,
+      "sample_sufficient": true
+    }
+  },
+  "stabilized": {
+    "BUY": {
+      "side": "BUY",
+      "orders": 5,
+      "filled_orders": 3,
+      "rejected_orders": 2,
+      "cancelled_orders": 0,
+      "status_counts": {
+        "FILLED": 3,
+        "REJECTED": 2
+      },
+      "order_fill_rate": 0.6,
+      "quantity_fill_rate": 0.6536685479733196,
+      "beta_1_1_posterior_mean_fill_rate": 0.5714285714285714,
+      "wilson_95_lower_fill_rate": 0.23071993220883708,
+      "wilson_95_upper_fill_rate": 0.8823817688407467,
+      "sample_sufficient": false
+    },
+    "SELL": {
+      "side": "SELL",
+      "orders": 4,
+      "filled_orders": 3,
+      "rejected_orders": 1,
+      "cancelled_orders": 0,
+      "status_counts": {
+        "FILLED": 3,
+        "REJECTED": 1
+      },
+      "order_fill_rate": 0.75,
+      "quantity_fill_rate": 0.2945258288357749,
+      "beta_1_1_posterior_mean_fill_rate": 0.6666666666666666,
+      "wilson_95_lower_fill_rate": 0.3006360524426366,
+      "wilson_95_upper_fill_rate": 0.9544139373553637,
+      "sample_sufficient": false
+    }
+  },
+  "scenarios": {
+    "STABILIZED_POSTERIOR_MEAN": {
+      "label": "post-hardening expected fill",
+      "application": "DETERMINISTIC_BERNOULLI",
+      "buy_fill_fraction": 0.5714285714285714,
+      "sell_fill_fraction": 0.6666666666666666,
+      "interpretation": "Beta(1,1) posterior mean from orders since the safety hardening date."
+    },
+    "STABILIZED_WILSON_LOWER": {
+      "label": "post-hardening conservative fill",
+      "application": "DETERMINISTIC_BERNOULLI",
+      "buy_fill_fraction": 0.23071993220883708,
+      "sell_fill_fraction": 0.3006360524426366,
+      "interpretation": "95% Wilson lower bound; deliberately conservative for small samples."
+    },
+    "FULL_HISTORY_EMPIRICAL": {
+      "label": "legacy-contaminated empirical fill",
+      "application": "DETERMINISTIC_BERNOULLI",
+      "buy_fill_fraction": 0.1934673366834171,
+      "sell_fill_fraction": 0.7611940298507462,
+      "interpretation": "All reconstructed orders, including the unstable pre-hardening period."
+    }
+  },
+  "calibration_status": "PROVISIONAL_SMALL_SAMPLE",
+  "production_parameter_permission": "DENIED_BY_DESIGN",
+  "limitations": [
+    "Order outcomes are observational and not randomized.",
+    "The pre-hardening period includes retry and broker-error behavior that is no longer representative.",
+    "The stabilized sample must reach the minimum independently for BUY and SELL before promotion use.",
+    "Scenario replay uses deterministic full-fill-or-reject sampling; it does not predict a specific broker response."
+  ]
+}

@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-22T12:13:50+09:00",
+  "mode": "PAPER",
+  "observe_only": true,
+  "broker_write_permission": "DENIED_BY_DESIGN",
+  "method": "observed order-result event replay with explicit opening-balance calibration",
+  "starting_capital": 500000000.0,
+  "endpoint": {
+    "cash": 191381629.0,
+    "positions": {
+      "021240": 753.0,
+      "161390": 1001.0,
+      "383220": 915.0,
+      "483650": 299.0
+    }
+  },
+  "raw_replay": {
+    "ending_cash": -498898445.4044086,
+    "cash_difference_vs_endpoint": -690280074.4044086,
+    "ending_positions": {
+      "009150": 127.0,
+      "009420": 1753.0,
+      "012510": 1378.0,
+      "021240": 2070.0,
+      "064400": 1826.0,
+      "161390": 1001.0,
+      "383220": 915.0,
+      "483650": 299.0
+    },
+    "position_gaps": [
+      {
+        "symbol": "009150",
+        "endpoint_qty": 0.0,
+        "replayed_qty": 127.0,
+        "difference": 127.0
+      },
+      {
+        "symbol": "009420",
+        "endpoint_qty": 0.0,
+        "replayed_qty": 1753.0,
+        "difference": 1753.0
+      },
+      {
+        "symbol": "012510",
+        "endpoint_qty": 0.0,
+        "replayed_qty": 1378.0,
+        "difference": 1378.0
+      },
+      {
+        "symbol": "021240",
+        "endpoint_qty": 753.0,
+        "replayed_qty": 2070.0,
+        "difference": 1317.0
+      },
+      {
+        "symbol": "064400",
+        "endpoint_qty": 0.0,
+        "replayed_qty": 1826.0,
+        "difference": 1826.0
+      }
+    ]
+  },
+  "calibration": {
+    "opening_cash_required": 1190280074.404409,
+    "opening_cash_difference_vs_500m": 690280074.4044089,
+    "opening_position_balancing_entries": {
+      "021240": -1317.0,
+      "064400": -1826.0,
+      "012510": -1378.0,
+      "009420": -1753.0,
+      "009150": -127.0
+    },
+    "opening_position_balancing_abs_qty": 6401.0,
+    "note": "These are reconciliation balances, not fabricated trades."
+  },
+  "calibrated_replay": {
+    "ending_cash": 191381629.00000018,
+    "cash_difference_vs_endpoint": 1.7881393432617188e-07,
+    "ending_positions": {
+      "021240": 753.0,
+      "161390": 1001.0,
+      "383220": 915.0,
+      "483650": 299.0
+    },
+    "position_gaps": [],
+    "exact_endpoint_parity": true
+  },
+  "data_quality": {
+    "order_rows": 465,
+    "filled_order_rows": 128,
+    "priced_fill_event_count": 123,
+    "priced_fill_event_coverage": 0.9609375,
+    "issues": [
+      {
+        "order_id": "f90e62c0-67f6-4f42-b7d2-a9df43940d1f",
+        "code": "MISSING_FILL_PRICE",
+        "detail": "filled_qty=157.0"
+      },
+      {
+        "order_id": "78569886-4487-456c-98f4-81ab1d006f2f",
+        "code": "MISSING_FILL_PRICE",
+        "detail": "filled_qty=557.0"
+      },
+      {
+        "order_id": "f7a3f469-6856-4def-aaaa-ad6073d67da4",
+        "code": "MISSING_FILL_PRICE",
+        "detail": "filled_qty=39.0"
+      },
+      {
+        "order_id": "27102e3b-3738-46f7-8ae6-0a554945a659",
+        "code": "MISSING_FILL_PRICE",
+        "detail": "filled_qty=526.0"
+      },
+      {
+        "order_id": "dd1f8909-4690-45fd-8812-1fd51adff109",
+        "code": "MISSING_FILL_PRICE",
+        "detail": "filled_qty=9.0"
+      }
+    ]
+  },
+  "promotion_gate": {
+    "ready": false,
+    "exact_endpoint_parity": true,
+    "calibration_free_from_500m": false,
+    "full_priced_fill_coverage": false,
+    "blockers": [
+      "opening cash/position balancing entries remain",
+      "one or more filled orders lack replayable prices"
+    ]
+  }
+}

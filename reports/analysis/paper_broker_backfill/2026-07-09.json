@@ -1,0 +1,238 @@
+{
+  "schema_version": 2,
+  "queried_at": "2026-07-22T12:49:20+09:00",
+  "mode": "PAPER",
+  "account_scope": "***9904-01",
+  "target_date": "2026-07-09",
+  "operation": "READ_ONLY_KIS_DAILY_ORDER_QUERY_WITH_CONTINUATION",
+  "broker_rows_returned": 53,
+  "matched_rows": [
+    {
+      "broker_order_id": "0000001539",
+      "symbol": "012330",
+      "side": "SELL",
+      "ordered_qty": 157,
+      "filled_qty": 157,
+      "total_fill_amount": 76302000,
+      "avg_fill_price": 486000,
+      "order_time": "090019"
+    },
+    {
+      "broker_order_id": "0000001541",
+      "symbol": "034730",
+      "side": "SELL",
+      "ordered_qty": 557,
+      "filled_qty": 557,
+      "total_fill_amount": 343739000,
+      "avg_fill_price": 617125,
+      "order_time": "090020"
+    },
+    {
+      "broker_order_id": "0000001568",
+      "symbol": "078930",
+      "side": "SELL",
+      "ordered_qty": 39,
+      "filled_qty": 39,
+      "total_fill_amount": 3108100,
+      "avg_fill_price": 79694,
+      "order_time": "090021"
+    },
+    {
+      "broker_order_id": "0000001589",
+      "symbol": "161390",
+      "side": "SELL",
+      "ordered_qty": 526,
+      "filled_qty": 526,
+      "total_fill_amount": 38704200,
+      "avg_fill_price": 73582,
+      "order_time": "090023"
+    },
+    {
+      "broker_order_id": "0000001607",
+      "symbol": "278470",
+      "side": "SELL",
+      "ordered_qty": 9,
+      "filled_qty": 9,
+      "total_fill_amount": 3582000,
+      "avg_fill_price": 398000,
+      "order_time": "090025"
+    }
+  ],
+  "broker_only_rows": [
+    {
+      "date": "2026-07-09",
+      "broker_order_id": "0000047428",
+      "symbol": "009420",
+      "side": "SELL",
+      "ordered_qty": 870,
+      "filled_qty": 870,
+      "total_fill_amount": 49620600,
+      "avg_fill_price": 57035,
+      "order_time": "145948"
+    },
+    {
+      "date": "2026-07-09",
+      "broker_order_id": "0000047438",
+      "symbol": "064400",
+      "side": "SELL",
+      "ordered_qty": 1826,
+      "filled_qty": 1826,
+      "total_fill_amount": 127637250,
+      "avg_fill_price": 69899,
+      "order_time": "145952"
+    },
+    {
+      "date": "2026-07-09",
+      "broker_order_id": "0000047443",
+      "symbol": "021240",
+      "side": "SELL",
+      "ordered_qty": 1317,
+      "filled_qty": 1317,
+      "total_fill_amount": 113664400,
+      "avg_fill_price": 86305,
+      "order_time": "145959"
+    },
+    {
+      "date": "2026-07-09",
+      "broker_order_id": "0000048097",
+      "symbol": "009150",
+      "side": "SELL",
+      "ordered_qty": 127,
+      "filled_qty": 127,
+      "total_fill_amount": 187123000,
+      "avg_fill_price": 1473409,
+      "order_time": "150604"
+    },
+    {
+      "date": "2026-07-09",
+      "broker_order_id": "0000048105",
+      "symbol": "009420",
+      "side": "SELL",
+      "ordered_qty": 883,
+      "filled_qty": 883,
+      "total_fill_amount": 49770800,
+      "avg_fill_price": 56365,
+      "order_time": "150609"
+    }
+  ],
+  "broker_nonfill_overrides": [
+    {
+      "date": "2026-07-09",
+      "broker_order_id": "0000049114",
+      "symbol": "012510",
+      "side": "BUY",
+      "ordered_qty": 168,
+      "filled_qty": 0,
+      "remaining_qty": 168,
+      "total_fill_amount": 0,
+      "cancelled": false,
+      "order_time": "151739",
+      "db_order_id": "4029344d-49eb-4a15-882d-74208da79058",
+      "db_original_status": "FILLED",
+      "db_original_filled_qty": 168
+    },
+    {
+      "date": "2026-07-09",
+      "broker_order_id": "0000049261",
+      "symbol": "012510",
+      "side": "BUY",
+      "ordered_qty": 167,
+      "filled_qty": 0,
+      "remaining_qty": 167,
+      "total_fill_amount": 0,
+      "cancelled": false,
+      "order_time": "151922",
+      "db_order_id": "50c6a973-3052-48a0-a420-702b25b7e9d7",
+      "db_original_status": "FILLED",
+      "db_original_filled_qty": 167
+    },
+    {
+      "date": "2026-07-09",
+      "broker_order_id": "0000049497",
+      "symbol": "012510",
+      "side": "BUY",
+      "ordered_qty": 167,
+      "filled_qty": 0,
+      "remaining_qty": 167,
+      "total_fill_amount": 0,
+      "cancelled": false,
+      "order_time": "152111",
+      "db_order_id": "70f00a1b-52b2-45af-ac16-1b044edddf7b",
+      "db_original_status": "FILLED",
+      "db_original_filled_qty": 167
+    },
+    {
+      "date": "2026-07-10",
+      "broker_order_id": "0000003501",
+      "symbol": "012510",
+      "side": "BUY",
+      "ordered_qty": 218,
+      "filled_qty": 0,
+      "remaining_qty": 218,
+      "total_fill_amount": 0,
+      "cancelled": false,
+      "order_time": "090632",
+      "db_order_id": "c4ea0dad-6bda-481d-b791-f3a199e26b1b",
+      "db_original_status": "FILLED",
+      "db_original_filled_qty": 218
+    },
+    {
+      "date": "2026-07-10",
+      "broker_order_id": "0000003907",
+      "symbol": "012510",
+      "side": "BUY",
+      "ordered_qty": 219,
+      "filled_qty": 0,
+      "remaining_qty": 219,
+      "total_fill_amount": 0,
+      "cancelled": false,
+      "order_time": "090753",
+      "db_order_id": "22b723f1-c88e-4ca8-8256-5e5b5eeec0ba",
+      "db_original_status": "FILLED",
+      "db_original_filled_qty": 219
+    },
+    {
+      "date": "2026-07-10",
+      "broker_order_id": "0000004205",
+      "symbol": "012510",
+      "side": "BUY",
+      "ordered_qty": 219,
+      "filled_qty": 0,
+      "remaining_qty": 219,
+      "total_fill_amount": 0,
+      "cancelled": false,
+      "order_time": "090909",
+      "db_order_id": "3cc42f45-2a7d-431b-8b51-ff8c9c7632c5",
+      "db_original_status": "FILLED",
+      "db_original_filled_qty": 219
+    },
+    {
+      "date": "2026-07-10",
+      "broker_order_id": "0000006129",
+      "symbol": "012510",
+      "side": "BUY",
+      "ordered_qty": 220,
+      "filled_qty": 0,
+      "remaining_qty": 220,
+      "total_fill_amount": 0,
+      "cancelled": false,
+      "order_time": "091628",
+      "db_order_id": "21350af9-aa7c-4e0e-a30a-ab2fd87daa76",
+      "db_original_status": "FILLED",
+      "db_original_filled_qty": 220
+    }
+  ],
+  "result": "RECOVERED_FIVE_MISSING_FILL_PRICES_FIVE_BROKER_ONLY_FILLS_AND_SEVEN_FALSE_DB_FILLS",
+  "continuation_fix": {
+    "previous_rows": 15,
+    "corrected_rows": 53,
+    "cause": "KIS continuation header F was not followed",
+    "official_reference": "https://github.com/koreainvestment/open-trading-api/blob/main/examples_llm/domestic_stock/inquire_daily_ccld/inquire_daily_ccld.py"
+  },
+  "safety": {
+    "orders_created": 0,
+    "orders_cancelled": 0,
+    "account_mutations": 0,
+    "real_mode_used": false
+  }
+}

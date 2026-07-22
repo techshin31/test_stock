@@ -40,6 +40,8 @@ dependencies = [
     "pykrx>=1.0.51",
     "setuptools<70",
     "mojito2==0.1.6",
+    "fastapi>=0.139.2",
+    "uvicorn>=0.51.0",
 ]
 
 [dependency-groups]

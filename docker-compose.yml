@@ -1,0 +1,91 @@
+services:
+  ############################################################
+  # 1. PostgreSQL Database
+  ############################################################
+  postgres:
+    image: postgres:16
+    container_name: quantpilot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin1234
+      POSTGRES_DB: quantpilot_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./storage/postgres/database:/var/lib/postgresql/data
+      - ./storage/postgres/schema/01_codes_schema.sql:/docker-entrypoint-initdb.d/01_codes_schema.sql:ro
+      - ./storage/postgres/schema/02_codes_seed.sql:/docker-entrypoint-initdb.d/02_codes_seed.sql:ro
+      - ./storage/postgres/schema/03_user_schema.sql:/docker-entrypoint-initdb.d/03_user_schema.sql:ro
+      - ./storage/postgres/schema/04_trader_schema.sql:/docker-entrypoint-initdb.d/04_trader_schema.sql:ro
+      - ./storage/postgres/schema/05_market_data_schema.sql:/docker-entrypoint-initdb.d/05_market_data_schema.sql:ro
+      - ./storage/postgres/schema/06_fa_analysis_schema.sql:/docker-entrypoint-initdb.d/06_fa_analysis_schema.sql:ro
+      - ./storage/postgres/schema/07_strategy_seed.sql:/docker-entrypoint-initdb.d/07_strategy_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d quantpilot_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ############################################################
+  # 2. FastAPI Backend Service
+  ############################################################
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    container_name: quantpilot-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
+      - ./reports:/app/reports
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ############################################################
+  # 3. PAPER Trader Scheduler Daemon
+  ############################################################
+  trader:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    container_name: quantpilot-trader
+    restart: unless-stopped
+    command: ["uv", "run", "python", "-m", "core.utils.scheduler_supervisor", "--mode", "PAPER"]
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      KIS_ENV: paper
+      ALLOW_LIVE_ORDER: "false"
+    volumes:
+      - ./logs:/app/logs
+      - ./reports:/app/reports
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  ############################################################
+  # 4. React Web Console Dashboard (Nginx)
+  ############################################################
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: quantpilot-dashboard
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - api

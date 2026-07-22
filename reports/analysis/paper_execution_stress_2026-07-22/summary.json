@@ -1,0 +1,230 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-22T12:33:02+09:00",
+  "mode": "PAPER",
+  "observe_only": true,
+  "production_rule_changed": false,
+  "calibration_status": "PROVISIONAL_SMALL_SAMPLE",
+  "execution_samples": {
+    "BUY": {
+      "side": "BUY",
+      "orders": 5,
+      "filled_orders": 3,
+      "rejected_orders": 2,
+      "cancelled_orders": 0,
+      "status_counts": {
+        "FILLED": 3,
+        "REJECTED": 2
+      },
+      "order_fill_rate": 0.6,
+      "quantity_fill_rate": 0.6536685479733196,
+      "beta_1_1_posterior_mean_fill_rate": 0.5714285714285714,
+      "wilson_95_lower_fill_rate": 0.23071993220883708,
+      "wilson_95_upper_fill_rate": 0.8823817688407467,
+      "sample_sufficient": false
+    },
+    "SELL": {
+      "side": "SELL",
+      "orders": 4,
+      "filled_orders": 3,
+      "rejected_orders": 1,
+      "cancelled_orders": 0,
+      "status_counts": {
+        "FILLED": 3,
+        "REJECTED": 1
+      },
+      "order_fill_rate": 0.75,
+      "quantity_fill_rate": 0.2945258288357749,
+      "beta_1_1_posterior_mean_fill_rate": 0.6666666666666666,
+      "wilson_95_lower_fill_rate": 0.3006360524426366,
+      "wilson_95_upper_fill_rate": 0.9544139373553637,
+      "sample_sufficient": false
+    }
+  },
+  "scenarios": {
+    "IDEAL_FULL_FILL": {
+      "A_CURRENT": {
+        "total_return": -0.017502667640842073,
+        "max_drawdown": -0.1906481376690169,
+        "annualized_turnover": 45.83367107763751,
+        "total_cost_ratio": 0.03951576003099509,
+        "average_exposure": 0.7000170138908755,
+        "hard_stop_count": 19,
+        "trailing_stop_count": 33,
+        "confirmed_reentries": 0
+      },
+      "R_TREND_REARM": {
+        "total_return": -0.000305977118945866,
+        "max_drawdown": -0.1716468902972471,
+        "annualized_turnover": 23.653884299835617,
+        "total_cost_ratio": 0.020334686742200663,
+        "average_exposure": 0.40589809737242744,
+        "hard_stop_count": 11,
+        "trailing_stop_count": 16,
+        "confirmed_reentries": 14
+      },
+      "C_CAP10": {
+        "total_return": -0.018322004021282035,
+        "max_drawdown": -0.14940224010256054,
+        "annualized_turnover": 28.68158190071761,
+        "total_cost_ratio": 0.02472592515129411,
+        "average_exposure": 0.5116100471856762,
+        "hard_stop_count": 19,
+        "trailing_stop_count": 33,
+        "confirmed_reentries": 0
+      },
+      "C_CAP08": {
+        "total_return": -0.012852581828408316,
+        "max_drawdown": -0.12047355017527128,
+        "annualized_turnover": 22.934248088279176,
+        "total_cost_ratio": 0.019768299039837182,
+        "average_exposure": 0.40880604547563754,
+        "hard_stop_count": 19,
+        "trailing_stop_count": 33,
+        "confirmed_reentries": 0
+      }
+    },
+    "STABILIZED_POSTERIOR_MEAN": {
+      "A_CURRENT": {
+        "total_return": 0.011927997831229664,
+        "max_drawdown": -0.19587671364793613,
+        "annualized_turnover": 35.72062155117022,
+        "total_cost_ratio": 0.03086733160826885,
+        "average_exposure": 0.6427336117473744,
+        "hard_stop_count": 32,
+        "trailing_stop_count": 39,
+        "confirmed_reentries": 0
+      },
+      "R_TREND_REARM": {
+        "total_return": 0.055445328556058326,
+        "max_drawdown": -0.15349832902654514,
+        "annualized_turnover": 21.32052817068964,
+        "total_cost_ratio": 0.01817876741514448,
+        "average_exposure": 0.4029304071612145,
+        "hard_stop_count": 12,
+        "trailing_stop_count": 19,
+        "confirmed_reentries": 12
+      },
+      "C_CAP10": {
+        "total_return": 0.035557931945919385,
+        "max_drawdown": -0.11998880389603084,
+        "annualized_turnover": 24.417049522239505,
+        "total_cost_ratio": 0.021025691497165648,
+        "average_exposure": 0.5041696189946139,
+        "hard_stop_count": 21,
+        "trailing_stop_count": 40,
+        "confirmed_reentries": 0
+      },
+      "C_CAP08": {
+        "total_return": 0.0004458645869382938,
+        "max_drawdown": -0.13239982032188036,
+        "annualized_turnover": 19.50664186554323,
+        "total_cost_ratio": 0.016801617082772703,
+        "average_exposure": 0.3748921439297853,
+        "hard_stop_count": 20,
+        "trailing_stop_count": 36,
+        "confirmed_reentries": 0
+      }
+    },
+    "STABILIZED_WILSON_LOWER": {
+      "A_CURRENT": {
+        "total_return": 0.0047977110082373375,
+        "max_drawdown": -0.1822851788125499,
+        "annualized_turnover": 27.697766728528187,
+        "total_cost_ratio": 0.023758911426653363,
+        "average_exposure": 0.5867315550329312,
+        "hard_stop_count": 22,
+        "trailing_stop_count": 61,
+        "confirmed_reentries": 0
+      },
+      "R_TREND_REARM": {
+        "total_return": -0.10860887262769692,
+        "max_drawdown": -0.21376196851827622,
+        "annualized_turnover": 18.96995072904248,
+        "total_cost_ratio": 0.016241401022241884,
+        "average_exposure": 0.4345658571918998,
+        "hard_stop_count": 31,
+        "trailing_stop_count": 49,
+        "confirmed_reentries": 9
+      },
+      "C_CAP10": {
+        "total_return": -0.08092571725162934,
+        "max_drawdown": -0.19319492245477266,
+        "annualized_turnover": 19.315151228158058,
+        "total_cost_ratio": 0.01661276305340971,
+        "average_exposure": 0.41541972999544885,
+        "hard_stop_count": 31,
+        "trailing_stop_count": 49,
+        "confirmed_reentries": 0
+      },
+      "C_CAP08": {
+        "total_return": -0.06155595847180029,
+        "max_drawdown": -0.14460574554779593,
+        "annualized_turnover": 13.018571363469007,
+        "total_cost_ratio": 0.011122793852694412,
+        "average_exposure": 0.3213271351902712,
+        "hard_stop_count": 41,
+        "trailing_stop_count": 56,
+        "confirmed_reentries": 0
+      }
+    }
+  },
+  "candidate": "R_TREND_REARM",
+  "baseline": "A_CURRENT",
+  "scenario_checks": [
+    {
+      "scenario": "IDEAL_FULL_FILL",
+      "return_improves": true,
+      "drawdown_improves": true,
+      "turnover_improves": true,
+      "passed": true,
+      "candidate_return": -0.000305977118945866,
+      "baseline_return": -0.017502667640842073,
+      "candidate_mdd": -0.1716468902972471,
+      "baseline_mdd": -0.1906481376690169,
+      "candidate_turnover": 23.653884299835617,
+      "baseline_turnover": 45.83367107763751
+    },
+    {
+      "scenario": "STABILIZED_POSTERIOR_MEAN",
+      "return_improves": true,
+      "drawdown_improves": true,
+      "turnover_improves": true,
+      "passed": true,
+      "candidate_return": 0.055445328556058326,
+      "baseline_return": 0.011927997831229664,
+      "candidate_mdd": -0.15349832902654514,
+      "baseline_mdd": -0.19587671364793613,
+      "candidate_turnover": 21.32052817068964,
+      "baseline_turnover": 35.72062155117022
+    },
+    {
+      "scenario": "STABILIZED_WILSON_LOWER",
+      "return_improves": false,
+      "drawdown_improves": false,
+      "turnover_improves": true,
+      "passed": false,
+      "candidate_return": -0.10860887262769692,
+      "baseline_return": 0.0047977110082373375,
+      "candidate_mdd": -0.21376196851827622,
+      "baseline_mdd": -0.1822851788125499,
+      "candidate_turnover": 18.96995072904248,
+      "baseline_turnover": 27.697766728528187
+    }
+  ],
+  "promotion_gate": {
+    "ready": false,
+    "minimum_side_sample": 30,
+    "sample_ready": false,
+    "all_execution_scenarios_pass": false,
+    "manual_review_required": true,
+    "blockers": [
+      "post-hardening BUY and SELL samples have not each reached 30 orders",
+      "trend-rearm does not improve return, drawdown, and turnover in every execution scenario"
+    ]
+  },
+  "sources": [
+    "reports\\analysis\\paper_ledger_2026-07-22\\order_lifecycle.csv",
+    "reports\\analysis\\paper_reentry_experiments\\pass_only\\metrics.json"
+  ]
+}

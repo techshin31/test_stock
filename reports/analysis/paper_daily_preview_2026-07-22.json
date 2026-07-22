@@ -1,0 +1,584 @@
+{
+  "schema_version": 2,
+  "report_date": "2026-07-22",
+  "generated_at": "2026-07-22T11:26:04+09:00",
+  "report_status": "PRELIMINARY_INTRADAY",
+  "mode": "PAPER",
+  "executive_summary": "REAL 전환은 5개 조건 때문에 차단됐습니다.",
+  "performance": {
+    "baseline_date": "2026-07-20",
+    "through_date": "2026-07-22",
+    "performance_days": 3,
+    "baseline_total_asset": 463025590.0,
+    "ending_total_asset": 471193229.0,
+    "net_return": 0.017639714038267362,
+    "benchmark_return": 0.09376837020256024,
+    "excess_return": -0.07612865616429287,
+    "max_drawdown": -0.0055075034513469845,
+    "annualized_volatility": 0.24253327527974677,
+    "total_costs": -221029.555,
+    "cost_drag": -0.00047735926431193574,
+    "benchmark_symbol": "^KS11",
+    "starting_capital_reference": 500000000.0,
+    "pnl_vs_starting_capital": -28806771.0,
+    "return_vs_starting_capital": -0.05761354200000002,
+    "post_baseline_pnl": 8167639.0,
+    "certified_benchmark_date": "2026-07-16",
+    "effective_benchmark_date": "2026-07-20",
+    "benchmark_anchor_adjusted": true,
+    "validation_status": "BLOCKED"
+  },
+  "performance_trend": [
+    {
+      "date": "2026-07-20",
+      "total_asset": 463025590.0,
+      "external_cash_flow": 0.0,
+      "daily_return": 0.0,
+      "cumulative_return": 0.0,
+      "drawdown": 0.0,
+      "benchmark_return": 0.0
+    },
+    {
+      "date": "2026-07-21",
+      "total_asset": 473802699.0,
+      "external_cash_flow": 0.0,
+      "daily_return": 0.02327540687330054,
+      "cumulative_return": 0.02327540687330054,
+      "drawdown": 0.0,
+      "benchmark_return": 0.03555410918928059
+    },
+    {
+      "date": "2026-07-22",
+      "total_asset": 471193229.0,
+      "external_cash_flow": 0.0,
+      "daily_return": -0.0055075034513469845,
+      "cumulative_return": 0.017639714038267362,
+      "drawdown": -0.0055075034513469845,
+      "benchmark_return": 0.09376837020256024
+    }
+  ],
+  "operations": {
+    "as_of": "2026-07-22",
+    "observed_trading_days": 2,
+    "scan_count": 489,
+    "fresh_scan_count": 489,
+    "risk_checks_total": 1980,
+    "risk_checks_completed": 1980,
+    "submitted_orders": 9,
+    "reconciled_orders": 9,
+    "critical_incidents": 8,
+    "net_return": 0.017639714038267362,
+    "benchmark_return": 0.09376837020256024,
+    "max_drawdown": -0.0055075034513469845,
+    "cost_drag": -0.00047735926431193574,
+    "performance_validation_status": "BLOCKED",
+    "data_freshness_rate": 1.0,
+    "risk_check_coverage": 1.0,
+    "order_reconciliation_rate": 1.0,
+    "operational_integrity": 1.0,
+    "excess_return": -0.07612865616429287
+  },
+  "trading": {
+    "order_count": 9,
+    "terminal_order_count": 9,
+    "open_order_count": 0,
+    "execution_count": 16,
+    "order_status_counts": {
+      "FILLED": 6,
+      "REJECTED": 3
+    },
+    "filled_order_count": 6,
+    "fill_rate": 0.6666666666666666,
+    "terminal_fill_rate": 0.6666666666666666,
+    "execution_linked_filled_order_count": 6,
+    "execution_link_coverage": 1.0,
+    "fill_notional": 262898300.0,
+    "turnover_since_baseline": 0.5677835214248094,
+    "execution_days": 2,
+    "average_daily_turnover": 0.2838917607124047,
+    "commission": 39434.74499999999,
+    "tax": 240635.7,
+    "slippage": -501100.0,
+    "total_costs": -221029.555,
+    "modeled_commission_execution_count": 16,
+    "modeled_tax_execution_count": 6,
+    "cost_method": "recorded when non-zero; otherwise configured KOSPI model"
+  },
+  "ledger_quality": {
+    "metadata": {
+      "generated_at": "2026-07-22T11:26:07+09:00",
+      "cutoff": "2026-07-22T11:25:45+09:00",
+      "timezone": "Asia/Seoul",
+      "mode": "PAPER",
+      "strategy": "aggressive",
+      "account_scope": "***9904-01",
+      "starting_capital": 500000000.0,
+      "scope_policy": "PAPER confirmed rows plus UNKNOWN legacy rows inferred from exact cash continuity"
+    },
+    "endpoint": {
+      "cash": 191381629.0,
+      "total_asset": 471193229.0,
+      "position_count": 4,
+      "total_pnl": -28806771.0,
+      "total_return": -0.057613542,
+      "broker_unrealized_pnl": 6728587.0,
+      "certified_baseline_asset": 463025590.0,
+      "post_baseline_pnl": 8167639.0,
+      "post_baseline_return": 0.017639714038267303
+    },
+    "order_result_replay": {
+      "orders": 465,
+      "terminal_orders": 465,
+      "status_counts": {
+        "REJECTED": 325,
+        "FILLED": 128,
+        "CANCELLED": 12
+      },
+      "scope_counts": {
+        "INFERRED_LEGACY_PAPER": 456,
+        "CONFIRMED_PAPER": 9
+      },
+      "filled_orders": 128,
+      "fill_rate": 0.2752688172043011,
+      "terminal_fill_rate": 0.2752688172043011,
+      "fill_notional": 3285875373.7939997,
+      "fill_notional_multiple_of_starting_capital": 6.571750747587999,
+      "modeled_commission_and_tax": 2553458.6544087,
+      "recorded_slippage": 3778201.750000001,
+      "partially_matched_realized_gross_pnl": -14998921.188234543,
+      "unmatched_sell_qty": 0.0
+    },
+    "reconciliation": {
+      "position_rows": 24,
+      "exact_position_matches": 14,
+      "position_match_rate": 0.5833333333333334,
+      "endpoint_held_positions": 4,
+      "exact_endpoint_held_position_matches": 2,
+      "endpoint_held_position_match_rate": 0.5,
+      "phantom_nonzero_replay_positions": 8,
+      "balancing_qty_abs_sum": 7689.0,
+      "unresolved_pnl_balancing_item": -17982978.157356754,
+      "known_replay_nonzero_positions": 8
+    },
+    "data_quality": {
+      "overall_grade": "LOW_FOR_TRADE_LEVEL_PNL__HIGH_FOR_ENDPOINT_PNL",
+      "fill_price_coverage": 0.9609375,
+      "execution_table_coverage_of_filled_orders": 0.625,
+      "zero_recorded_commission_tax_rate": 1.0,
+      "unpriced_filled_orders": 5,
+      "unpriced_filled_qty": 1288.0,
+      "first_positive_observation_at": "2026-07-09T00:51:50+09:00",
+      "first_positive_observation_total": 453599400.0,
+      "first_positive_daily_nav_date": "2026-07-09",
+      "first_positive_daily_nav_total": 473678441.0,
+      "legacy_last_cash": 210749681.0,
+      "paper_first_cash": 210749681.0,
+      "legacy_to_paper_cash_continuity": true,
+      "critical_findings": [
+        "The account endpoint and 500M total P&L are directly observed and exact at the cutoff.",
+        "Trade-level realized P&L is incomplete because executions and some fill prices are missing.",
+        "Legacy UNKNOWN scope is inferred as PAPER lineage from exact cash continuity, not explicit account identity.",
+        "Commission and tax fields are zero; configured rates are modeled separately.",
+        "Position gaps are preserved as balancing entries and are never fabricated into trades."
+      ]
+    }
+  },
+  "shadow_reentry": {
+    "schema_version": 1,
+    "generated_at": "2026-07-22T11:25:22+09:00",
+    "mode": "PAPER",
+    "strategy": "aggressive",
+    "account_scope": "***9904-01",
+    "variant": "R_TREND_REARM",
+    "observe_only": true,
+    "order_permission": "DENIED_BY_DESIGN",
+    "rule": {
+      "eligible_exit_reasons": [
+        "HARD_STOP_LOSS",
+        "TRAILING_STOP"
+      ],
+      "conditions": [
+        "close > recorded exit price",
+        "close > MA20",
+        "MA20 > previous-session MA20",
+        "20-session momentum > 0"
+      ],
+      "required_consecutive_sessions": 3
+    },
+    "observed_sessions": [
+      "2026-07-21"
+    ],
+    "completed_observation_sessions": 1,
+    "required_observation_sessions": 10,
+    "observation_window_complete": false,
+    "risk_exit_count": 5,
+    "shadow_ready_candidate_count": 0,
+    "candidates": {
+      "005930.KS": {
+        "ticker": "005930.KS",
+        "exit_timestamp": "2026-07-21T09:14:51",
+        "exit_date": "2026-07-21",
+        "exit_price": 244000.0,
+        "exit_price_source": "ORDER_EXPECTED_PRICE",
+        "exit_reason": "TRAILING_STOP",
+        "broker_order_id": "0000004843",
+        "signal_date": "2026-07-21",
+        "production_position_present": false,
+        "observation": {
+          "data_ready": true,
+          "close": 259000.0,
+          "ma20": 296250.0,
+          "previous_ma20": 300975.0,
+          "momentum20": -0.26732673267326734,
+          "conditions": {
+            "above_exit_price": true,
+            "above_ma20": false,
+            "ma20_rising": false,
+            "momentum20_positive": false
+          },
+          "all_conditions_met": false
+        },
+        "eligible_after_exit_session": false,
+        "qualifies_today": false,
+        "confirmation_streak": 0,
+        "required_confirmation_sessions": 3,
+        "shadow_reentry_ready": false,
+        "action": "OBSERVE_ONLY_NO_ORDER"
+      },
+      "011070.KS": {
+        "ticker": "011070.KS",
+        "exit_timestamp": "2026-07-14T15:03:40",
+        "exit_date": "2026-07-14",
+        "exit_price": 661000.0,
+        "exit_price_source": "ORDER_EXPECTED_PRICE",
+        "exit_reason": "HARD_STOP_LOSS",
+        "broker_order_id": "0000038017",
+        "signal_date": "2026-07-21",
+        "production_position_present": false,
+        "observation": {
+          "data_ready": true,
+          "close": 629000.0,
+          "ma20": 809250.0,
+          "previous_ma20": 834300.0,
+          "momentum20": -0.4433628318584071,
+          "conditions": {
+            "above_exit_price": false,
+            "above_ma20": false,
+            "ma20_rising": false,
+            "momentum20_positive": false
+          },
+          "all_conditions_met": false
+        },
+        "eligible_after_exit_session": true,
+        "qualifies_today": false,
+        "confirmation_streak": 0,
+        "required_confirmation_sessions": 3,
+        "shadow_reentry_ready": false,
+        "action": "OBSERVE_ONLY_NO_ORDER"
+      },
+      "034730.KS": {
+        "ticker": "034730.KS",
+        "exit_timestamp": "2026-07-21T09:20:54",
+        "exit_date": "2026-07-21",
+        "exit_price": 579000.0,
+        "exit_price_source": "ORDER_EXPECTED_PRICE",
+        "exit_reason": "TRAILING_STOP",
+        "broker_order_id": "0000006063",
+        "signal_date": "2026-07-21",
+        "production_position_present": false,
+        "observation": {
+          "data_ready": true,
+          "close": 596000.0,
+          "ma20": 675500.0,
+          "previous_ma20": 682200.0,
+          "momentum20": -0.18356164383561646,
+          "conditions": {
+            "above_exit_price": true,
+            "above_ma20": false,
+            "ma20_rising": false,
+            "momentum20_positive": false
+          },
+          "all_conditions_met": false
+        },
+        "eligible_after_exit_session": false,
+        "qualifies_today": false,
+        "confirmation_streak": 0,
+        "required_confirmation_sessions": 3,
+        "shadow_reentry_ready": false,
+        "action": "OBSERVE_ONLY_NO_ORDER"
+      },
+      "180640.KS": {
+        "ticker": "180640.KS",
+        "exit_timestamp": "2026-07-14T14:59:55",
+        "exit_date": "2026-07-14",
+        "exit_price": 131600.0,
+        "exit_price_source": "ORDER_EXPECTED_PRICE",
+        "exit_reason": "HARD_STOP_LOSS",
+        "broker_order_id": "0000037707",
+        "signal_date": "2026-07-21",
+        "production_position_present": false,
+        "observation": {
+          "data_ready": true,
+          "close": 102800.0,
+          "ma20": 121215.0,
+          "previous_ma20": 121765.0,
+          "momentum20": -0.09666080843585234,
+          "conditions": {
+            "above_exit_price": false,
+            "above_ma20": false,
+            "ma20_rising": false,
+            "momentum20_positive": false
+          },
+          "all_conditions_met": false
+        },
+        "eligible_after_exit_session": true,
+        "qualifies_today": false,
+        "confirmation_streak": 0,
+        "required_confirmation_sessions": 3,
+        "shadow_reentry_ready": false,
+        "action": "OBSERVE_ONLY_NO_ORDER"
+      },
+      "402340.KS": {
+        "ticker": "402340.KS",
+        "exit_timestamp": "2026-07-14T15:01:24",
+        "exit_date": "2026-07-14",
+        "exit_price": 1161000.0,
+        "exit_price_source": "ORDER_EXPECTED_PRICE",
+        "exit_reason": "HARD_STOP_LOSS",
+        "broker_order_id": "0000037871",
+        "signal_date": "2026-07-21",
+        "production_position_present": false,
+        "observation": {
+          "data_ready": true,
+          "close": 1253000.0,
+          "ma20": 1484500.0,
+          "previous_ma20": 1520350.0,
+          "momentum20": -0.36395939086294415,
+          "conditions": {
+            "above_exit_price": true,
+            "above_ma20": false,
+            "ma20_rising": false,
+            "momentum20_positive": false
+          },
+          "all_conditions_met": false
+        },
+        "eligible_after_exit_session": true,
+        "qualifies_today": false,
+        "confirmation_streak": 0,
+        "required_confirmation_sessions": 3,
+        "shadow_reentry_ready": false,
+        "action": "OBSERVE_ONLY_NO_ORDER"
+      }
+    }
+  },
+  "strategy_change_gate": {
+    "candidate": "R_TREND_REARM",
+    "ready": false,
+    "production_rule_changed": false,
+    "minimum_live_observation_sessions": 10,
+    "criteria": [
+      {
+        "name": "recent_return_improves",
+        "passed": true,
+        "detail": "current=-1.7503%, shadow=-0.0306%"
+      },
+      {
+        "name": "recent_max_drawdown_improves",
+        "passed": true,
+        "detail": "current=-19.0648%, shadow=-17.1647%"
+      },
+      {
+        "name": "recent_turnover_improves",
+        "passed": true,
+        "detail": "current=45.83x, shadow=23.65x"
+      },
+      {
+        "name": "live_shadow_observation_window",
+        "passed": false,
+        "detail": "1/10 completed sessions"
+      },
+      {
+        "name": "shadow_is_observe_only",
+        "passed": true,
+        "detail": "order path is disconnected from the shadow candidate"
+      },
+      {
+        "name": "held_quantity_ledger_match",
+        "passed": false,
+        "detail": "50.00%"
+      },
+      {
+        "name": "filled_order_execution_link_coverage",
+        "passed": false,
+        "detail": "62.50%"
+      },
+      {
+        "name": "no_unresolved_order_states",
+        "passed": true,
+        "detail": "0 open orders"
+      }
+    ],
+    "blockers": [
+      "1/10 completed sessions",
+      "50.00%",
+      "62.50%"
+    ],
+    "experiment_evidence": {
+      "as_of": "2026-07-09",
+      "data_quality": {
+        "price_history_end": "2026-07-09",
+        "experiment_end": "2026-07-09",
+        "selection_runs": 7,
+        "selection_statuses": {
+          "PASS": 6,
+          "PUBLISHED": 1
+        },
+        "warning_run_share": 0.0,
+        "price_tickers": 789,
+        "calendar_days": 107,
+        "price_missing_rate_after_fill": 0.0002842827191642088,
+        "kospi_missing_rate": 0.0,
+        "quality_grade": "MEDIUM",
+        "limitations": [
+          "Only PASS/PUBLISHED historical selection runs are included.",
+          "The latest available constituent price, not the current PAPER snapshot date, determines the experiment end.",
+          "Daily closes and proportional weights approximate share-level fills and intraday stop execution.",
+          "Broker rejections, ambiguous results, partial fills, and realized taxes are represented only by fixed cost rates."
+        ]
+      },
+      "current": {
+        "trading_days": 107,
+        "total_return": -0.017502667640842073,
+        "cagr": -0.04073339735386994,
+        "annual_volatility": 0.37814897586164153,
+        "sharpe_zero_rf": 0.07865296709554467,
+        "sortino_zero_rf": 0.10146897575556955,
+        "calmar": -0.21365746265293684,
+        "max_drawdown": -0.1906481376690169,
+        "positive_day_rate": 0.5514018691588785,
+        "profit_factor_daily": 1.0136723560184164,
+        "best_day": 0.08606471806711606,
+        "worst_day": -0.07173786933186244,
+        "average_daily_turnover": 0.18187964713348218,
+        "annualized_turnover": 45.83367107763751,
+        "total_cost_ratio": 0.03951576003099509,
+        "final_equity_multiple": 0.9824973323591579,
+        "average_exposure": 0.7000170138908755,
+        "hard_stop_count": 19,
+        "trailing_stop_count": 33,
+        "reentry_blocked_sessions": 0,
+        "confirmed_reentries": 0
+      },
+      "shadow": {
+        "trading_days": 107,
+        "total_return": -0.000305977118945866,
+        "cagr": -0.0007204696151038581,
+        "annual_volatility": 0.2776067773902048,
+        "sharpe_zero_rf": 0.13667827845820385,
+        "sortino_zero_rf": 0.1491276566899111,
+        "calmar": -0.0041973939280589056,
+        "max_drawdown": -0.1716468902972471,
+        "positive_day_rate": 0.4672897196261682,
+        "profit_factor_daily": 1.0264921742963258,
+        "best_day": 0.03896516780112735,
+        "worst_day": -0.07122036933186243,
+        "average_daily_turnover": 0.09386462023744292,
+        "annualized_turnover": 23.653884299835617,
+        "total_cost_ratio": 0.020334686742200663,
+        "final_equity_multiple": 0.9996940228810541,
+        "average_exposure": 0.40589809737242744,
+        "hard_stop_count": 11,
+        "trailing_stop_count": 16,
+        "reentry_blocked_sessions": 492,
+        "confirmed_reentries": 14
+      }
+    }
+  },
+  "validation": {
+    "status": "BLOCKED",
+    "checks": [
+      {
+        "name": "operational_log",
+        "passed": true,
+        "detail": "489 completed scans"
+      },
+      {
+        "name": "certified_baseline",
+        "passed": true,
+        "detail": "2026-07-20T17:46:10+09:00"
+      },
+      {
+        "name": "account_snapshot_freshness",
+        "passed": true,
+        "detail": "2026-07-22T11:25:45+09:00"
+      },
+      {
+        "name": "cash_flow_ledger",
+        "passed": true,
+        "detail": "0 declared external flows"
+      },
+      {
+        "name": "benchmark_download",
+        "passed": true,
+        "detail": "4 KOSPI closes"
+      },
+      {
+        "name": "benchmark_anchor_alignment",
+        "passed": true,
+        "detail": "certified=2026-07-16, effective=2026-07-20, account baseline unchanged"
+      },
+      {
+        "name": "scoped_order_execution_data",
+        "passed": true,
+        "detail": "9 orders / 16 executions"
+      },
+      {
+        "name": "paper_ledger_reconstruction",
+        "passed": true,
+        "detail": "465 orders; held quantity match 50.00%"
+      },
+      {
+        "name": "performance_calculation",
+        "passed": true,
+        "detail": "3 daily NAV observations"
+      }
+    ],
+    "errors": [
+      "market close is not complete (15:30 KST required)"
+    ]
+  },
+  "promotion": {
+    "target_mode": "REAL",
+    "ready": false,
+    "manual_approval_required": true,
+    "blockers": [
+      "observed_trading_days 2 < 60",
+      "critical_incidents 8 > 0",
+      "performance_validation_status BLOCKED != READY",
+      "submitted_orders 9 < 10",
+      "excess_return -0.0761 <= 0.0000"
+    ]
+  },
+  "sources": [
+    "C:\\dev\\project\\Service_Stock_Analysis\\logs\\paper\\operational_health.jsonl",
+    "C:\\dev\\project\\Service_Stock_Analysis\\logs\\paper\\account_snapshots.jsonl",
+    "C:\\dev\\project\\Service_Stock_Analysis\\reports\\promotion\\paper\\baseline.json",
+    "C:\\dev\\project\\Service_Stock_Analysis\\reports\\promotion\\paper\\cash_flows.json",
+    "Yahoo Finance ^KS11 via data loader",
+    "PostgreSQL orders + executions (strategy/venue/account scoped)",
+    "PostgreSQL full PAPER/legacy order ledger + broker dashboard endpoint",
+    "C:\\dev\\project\\Service_Stock_Analysis\\logs\\paper\\shadow_reentry_state.json",
+    "C:\\dev\\project\\Service_Stock_Analysis\\reports\\analysis\\paper_reentry_experiments\\pass_only\\metrics.json"
+  ],
+  "reader_caveats": [
+    "수익률은 인증 기준선 이후 계좌 NAV의 시간가중수익률입니다.",
+    "원장 수준 실현손익은 누락 체결 때문에 부분 추정치입니다.",
+    "추세 재무장 후보는 관측 전용이며 주문 경로와 분리되어 있습니다."
+  ],
+  "caveats": [
+    "수익률은 인증 기준선 이후 계좌 NAV의 시간가중수익률이며 현금흐름은 cash_flows.json 선언값으로 조정합니다.",
+    "수수료·세금이 체결 원장에 0으로 기록되면 설정된 KOSPI 비용률로 추정합니다.",
+    "슬리피지는 예상가 대비 체결가 차이로 계산되며 음수는 가격개선입니다.",
+    "이 보고서는 승격 근거만 생성하며 PAPER/REAL 모드를 자동으로 켜지 않습니다."
+  ]
+}

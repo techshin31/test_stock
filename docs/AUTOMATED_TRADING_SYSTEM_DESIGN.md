@@ -101,3 +101,12 @@ flowchart LR
 
 이 결정들은 과최적화·데이터 오류·의도하지 않은 자본 노출 위험 때문에 검토와
 명시적 승인을 거친다.
+
+## 주문결과 원장 무결성과 패리티
+
+- 매 거래 사이클은 당일 `FILLED` 주문의 `filled_qty`와 `executions.qty` 합계를 계좌·전략·실행환경 범위로 비교한다.
+- 연결 누락이나 수량 불일치가 있으면 `EXECUTION_LEDGER_INCOMPLETE`로 신규 매수만 차단한다. 기존 보유 종목의 손절·트레일링 등 위험청산은 계속 허용한다.
+- `apps.backtester.paper_order_result_replay`는 관측된 체결수량과 체결가격만 시간순으로 재생한다.
+- 패리티를 맞추기 위해 필요한 시작 현금·수량은 `opening balancing entries`로 분리하며 거래로 위조하지 않는다.
+- 가격 커버리지 100%와 5억원 무조정 패리티가 모두 확인되기 전에는 전략 후보를 운영 규칙으로 승격하지 않는다.
+- 전체 완료 상태는 `docs/AUTOMATED_TRADING_COMPLETION_MATRIX.md`의 직접 증거와 완료 조건으로 감사한다.

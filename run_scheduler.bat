@@ -50,19 +50,21 @@ if errorlevel 1 (
 set "TRADING_MODE=%~1"
 if "%TRADING_MODE%"=="" set "TRADING_MODE=--paper"
 if /I "%TRADING_MODE%"=="--paper" (
-    echo [INFO] Checking DRY_RUN to PAPER promotion gate...
-    uv run python -m core.analytics.trading_kpis --target PAPER --operational-log logs\dry_run\operational_health.jsonl --readiness-json reports\promotion\dry_run\latest.json
+    echo [INFO] Checking for a certified PAPER continuation baseline...
+    uv run python -m core.analytics.trading_performance --mode PAPER --check-baseline > nul 2>&1
     if errorlevel 1 (
-        echo [BLOCKED] PAPER promotion gate did not pass. Keep using --dry-run.
+        echo [INFO] No certified PAPER baseline. Checking the initial DRY_RUN to PAPER promotion gate...
+        uv run python -m core.analytics.trading_kpis --target PAPER --operational-log logs\dry_run\operational_health.jsonl --readiness-json reports\promotion\dry_run\latest.json
+        if errorlevel 1 (
+            echo [BLOCKED] Initial PAPER promotion gate did not pass. Keep using --dry-run.
+            if /I "%SCHEDULER_PAUSE_ON_EXIT%"=="true" pause
+            exit /b 1
+        )
+        echo [BLOCKED] Promotion passed, but the PAPER baseline is missing. Use run_trader.bat option 7 first.
         if /I "%SCHEDULER_PAUSE_ON_EXIT%"=="true" pause
         exit /b 1
-    )
-    echo [INFO] Checking the certified PAPER performance baseline...
-    uv run python -m core.analytics.trading_performance --mode PAPER --check-baseline
-    if errorlevel 1 (
-        echo [BLOCKED] PAPER baseline is missing. Use run_trader.bat option 7 first.
-        if /I "%SCHEDULER_PAUSE_ON_EXIT%"=="true" pause
-        exit /b 1
+    ) else (
+        echo [INFO] Certified PAPER baseline found. Using the safe continuation gate.
     )
     echo [INFO] Verifying the current mock account against the certified baseline...
     uv run python run_live_trader.py --mock --snapshot-only
@@ -79,6 +81,13 @@ if /I "%TRADING_MODE%"=="--paper" (
     )
 )
 if /I "%TRADING_MODE%"=="--live" (
+    echo [INFO] Checking complete PAPER system evidence before REAL activation...
+    uv run python -m core.analytics.system_readiness --require-complete --for-real-activation
+    if errorlevel 1 (
+        echo [BLOCKED] Full PAPER system evidence is incomplete. Live trading will not start.
+        if /I "%SCHEDULER_PAUSE_ON_EXIT%"=="true" pause
+        exit /b 1
+    )
     echo [INFO] Checking PAPER to REAL promotion gate...
     uv run python -m core.analytics.trading_kpis --target REAL --operational-log logs\paper\operational_health.jsonl --performance-json "%REAL_PROMOTION_SNAPSHOT%"
     if errorlevel 1 (
@@ -126,8 +135,12 @@ if /I "%TRADING_MODE%"=="--live" (
 )
 echo [INFO] Scheduler mode: %TRADING_MODE%
 echo [INFO] Daily loss limit: %MAX_DAILY_LOSS_RATE% / Entry kill switch: %TRADING_KILL_SWITCH%
-uv run python scheduler.py %TRADING_MODE%
+set "SUPERVISOR_MODE=DRY_RUN"
+if /I "%TRADING_MODE%"=="--paper" set "SUPERVISOR_MODE=PAPER"
+if /I "%TRADING_MODE%"=="--simulate" set "SUPERVISOR_MODE=SIMULATE"
+if /I "%TRADING_MODE%"=="--live" set "SUPERVISOR_MODE=REAL"
+uv run python -m core.utils.scheduler_supervisor --mode %SUPERVISOR_MODE%
 set "SCHEDULER_EXIT_CODE=%ERRORLEVEL%"
-if not "%SCHEDULER_EXIT_CODE%"=="0" echo [ERROR] Scheduler exited unexpectedly. Check logs\scheduler.log and logs\live_trader.log.
+if not "%SCHEDULER_EXIT_CODE%"=="0" echo [ERROR] Scheduler supervisor exited. Check logs\%SUPERVISOR_MODE%\scheduler_supervisor.jsonl and the mode logs.
 if /I "%SCHEDULER_PAUSE_ON_EXIT%"=="true" pause
 exit /b %SCHEDULER_EXIT_CODE%

@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-22T14:02:38+09:00",
+  "scope": "PAPER_SCHEDULER_RECOVERY_SELF_TEST",
+  "status": "READY",
+  "broker_loaded": false,
+  "order_permission": "DENIED_BY_DESIGN",
+  "tested_mode": "PAPER",
+  "real_auto_restart_allowed": false,
+  "attempts": 2,
+  "process_exit_codes": [
+    1,
+    0
+  ],
+  "final_exit_code": 0,
+  "events": [
+    {
+      "timestamp": "2026-07-22T14:02:38+09:00",
+      "mode": "PAPER",
+      "event": "PROCESS_EXIT",
+      "exit_code": 1,
+      "restart_count": 0,
+      "detail": "scheduler process exited"
+    },
+    {
+      "timestamp": "2026-07-22T14:02:38+09:00",
+      "mode": "PAPER",
+      "event": "AUTO_RESTART_SCHEDULED",
+      "exit_code": 1,
+      "restart_count": 1,
+      "detail": "delay_seconds=0"
+    },
+    {
+      "timestamp": "2026-07-22T14:02:38+09:00",
+      "mode": "PAPER",
+      "event": "PROCESS_EXIT",
+      "exit_code": 0,
+      "restart_count": 1,
+      "detail": "scheduler process exited"
+    }
+  ]
+}

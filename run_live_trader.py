@@ -13,6 +13,22 @@ from core.execution.trader import LiveTrader
 from core.utils.telegram_bot import TelegramBot
 from core.utils.process_lock import ProcessAlreadyRunning, ProcessInstanceLock
 
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+
+
+def _assert_real_system_ready(project_root: Path = PROJECT_ROOT) -> dict:
+    """Fail closed before any ordinary REAL broker/order path is initialized."""
+    from core.analytics.system_readiness import audit_system_readiness
+
+    result = audit_system_readiness(project_root, environ={})
+    if result.get("full_system_complete") is not True:
+        blockers = "; ".join(result.get("blockers") or ["completion unavailable"])
+        raise PermissionError(
+            "REAL activation requires complete PAPER system evidence: " + blockers
+        )
+    return result
+
 def configure_logging(mode: str) -> None:
     log_dir = os.path.join("logs", mode.lower())
     os.makedirs(log_dir, exist_ok=True)
@@ -172,6 +188,8 @@ def main():
         else "REAL" if args.live
         else "PAPER"
     )
+    if args.live and not args.snapshot_only and not args.liquidate:
+        _assert_real_system_ready()
     configure_logging(requested_mode)
     cycle_lock = None
     if not args.snapshot_only:

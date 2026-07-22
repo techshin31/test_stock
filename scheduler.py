@@ -8,6 +8,7 @@ import time
 import traceback
 from pathlib import Path
 
+from core.broker.kis_api import redact_sensitive_text
 from core.utils.trading_calendar import is_krx_trading_day
 from core.utils.process_lock import ProcessAlreadyRunning, ProcessInstanceLock
 
@@ -201,11 +202,60 @@ def get_next_run_time(now):
     return "다음 KRX 거래일 08:30"
 
 
-def claim_daily_report(last_run_date, report_date):
-    """Claim a report date before execution to prevent tight failure retries."""
-    if last_run_date == report_date:
-        return False, last_run_date
-    return True, report_date
+REPORT_RETRY_INTERVAL = datetime.timedelta(minutes=5)
+
+
+def should_attempt_daily_report(
+    completed_date,
+    report_date,
+    last_attempt_at,
+    now,
+    retry_interval=REPORT_RETRY_INTERVAL,
+):
+    """Return whether an EOD report may run without creating a tight retry loop."""
+    if completed_date == report_date:
+        return False
+    if last_attempt_at is None:
+        return True
+    return now - last_attempt_at >= retry_interval
+
+
+def pending_paper_eod_report_date(
+    now: datetime.datetime,
+    project_root: Path = PROJECT_ROOT,
+):
+    """Return the oldest completed PAPER session without a valid daily report."""
+    from core.analytics.system_readiness import (
+        _completed_operational_dates,
+        _final_daily_report_dates,
+    )
+
+    log_path = project_root / "logs" / "paper" / "operational_health.jsonl"
+    if not log_path.exists():
+        return None
+    completed_dates = _completed_operational_dates(log_path, now)
+    valid_dates, _ = _final_daily_report_dates(
+        project_root / "reports" / "promotion" / "paper" / "daily"
+    )
+    return next(
+        (session_date for session_date in completed_dates if session_date not in valid_dates),
+        None,
+    )
+
+
+def due_end_of_day_report_date(
+    now: datetime.datetime,
+    execution_mode: str,
+    project_root: Path = PROJECT_ROOT,
+):
+    """Choose a current or missed EOD session without inventing non-trading days."""
+    if execution_mode == "PAPER":
+        return pending_paper_eod_report_date(now, project_root)
+    if not is_trading_day(now):
+        return None
+    if now.hour > 15 or (now.hour == 15 and now.minute >= 30):
+        return now.date()
+    return None
 
 
 def run_command(mode="intraday", live=False, dry_run=True, simulate=False):
@@ -257,12 +307,47 @@ def run_end_of_day_report(report_date, execution_mode):
         ],
         cwd=PROJECT_ROOT,
         env=dict(os.environ, PYTHONPATH=str(PROJECT_ROOT), PYTHONUTF8="1"),
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=10 * 60,
     )
+    stdout = redact_sensitive_text(getattr(result, "stdout", "") or "")
+    stderr = redact_sensitive_text(getattr(result, "stderr", "") or "")
+    status = {
+        "schema_version": 1,
+        "updated_at": datetime.datetime.now().astimezone().isoformat(
+            timespec="seconds"
+        ),
+        "mode": execution_mode,
+        "report_date": report_date.isoformat(),
+        "status": "READY" if result.returncode == 0 else "FAILED",
+        "return_code": int(result.returncode),
+        "stdout_tail": stdout[-4000:],
+        "stderr_tail": stderr[-4000:],
+    }
+    status_path = (
+        PROJECT_ROOT / "logs" / execution_mode.lower() / "eod_report_status.json"
+    )
+    status_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = status_path.with_suffix(status_path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(status, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    temporary.replace(status_path)
     if result.returncode != 0:
-        raise RuntimeError(f"{execution_mode} EOD performance report failed")
+        diagnostic = next(
+            (
+                line.strip()
+                for line in reversed((stderr or stdout).splitlines())
+                if line.strip()
+            ),
+            f"returncode={result.returncode}",
+        )
+        raise RuntimeError(
+            f"{execution_mode} EOD performance report failed: {diagnostic}"
+        )
 
 
 def check_and_run_cold_start(live=False, dry_run=True, simulate=False, now=None):
@@ -304,6 +389,7 @@ def main():
         return 2
     atexit.register(instance_lock.release)
     report_run_date = None
+    report_last_attempt_at = None
 
     try:
         last_run_mark = check_and_run_cold_start(live=args.live, dry_run=dry_run, simulate=args.simulate)
@@ -346,27 +432,30 @@ def main():
                 if (
                     args.simulate
                     and (now.hour > 15 or (now.hour == 15 and now.minute >= 21))
-                    and report_run_date != now.date()
-                ):
-                    # Claim the date before execution so a failed report cannot be
-                    # retried every 10 seconds for the rest of the day.
-                    claimed, report_run_date = claim_daily_report(
-                        report_run_date, now.date()
+                    and should_attempt_daily_report(
+                        report_run_date, now.date(), report_last_attempt_at, now
                     )
-                    if claimed:
-                        run_simulation_report(now.date())
-                        last_run_mode = "simulation_report"
-                elif (
-                    not args.simulate
-                    and (now.hour > 15 or (now.hour == 15 and now.minute >= 30))
-                    and report_run_date != now.date()
                 ):
-                    claimed, report_run_date = claim_daily_report(
-                        report_run_date, now.date()
+                    report_last_attempt_at = now
+                    run_simulation_report(now.date())
+                    report_run_date = now.date()
+                    last_run_mode = "simulation_report"
+            if not args.simulate:
+                pending_report_date = due_end_of_day_report_date(
+                    now, execution_mode
+                )
+                if pending_report_date and should_attempt_daily_report(
+                    report_run_date,
+                    pending_report_date,
+                    report_last_attempt_at,
+                    now,
+                ):
+                    report_last_attempt_at = now
+                    run_end_of_day_report(pending_report_date, execution_mode)
+                    report_run_date = pending_report_date
+                    last_run_mode = (
+                        f"eod_performance_report:{pending_report_date}"
                     )
-                    if claimed:
-                        run_end_of_day_report(now.date(), execution_mode)
-                        last_run_mode = "eod_performance_report"
         except Exception as exc:
             log_error(f"scheduled job failed: {exc}", execution_mode)
             retry_note = " (10초 후 재시도)" if cold_start_pending else ""

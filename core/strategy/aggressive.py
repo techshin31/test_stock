@@ -59,8 +59,13 @@
   obsidian/매매원칙/인버스ETF_매매원칙.md
   obsidian/매매원칙/분할매수매도_원칙.md
 """
+import os
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
+
+from core.signal.news_signal import NewsSignalGenerator
 
 from .base  import AbstractStrategy, InvestmentType, DefensiveAssetType
 from .state import StrategyState
@@ -122,6 +127,51 @@ class AggressiveStrategy(AbstractStrategy):
         self._BB_WINDOW   = params["bb_window"]
         self._BB_STD      = params["bb_std"]
         self._MA10_WINDOW = params["ma10_window"]
+        self.news_signal_enabled = bool(
+            params.get(
+                "enable_news_signal",
+                os.getenv("ENABLE_NEWS_SIGNAL", "false").lower() == "true",
+            )
+        )
+        execution_mode = str(
+            params.get("execution_mode", os.getenv("TRADING_EXECUTION_MODE", "DRY_RUN"))
+        ).upper()
+        if execution_mode not in {"DRY_RUN", "PAPER", "REAL", "SIMULATE"}:
+            execution_mode = "DRY_RUN"
+        self.news_cache_dir = Path("logs") / execution_mode.lower()
+        self._news_signal_generator = None
+
+    # ── 유틸리티 메서드 ──────────────────────────────────────────────────────
+    def _append_to_dashboard(self, message: str) -> None:
+        """대시보드 타임라인에 메시지를 추가합니다."""
+        import datetime
+        import json
+
+        dashboard_path = self.news_cache_dir / "dashboard_state.json"
+        if not dashboard_path.exists():
+            return
+
+        try:
+            with open(dashboard_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            timeline = data.setdefault("timeline", [])
+            now = datetime.datetime.now().strftime("%H:%M")
+            timeline.append(f"[{now}] {message}")
+            data["timeline"] = timeline[-10:] # 최근 10개 유지
+
+            with open(dashboard_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def _news_score(self, ticker: str) -> float:
+        """Return a cached mode-scoped score only when explicitly enabled."""
+        if not self.news_signal_enabled:
+            return 0.0
+        if self._news_signal_generator is None:
+            self._news_signal_generator = NewsSignalGenerator(self.news_cache_dir)
+        return self._news_signal_generator.generate_signals([ticker]).get(ticker, 0.0)
 
     # ── 방어 자산 신호 ───────────────────────────────────────────────────────
     def make_defensive_signals(
@@ -184,11 +234,13 @@ class AggressiveStrategy(AbstractStrategy):
             price      = close.iloc[i]
             new_target: float | None = None
 
-            # ── [매도 1] DOWNTREND → 인버스 ETF 100% ──────────────────────
-            # DOWNTREND 진입·유지 중에는 다른 신호보다 우선해서 인버스 포지션을 목표로 한다.
+            # ── [매도 1] DOWNTREND → 인버스 ETF 분할/전면 진입 ──────────────────────
+            # DOWNTREND 진입 시 하락 변동성(ATR 비율)에 따라 50% 또는 100% 진입
             if check_downtrend_exit(regime):
-                if _state.position != -1.0:
-                    new_target = -1.0
+                atr_ratio = atr.iloc[i] / price if price > 0 else 0
+                target_inverse = -1.0 if atr_ratio > 0.03 else -0.5
+                if _state.position != target_inverse and _state.position > -1.0:
+                    new_target = target_inverse
                 _state.reset_entry()
 
             # ── [전처리] 인버스 포지션 자동 청산 ──────────────────────────
@@ -238,25 +290,62 @@ class AggressiveStrategy(AbstractStrategy):
                             and _state.position > self.TRANSITION_KEEP):
                         new_target = self.TRANSITION_KEEP
 
+                    # [매도 4.5] 모멘텀 조기 급락 방어 (Evasive Maneuver)
+                    elif (regime == MarketRegime.UPTREND.name
+                            and price < cur_ma_s and prev_price > 0 and (prev_price - price)/prev_price > 0.03
+                            and _state.position > 0.4):
+                        new_target = 0.4  # 비중을 선제적으로 40%로 축소
+
                 # ── [매수] 신호 ────────────────────────────────────────────
                 if new_target is None:
 
                     if regime == MarketRegime.UPTREND.name:
+                        # 변동성 기반 동적 비중 조절 (ATR ratio > 4% 이면 리스크 관리 위해 진입 비중 절반으로 축소)
+                        atr_ratio = atr.iloc[i] / price if price > 0 else 0
+                        volatility_scale = 0.5 if atr_ratio > 0.04 else 1.0
+
                         # [매수 1] UPTREND 진입 첫날 → MA10 돌파 시 즉시 70%, 아니면 40%
                         if check_uptrend_entry1(regime, _state.regime):
                             d_date = d.date() if hasattr(d, "date") else d
                             _state.open_entry1(d_date)
-                            if check_ma10_trigger(price, ma10.iloc[i]):
-                                _state.entry1_days_elapsed = self.ENTRY2_WINDOW + 1  # 중복 2차 방지
-                                new_target = self.ENTRY2_SIZE  # 즉시 70%
+
+                            # 뉴스 감성 분석 오버레이 (TRADING MODE일 때 최신일에만 실행)
+                            news_score = 0.0
+                            if (
+                                self.news_signal_enabled
+                                and state is not None
+                                and i == len(dates) - 1
+                            ):
+                                try:
+                                    news_score = self._news_score(_state.ticker)
+                                except Exception:
+                                    pass
+
+                            # 악재(-0.3 이하)면 진입 차단, 호재(0.5 이상)면 비중 확대
+                            if news_score <= -0.3:
+                                new_target = 0.0
+                                # 타임라인 로깅 (하루에 한 번만)
+                                if str(d_date) != _state.metadata.get('last_news_log_date'):
+                                    _state.metadata['last_news_log_date'] = str(d_date)
+                                    self._append_to_dashboard(f"🚨 [{_state.ticker}] 악재 공시/뉴스 감지 (점수: {news_score:.1f}). 매수 진입을 차단합니다.")
                             else:
-                                new_target = self.ENTRY1_SIZE  # 40%
+                                if news_score >= 0.5:
+                                    volatility_scale = min(1.0, volatility_scale + 0.5) # 비중 회복/확대
+                                    if str(d_date) != _state.metadata.get('last_news_log_date'):
+                                        _state.metadata['last_news_log_date'] = str(d_date)
+                                        self._append_to_dashboard(f"🚀 [{_state.ticker}] 대형 호재/공시 감지 (점수: {news_score:.1f}). 진입 비중을 확대합니다!")
+
+                                if check_ma10_trigger(price, ma10.iloc[i]):
+                                    _state.entry1_days_elapsed = self.ENTRY2_WINDOW + 1  # 중복 2차 방지
+                                    new_target = round(self.ENTRY2_SIZE * volatility_scale, 2)
+                                else:
+                                    new_target = round(self.ENTRY1_SIZE * volatility_scale, 2)
 
                         # [매수 2] UPTREND 2차 매수 (entry1 이내 + 종가>MA20)
                         elif (_state.is_entry2_available(self.ENTRY2_WINDOW)
                                 and _state.position < self.ENTRY2_SIZE
                                 and check_uptrend_entry2(regime, price, ma_s.iloc[i])):
-                            new_target = self.ENTRY2_SIZE  # 70%
+                            new_target = round(self.ENTRY2_SIZE * volatility_scale, 2)
 
                     elif regime == MarketRegime.SIDEWAYS.name and i > 0:
                         # [매수 3] SIDEWAYS BB 하단 상향 돌파 → 횡보 매수

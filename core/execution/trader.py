@@ -11,6 +11,7 @@ from data.loaders.fa_ta_loader import enrich_ohlcv_with_fa
 from apps.worker.fa_contract import DEFAULT_CONFIG as FA_CONTRACT
 from storage.postgres.connection import PostgreDB
 from core.strategy.fa_ta_momentum import FaTaMomentumStrategy
+from core.analytics.paper_shadow_reentry import evaluate_paper_shadow_reentry
 from core.broker.kis_api import BrokerResponseError, KisBroker, normalize_symbol
 from core.broker.simulation import LocalSimulationBroker
 from core.utils.trading_calendar import previous_krx_trading_day
@@ -215,6 +216,15 @@ class LiveTrader:
         
         # Local simulation state is isolated from operational order/position tables.
         unresolved_error = None
+        execution_ledger_health = {
+            "status": "NOT_APPLICABLE",
+            "filled_order_count": 0,
+            "execution_linked_order_count": 0,
+            "quantity_matched_order_count": 0,
+            "execution_link_coverage": 1.0,
+            "quantity_match_rate": 1.0,
+        }
+        execution_ledger_entry_blocker = None
         if not getattr(self.broker, "is_simulated", False):
             self._sync_balance_and_positions(balance_info, total_eval)
             self._reconcile_open_orders(positions)
@@ -222,6 +232,22 @@ class LiveTrader:
                 self._assert_no_unresolved_orders()
             except RuntimeError as exc:
                 unresolved_error = str(exc)
+            try:
+                execution_ledger_health = self._daily_execution_ledger_health()
+                if execution_ledger_health["status"] != "READY":
+                    execution_ledger_entry_blocker = "EXECUTION_LEDGER_INCOMPLETE"
+            except Exception as exc:
+                logging.exception("daily execution-ledger integrity check failed: %s", exc)
+                execution_ledger_health = {
+                    "status": "ERROR",
+                    "error": str(exc),
+                    "filled_order_count": 0,
+                    "execution_linked_order_count": 0,
+                    "quantity_matched_order_count": 0,
+                    "execution_link_coverage": 0.0,
+                    "quantity_match_rate": 0.0,
+                }
+                execution_ledger_entry_blocker = "EXECUTION_LEDGER_CHECK_ERROR"
         
         # 대시보드 표시용 상태 업데이트
         if not os.path.exists("logs"):
@@ -259,7 +285,15 @@ class LiveTrader:
         dashboard_state["updated_at"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         dashboard_state["cash"] = cash
         dashboard_state["total_eval"] = total_eval
-        dashboard_state["positions"] = list(positions.keys())
+        dashboard_state["positions"] = [
+            {
+                "ticker": k,
+                "qty": v.get("qty", 0),
+                "current_price": v.get("current_price", 0.0),
+                "avg_price": v.get("avg_price", 0.0),
+                "profit_rate": v.get("profit_rate", 0.0)
+            } for k, v in positions.items()
+        ]
         dashboard_state["total_slippage"] = total_slippage
         dashboard_state["unrealized_pnl"] = float(balance_info.get("unrealized_pnl", 0.0))
         dashboard_state["daily_asset_change"] = float(balance_info.get("daily_asset_change", 0.0))
@@ -483,12 +517,49 @@ class LiveTrader:
         )
         data_health["dependency_errors"] = dependency_errors
         data_health["daily_return_decimal"] = daily_return_decimal
+        data_health["execution_ledger"] = execution_ledger_health
         dependency_entry_blocker = (
             "DEPENDENCY_ERROR_ENTRY_BLOCK" if dependency_errors else None
         )
         data_health["entry_circuit_breaker"] = (
-            entry_circuit_breaker or dependency_entry_blocker
+            entry_circuit_breaker
+            or execution_ledger_entry_blocker
+            or dependency_entry_blocker
         )
+        shadow_reentry = None
+        if self.execution_venue == "PAPER":
+            try:
+                shadow_reentry = evaluate_paper_shadow_reentry(
+                    mode=self.execution_venue,
+                    strategy=self.strategy_name,
+                    account_scope=getattr(self.broker, "masked_account", "UNKNOWN"),
+                    signal_date=signal_date,
+                    ohlcv_store=ohlcv_store,
+                    positions=positions,
+                    log_dir=self.log_dir,
+                )
+                data_health["shadow_reentry"] = {
+                    "variant": shadow_reentry["variant"],
+                    "observe_only": True,
+                    "completed_observation_sessions": shadow_reentry[
+                        "completed_observation_sessions"
+                    ],
+                    "required_observation_sessions": shadow_reentry[
+                        "required_observation_sessions"
+                    ],
+                    "risk_exit_count": shadow_reentry["risk_exit_count"],
+                    "shadow_ready_candidate_count": shadow_reentry[
+                        "shadow_ready_candidate_count"
+                    ],
+                }
+            except Exception as exc:
+                logging.exception("PAPER shadow re-entry observation failed: %s", exc)
+                data_health["shadow_reentry"] = {
+                    "variant": "R_TREND_REARM",
+                    "observe_only": True,
+                    "status": "OBSERVATION_ERROR",
+                    "error": str(exc),
+                }
         self.last_data_health = data_health
 
         target_positions = self._apply_portfolio_limits(
@@ -501,6 +572,14 @@ class LiveTrader:
                 positions,
                 total_eval,
                 dependency_entry_blocker,
+            )
+        if execution_ledger_entry_blocker:
+            target_positions = self._apply_entry_circuit_breaker(
+                target_positions,
+                target_details,
+                positions,
+                total_eval,
+                execution_ledger_entry_blocker,
             )
         if entry_circuit_breaker:
             target_positions = self._apply_entry_circuit_breaker(
@@ -531,6 +610,8 @@ class LiveTrader:
         )
         data_health["order_suppressions"] = suppression_summary
         dashboard_state["data_health"] = data_health
+        if shadow_reentry is not None:
+            dashboard_state["shadow_reentry"] = shadow_reentry
         dashboard_state["order_candidates"] = candidate_summary
         dashboard_state["order_suppressions"] = suppression_summary
         dashboard_state["actual_orders"] = actual_orders
@@ -1515,6 +1596,62 @@ class LiveTrader:
             raise RuntimeError(
                 f"unresolved order circuit breaker: {count} open orders require reconciliation"
             )
+
+    def _daily_execution_ledger_health(self):
+        """Verify that today's terminal fills have matching execution quantities.
+
+        This is an entry-only safety input. A missing execution row must never be
+        silently treated as a clean ledger, but it also must not prevent a risk
+        exit from reducing an existing PAPER position.
+        """
+        strategy_name, execution_venue, account_scope = self._order_scope()
+        row = self.db.fetch_one(
+            """
+            WITH filled_orders AS (
+                SELECT o.id, o.filled_qty
+                FROM orders o
+                JOIN strategies s ON s.id = o.strategy_id
+                WHERE o.created_at::date = CURRENT_DATE
+                  AND o.order_status_code = 'FILLED'
+                  AND COALESCE(o.filled_qty, 0) > 0
+                  AND s.name = %s
+                  AND o.execution_venue_code = %s
+                  AND o.account_scope = %s
+            ), execution_totals AS (
+                SELECT e.order_id, COALESCE(SUM(e.qty), 0) AS execution_qty
+                FROM executions e
+                JOIN filled_orders f ON f.id = e.order_id
+                GROUP BY e.order_id
+            )
+            SELECT
+                COUNT(*) AS filled_order_count,
+                COUNT(*) FILTER (
+                    WHERE COALESCE(x.execution_qty, 0) > 0
+                ) AS execution_linked_order_count,
+                COUNT(*) FILTER (
+                    WHERE ABS(COALESCE(x.execution_qty, 0) - f.filled_qty) < 0.000001
+                ) AS quantity_matched_order_count
+            FROM filled_orders f
+            LEFT JOIN execution_totals x ON x.order_id = f.id
+            """,
+            (strategy_name, execution_venue, account_scope),
+        ) or {}
+        filled = int(row.get("filled_order_count") or 0)
+        linked = int(row.get("execution_linked_order_count") or 0)
+        matched = int(row.get("quantity_matched_order_count") or 0)
+        link_coverage = linked / filled if filled else 1.0
+        quantity_match_rate = matched / filled if filled else 1.0
+        ready = linked == filled and matched == filled
+        return {
+            "status": "READY" if ready else "BLOCKED",
+            "filled_order_count": filled,
+            "execution_linked_order_count": linked,
+            "quantity_matched_order_count": matched,
+            "missing_execution_order_count": max(filled - linked, 0),
+            "quantity_mismatch_order_count": max(filled - matched, 0),
+            "execution_link_coverage": link_coverage,
+            "quantity_match_rate": quantity_match_rate,
+        }
 
     def _reconcile_open_orders(self, live_positions=None):
         """이전 실행에서 남은 접수/부분체결 주문을 브로커 원장과 동기화한다."""

@@ -1,0 +1,93 @@
+{
+  "metadata": {
+    "generated_at": "2026-07-22T13:10:56+09:00",
+    "cutoff": "2026-07-22T13:10:47+09:00",
+    "timezone": "Asia/Seoul",
+    "mode": "PAPER",
+    "strategy": "aggressive",
+    "strategy_lineage": [
+      "risk_neutral",
+      "aggressive"
+    ],
+    "account_scope": "***9904-01",
+    "starting_capital": 500000000.0,
+    "scope_policy": "PAPER confirmed rows plus UNKNOWN legacy rows across the risk_neutral-to-aggressive account lineage"
+  },
+  "endpoint": {
+    "cash": 191381629.0,
+    "total_asset": 471978629.0,
+    "position_count": 4,
+    "total_pnl": -28021371.0,
+    "total_return": -0.056042742,
+    "broker_unrealized_pnl": 7513987.0,
+    "certified_baseline_asset": 463025590.0,
+    "post_baseline_pnl": 8953039.0,
+    "post_baseline_return": 0.019335948581157253
+  },
+  "order_result_replay": {
+    "orders": 547,
+    "terminal_orders": 547,
+    "status_counts": {
+      "REJECTED": 325,
+      "FILLED": 197,
+      "CANCELLED": 14,
+      "EXPIRED_UNFILLED": 7,
+      "PARTIAL": 4
+    },
+    "scope_counts": {
+      "INFERRED_LEGACY_PAPER": 533,
+      "CONFIRMED_PAPER": 9,
+      "CONFIRMED_PAPER_BROKER_ONLY": 5
+    },
+    "filled_orders": 201,
+    "fill_rate": 0.36745886654478976,
+    "terminal_fill_rate": 0.36745886654478976,
+    "fill_notional": 4591175100.0,
+    "fill_notional_multiple_of_starting_capital": 9.1823502,
+    "modeled_commission_and_tax": 4547422.305,
+    "recorded_slippage": 3757177.75,
+    "partially_matched_realized_gross_pnl": -30596487.944188364,
+    "unmatched_sell_qty": 0.0
+  },
+  "reconciliation": {
+    "position_rows": 23,
+    "exact_position_matches": 23,
+    "position_match_rate": 1.0,
+    "endpoint_held_positions": 4,
+    "exact_endpoint_held_position_matches": 4,
+    "endpoint_held_position_match_rate": 1.0,
+    "phantom_nonzero_replay_positions": 0,
+    "balancing_qty_abs_sum": 0.0,
+    "minimum_opening_inventory_abs_sum": 0.0,
+    "unresolved_pnl_balancing_item": -391447.75081163645,
+    "known_replay_nonzero_positions": 4
+  },
+  "data_quality": {
+    "overall_grade": "LOW_FOR_TRADE_LEVEL_PNL__HIGH_FOR_ENDPOINT_PNL",
+    "fill_price_coverage": 1.0,
+    "auditable_fill_evidence_coverage": 1.0,
+    "execution_table_coverage_of_filled_orders": 0.7512437810945274,
+    "broker_daily_order_backfill_count": 45,
+    "broker_only_filled_order_count": 5,
+    "broker_nonfill_override_count": 7,
+    "broker_nonfill_overridden_execution_rows": 4,
+    "zero_recorded_commission_tax_rate": 1.0,
+    "unpriced_filled_orders": 0,
+    "unpriced_filled_qty": 0.0,
+    "first_positive_observation_at": "2026-07-03T09:00:00+09:00",
+    "first_positive_observation_total": 499657310.0,
+    "first_positive_daily_nav_date": "2026-07-03",
+    "first_positive_daily_nav_total": 499657310.0,
+    "legacy_last_cash": 210749681.0,
+    "paper_first_cash": 210749681.0,
+    "legacy_to_paper_cash_continuity": true,
+    "critical_findings": [
+      "The account endpoint and 500M total P&L are directly observed and exact at the cutoff.",
+      "All filled orders have auditable prices; the execution table remains historically incomplete.",
+      "Minimum opening inventory is inferred only where observed sells would otherwise create a cash-account short; it is not a fabricated trade.",
+      "Legacy UNKNOWN scope is inferred as PAPER lineage from exact cash continuity, not explicit account identity.",
+      "Commission and tax fields are zero; configured rates are modeled separately.",
+      "Position gaps are preserved as balancing entries and are never fabricated into trades."
+    ]
+  }
+}

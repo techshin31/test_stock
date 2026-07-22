@@ -382,10 +382,12 @@ class KisBroker:
             if not isinstance(page_rows, list):
                 raise BrokerResponseError("주문 체결 조회: output1 형식이 잘못되었습니다.")
             rows.extend(page_rows)
-            if response.headers.get("tr_cont") != "M":
+            continuation = str(response.headers.get("tr_cont") or "").upper()
+            if continuation not in {"M", "F"}:
                 return rows
             params["CTX_AREA_FK100"] = payload.get("ctx_area_fk100", "")
             params["CTX_AREA_NK100"] = payload.get("ctx_area_nk100", "")
+            headers["tr_cont"] = "N"
         raise BrokerResponseError("주문 체결 조회 페이지 수가 안전 한도를 초과했습니다.")
 
     def get_order_status(self, broker_order_id: str, target_date: dt.date | None = None) -> dict:
