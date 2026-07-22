@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-22T16:00:42+09:00",
+  "generated_at": "2026-07-22T16:14:34+09:00",
   "scope": "PAPER_AUTOMATED_TRADING_SYSTEM",
-  "paper_runtime_safe": false,
+  "paper_runtime_safe": true,
   "full_system_complete": false,
   "real_execution_authorized": false,
   "progress": {
@@ -24,11 +24,11 @@
       "required": 60
     },
     "evidence_checks": {
-      "passed": 10,
+      "passed": 9,
       "total": 14
     },
     "safety_checks": {
-      "passed": 10,
+      "passed": 12,
       "total": 12
     }
   },
@@ -40,13 +40,13 @@
     },
     {
       "name": "scheduler_instance_scope",
-      "passed": false,
-      "detail": "pid=11, mode=PAPER, label=scheduler, lock_held=False"
+      "passed": true,
+      "detail": "pid=11, mode=PAPER, label=scheduler, runtime_live=True, evidence=local_os_lock"
     },
     {
       "name": "scheduler_supervisor_runtime",
-      "passed": false,
-      "detail": "pid=10, mode=PAPER, event=SUPERVISOR_STARTED, detail=child_launch=managed, lock_held=False"
+      "passed": true,
+      "detail": "pid=9, mode=PAPER, event=SUPERVISOR_STARTED, detail=child_launch=managed, runtime_live=True, evidence=local_os_lock"
     },
     {
       "name": "certified_account_scope",
@@ -81,7 +81,7 @@
     {
       "name": "dashboard_freshness",
       "passed": true,
-      "detail": "age_seconds=2351, limit=86400"
+      "detail": "age_seconds=3184, limit=86400"
     },
     {
       "name": "real_environment_disabled",
@@ -107,8 +107,8 @@
     },
     {
       "name": "latest_eod_operational_integrity",
-      "passed": true,
-      "detail": "data=1.0, risk=1.0, reconciliation=1.0, integrity=1.0, open_orders=0"
+      "passed": false,
+      "detail": "data=1.0, risk=1.0, reconciliation=1.0, integrity=1.0, open_orders=0, critical_incidents=9"
     },
     {
       "name": "scheduler_recovery_self_test",
@@ -167,8 +167,7 @@
     }
   ],
   "blockers": [
-    "scheduler_instance_scope: pid=11, mode=PAPER, label=scheduler, lock_held=False",
-    "scheduler_supervisor_runtime: pid=10, mode=PAPER, event=SUPERVISOR_STARTED, detail=child_launch=managed, lock_held=False",
+    "latest_eod_operational_integrity: data=1.0, risk=1.0, reconciliation=1.0, integrity=1.0, open_orders=0, critical_incidents=9",
     "execution_stress_robustness: sample_ready=False, risk_fallbacks=['C_CAP10', 'C_CAP08']",
     "shadow_observation_window: 1/10 verified sessions",
     "paper_operating_window: 2/60 completed PAPER sessions",
@@ -180,14 +179,16 @@
     "logs/paper/shadow_reentry_state.json",
     "logs/scheduler.instance.lock.json",
     "logs/scheduler.supervisor.instance.lock.json",
+    "logs/paper/scheduler_runtime.json",
+    "logs/paper/scheduler_supervisor_runtime.json",
     "logs/paper/scheduler_supervisor.jsonl",
     "reports/promotion/paper/baseline.json",
     "reports/promotion/paper/latest.json",
     "reports/promotion/paper/daily/*.json",
     "reports/analysis/paper_broker_history/latest.json",
     "reports/analysis/scheduler_recovery_evidence.json",
-    "reports\\analysis\\paper_ledger_latest\\summary.json",
-    "reports\\analysis\\paper_order_result_replay\\latest\\summary.json",
-    "reports\\analysis\\paper_execution_stress\\latest\\summary.json"
+    "reports/analysis/paper_ledger_latest/summary.json",
+    "reports/analysis/paper_order_result_replay/latest/summary.json",
+    "reports/analysis/paper_execution_stress/latest/summary.json"
   ]
 }

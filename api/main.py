@@ -186,6 +186,17 @@ def _report_summary(payload: dict, *, filename: str | None = None) -> dict:
         "blocker_count": len(promotion.get("blockers") or []),
         "performance": {
             "ending_total_asset": performance.get("ending_total_asset"),
+            "starting_capital_reference": performance.get(
+                "starting_capital_reference"
+            ),
+            "pnl_vs_starting_capital": performance.get(
+                "pnl_vs_starting_capital"
+            ),
+            "return_vs_starting_capital": performance.get(
+                "return_vs_starting_capital"
+            ),
+            "baseline_date": performance.get("baseline_date"),
+            "post_baseline_pnl": performance.get("post_baseline_pnl"),
             "net_return": performance.get("net_return"),
             "benchmark_return": performance.get("benchmark_return"),
             "excess_return": performance.get("excess_return"),
@@ -253,10 +264,7 @@ def _report_freshness(
         and latest.get("report_status") == "FINAL"
         and (latest.get("validation") or {}).get("status") == "READY"
     )
-    if latest_date is not None and latest_date >= expected and is_valid_report:
-        state = "CURRENT"
-        message = "공식 EOD 리포트가 최신 완료 거래일까지 갱신되었습니다."
-    elif (
+    if (
         eod_status
         and eod_status.get("status") == "FAILED"
         and (
@@ -269,13 +277,20 @@ def _report_freshness(
             (
                 line.strip()
                 for line in reversed(
-                    str(eod_status.get("stderr_tail") or "").splitlines()
+                    str(
+                        eod_status.get("stderr_tail")
+                        or eod_status.get("stdout_tail")
+                        or ""
+                    ).splitlines()
                 )
                 if line.strip()
             ),
             "상세 원인은 scheduler 로그를 확인하세요.",
         )
         message = f"공식 EOD 리포트 생성에 실패했습니다: {diagnostic}"
+    elif latest_date is not None and latest_date >= expected and is_valid_report:
+        state = "CURRENT"
+        message = "공식 EOD 리포트가 최신 완료 거래일까지 갱신되었습니다."
     elif latest_date is not None and latest_date >= expected and not is_valid_report:
         state = "FAILED"
         errors = (latest.get("validation") or {}).get("errors") or []

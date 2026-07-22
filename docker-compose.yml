@@ -68,6 +68,7 @@ services:
       POSTGRES_PORT: 5432
       KIS_ENV: paper
       ALLOW_LIVE_ORDER: "false"
+      QUANTPILOT_RUNTIME_ID: paper-trader
       TZ: Asia/Seoul
     volumes:
       - ./logs:/app/logs

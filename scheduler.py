@@ -10,7 +10,11 @@ from pathlib import Path
 
 from core.broker.kis_api import redact_sensitive_text
 from core.utils.trading_calendar import is_krx_trading_day
-from core.utils.process_lock import ProcessAlreadyRunning, ProcessInstanceLock
+from core.utils.process_lock import (
+    ProcessAlreadyRunning,
+    ProcessHeartbeat,
+    ProcessInstanceLock,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -39,6 +43,17 @@ OPERATIONAL_STATUS_LABELS = {
 def operational_status_label(status: str) -> str:
     label = OPERATIONAL_STATUS_LABELS.get(status, status or "확인 중")
     return f"{label} ({status})" if status else label
+
+
+def format_position_label(position: object) -> str:
+    """Render both legacy ticker strings and name-rich position objects."""
+    if not isinstance(position, dict):
+        return str(position)
+    ticker = str(position.get("ticker") or "").strip()
+    name = str(position.get("name") or "").strip()
+    if name and ticker and name != ticker:
+        return f"{name} ({ticker})"
+    return name or ticker or "알 수 없는 종목"
 
 
 SchedulerAlreadyRunning = ProcessAlreadyRunning
@@ -94,7 +109,11 @@ def draw_dashboard(last_mode, next_run_time, execution_mode):
                 f"({float(state.get('daily_asset_change_rate', 0)):.2f}%)"
             )
             print(f" 🧾 체결가 차이 비용(슬리피지 누계): {state.get('total_slippage', 0):,.0f} 원")
-            print(f" 📊 보유 종목({len(positions)}): {', '.join(positions) if positions else '없음'}")
+            position_labels = [format_position_label(item) for item in positions]
+            print(
+                f" 📊 보유 종목({len(positions)}): "
+                f"{', '.join(position_labels) if position_labels else '없음'}"
+            )
             daily = state.get("actual_orders", state.get("daily_orders", {}))
             print(
                 " 📌 오늘 실제 주문: "
@@ -237,8 +256,23 @@ def pending_paper_eod_report_date(
     valid_dates, _ = _final_daily_report_dates(
         project_root / "reports" / "promotion" / "paper" / "daily"
     )
+    status_path = project_root / "logs" / "paper" / "eod_report_status.json"
+    failed_report_date = None
+    if status_path.exists():
+        try:
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+            if status.get("status") == "FAILED":
+                failed_report_date = datetime.date.fromisoformat(
+                    str(status.get("report_date"))
+                )
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            failed_report_date = None
     return next(
-        (session_date for session_date in completed_dates if session_date not in valid_dates),
+        (
+            session_date
+            for session_date in completed_dates
+            if session_date not in valid_dates or session_date == failed_report_date
+        ),
         None,
     )
 
@@ -388,6 +422,12 @@ def main():
         print(f"[BLOCKED] {exc}")
         return 2
     atexit.register(instance_lock.release)
+    heartbeat = ProcessHeartbeat(
+        PROJECT_ROOT / "logs" / execution_mode.lower() / "scheduler_runtime.json",
+        execution_mode,
+        label="scheduler",
+    ).start()
+    atexit.register(heartbeat.stop)
     report_run_date = None
     report_last_attempt_at = None
 

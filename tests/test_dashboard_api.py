@@ -142,6 +142,48 @@ def test_report_freshness_requires_final_and_ready_for_current():
     assert result["state"] == "CURRENT"
 
 
+def test_report_freshness_does_not_hide_failed_automation_behind_current_file():
+    now = dt.datetime(2026, 7, 22, 16, 0, tzinfo=dashboard_api.SEOUL)
+    latest_ready = {
+        "report_date": "2026-07-22",
+        "report_status": "FINAL",
+        "validation": {"status": "READY"},
+    }
+    failed_status = {
+        "report_date": "2026-07-22",
+        "status": "FAILED",
+        "stdout_tail": "container EOD failed",
+    }
+
+    result = dashboard_api._report_freshness(
+        "PAPER", now, latest_ready, failed_status
+    )
+
+    assert result["state"] == "FAILED"
+    assert "container EOD failed" in result["message"]
+
+
+def test_report_summary_separates_inception_and_certified_baseline_returns():
+    result = dashboard_api._report_summary(
+        {
+            "report_date": "2026-07-22",
+            "performance": {
+                "starting_capital_reference": 500_000_000,
+                "pnl_vs_starting_capital": -33_600_954,
+                "return_vs_starting_capital": -0.067201908,
+                "baseline_date": "2026-07-20",
+                "post_baseline_pnl": 3_373_456,
+                "net_return": 0.007285679,
+            },
+        }
+    )
+
+    performance = result["performance"]
+    assert performance["return_vs_starting_capital"] == -0.067201908
+    assert performance["net_return"] == 0.007285679
+    assert performance["baseline_date"] == "2026-07-20"
+
+
 def test_report_freshness_surfaces_blocked_latest_as_failed():
     now = dt.datetime(2026, 7, 22, 16, 0, tzinfo=dashboard_api.SEOUL)
     latest_blocked = {

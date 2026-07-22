@@ -18,7 +18,11 @@ import time
 from pathlib import Path
 from typing import Callable, Sequence
 
-from core.utils.process_lock import ProcessAlreadyRunning, ProcessInstanceLock
+from core.utils.process_lock import (
+    ProcessAlreadyRunning,
+    ProcessHeartbeat,
+    ProcessInstanceLock,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -323,6 +327,12 @@ def main() -> int:
         print(f"[BLOCKED] {exc}")
         return 2
     atexit.register(supervisor_lock.release)
+    heartbeat = ProcessHeartbeat(
+        PROJECT_ROOT / "logs" / mode.lower() / "scheduler_supervisor_runtime.json",
+        mode,
+        label="scheduler-supervisor",
+    ).start()
+    atexit.register(heartbeat.stop)
     command = [sys.executable, str(PROJECT_ROOT / "scheduler.py"), MODE_FLAGS[mode]]
     sink = lambda payload: _append_jsonl(log_path, payload)
     sink(

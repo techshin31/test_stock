@@ -215,36 +215,37 @@ def audit_system_readiness(
 
     mode = str(dashboard.get("execution_mode") or "").upper()
     add(safety_checks, "paper_mode", mode == "PAPER", mode or "unavailable")
-    from core.utils.process_lock import is_process_alive, is_process_lock_held
+    from core.utils.process_lock import is_process_runtime_live
 
     scheduler_pid = scheduler_instance.get("pid")
     scheduler_lock_file = project_root / "logs" / "scheduler.instance.lock"
-    scheduler_lock_held = (
-        isinstance(scheduler_pid, int)
-        and scheduler_pid > 0
-        and is_process_alive(scheduler_pid)
-        and is_process_lock_held(scheduler_lock_file)
+    scheduler_runtime_live, scheduler_runtime_evidence = is_process_runtime_live(
+        scheduler_instance,
+        scheduler_lock_file,
+        project_root / "logs" / "paper" / "scheduler_runtime.json",
+        now=now,
     )
     add(
         safety_checks,
         "scheduler_instance_scope",
         scheduler_instance.get("mode") == "PAPER"
         and scheduler_instance.get("label") == "scheduler"
-        and scheduler_lock_held,
+        and scheduler_runtime_live,
         (
             f"pid={scheduler_pid or 'unavailable'}, "
             f"mode={scheduler_instance.get('mode', 'unavailable')}, "
             f"label={scheduler_instance.get('label', 'unavailable')}, "
-            f"lock_held={scheduler_lock_held}"
+            f"runtime_live={scheduler_runtime_live}, "
+            f"evidence={scheduler_runtime_evidence}"
         ),
     )
     supervisor_pid = scheduler_supervisor.get("pid")
     supervisor_lock_file = project_root / "logs" / "scheduler.supervisor.instance.lock"
-    supervisor_lock_held = (
-        isinstance(supervisor_pid, int)
-        and supervisor_pid > 0
-        and is_process_alive(supervisor_pid)
-        and is_process_lock_held(supervisor_lock_file)
+    supervisor_runtime_live, supervisor_runtime_evidence = is_process_runtime_live(
+        scheduler_supervisor,
+        supervisor_lock_file,
+        project_root / "logs" / "paper" / "scheduler_supervisor_runtime.json",
+        now=now,
     )
     supervisor_event = str(scheduler_supervisor_event.get("event") or "")
     supervisor_detail = str(scheduler_supervisor_event.get("detail") or "")
@@ -257,7 +258,7 @@ def audit_system_readiness(
         "scheduler_supervisor_runtime",
         scheduler_supervisor.get("mode") == "PAPER"
         and scheduler_supervisor.get("label") == "scheduler-supervisor"
-        and supervisor_lock_held
+        and supervisor_runtime_live
         and scheduler_supervisor_event.get("mode") == "PAPER"
         and supervisor_event
         in {
@@ -273,7 +274,8 @@ def audit_system_readiness(
             f"mode={scheduler_supervisor.get('mode', 'unavailable')}, "
             f"event={supervisor_event or 'unavailable'}, "
             f"detail={supervisor_detail or 'unavailable'}, "
-            f"lock_held={supervisor_lock_held}"
+            f"runtime_live={supervisor_runtime_live}, "
+            f"evidence={supervisor_runtime_evidence}"
         ),
     )
     account_scope = str(dashboard.get("account_scope") or "")
@@ -424,17 +426,20 @@ def audit_system_readiness(
         "integrity": latest_operations.get("operational_integrity"),
     }
     latest_open_orders = latest_trading.get("open_order_count")
+    latest_critical_incidents = int(latest_operations.get("critical_incidents") or 0)
     add(
         evidence_checks,
         "latest_eod_operational_integrity",
         all(value == 1.0 for value in latest_operational_rates.values())
-        and latest_open_orders == 0,
+        and latest_open_orders == 0
+        and latest_critical_incidents == 0,
         (
             f"data={latest_operational_rates['data']}, "
             f"risk={latest_operational_rates['risk']}, "
             f"reconciliation={latest_operational_rates['reconciliation']}, "
             f"integrity={latest_operational_rates['integrity']}, "
-            f"open_orders={latest_open_orders}"
+            f"open_orders={latest_open_orders}, "
+            f"critical_incidents={latest_critical_incidents}"
         ),
     )
     recovery_exit_codes = scheduler_recovery.get("process_exit_codes") or []
@@ -661,6 +666,8 @@ def audit_system_readiness(
             "logs/paper/shadow_reentry_state.json",
             "logs/scheduler.instance.lock.json",
             "logs/scheduler.supervisor.instance.lock.json",
+            "logs/paper/scheduler_runtime.json",
+            "logs/paper/scheduler_supervisor_runtime.json",
             "logs/paper/scheduler_supervisor.jsonl",
             "reports/promotion/paper/baseline.json",
             "reports/promotion/paper/latest.json",

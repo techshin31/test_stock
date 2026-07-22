@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "report_date": "2026-07-22",
-  "generated_at": "2026-07-22T15:59:58+09:00",
+  "generated_at": "2026-07-22T16:13:57+09:00",
   "report_status": "FINAL",
   "mode": "PAPER",
   "executive_summary": "REAL 전환은 3개 조건 때문에 차단됐습니다.",
@@ -106,7 +106,7 @@
   },
   "ledger_quality": {
     "metadata": {
-      "generated_at": "2026-07-22T16:00:16+09:00",
+      "generated_at": "2026-07-22T16:14:14+09:00",
       "cutoff": "2026-07-22T15:21:31+09:00",
       "timezone": "Asia/Seoul",
       "mode": "PAPER",
@@ -203,7 +203,7 @@
     },
     "observed_order_result_parity": {
       "schema_version": 1,
-      "generated_at": "2026-07-22T16:00:16+09:00",
+      "generated_at": "2026-07-22T16:14:14+09:00",
       "mode": "PAPER",
       "observe_only": true,
       "broker_write_permission": "DENIED_BY_DESIGN",
@@ -268,9 +268,9 @@
     },
     "canonical_evidence_refresh": {
       "status": "READY",
-      "ledger_summary": "C:\\dev\\project\\Service_Stock_Analysis\\reports\\analysis\\paper_ledger_latest\\summary.json",
-      "parity_summary": "C:\\dev\\project\\Service_Stock_Analysis\\reports\\analysis\\paper_order_result_replay\\latest\\summary.json",
-      "execution_stress_summary": "C:\\dev\\project\\Service_Stock_Analysis\\reports\\analysis\\paper_execution_stress\\latest\\summary.json",
+      "ledger_summary": "/app/reports/analysis/paper_ledger_latest/summary.json",
+      "parity_summary": "/app/reports/analysis/paper_order_result_replay/latest/summary.json",
+      "execution_stress_summary": "/app/reports/analysis/paper_execution_stress/latest/summary.json",
       "execution_stress_ready": false
     }
   },
@@ -619,7 +619,7 @@
         "confirmed_reentries": 14
       },
       "execution_stress": {
-        "generated_at": "2026-07-22T16:00:42+09:00",
+        "generated_at": "2026-07-22T16:14:34+09:00",
         "calibration_status": "PROVISIONAL_SMALL_SAMPLE",
         "scenario_checks": [
           {
@@ -738,17 +738,17 @@
     ]
   },
   "sources": [
-    "C:\\dev\\project\\Service_Stock_Analysis\\logs\\paper\\operational_health.jsonl",
-    "C:\\dev\\project\\Service_Stock_Analysis\\logs\\paper\\account_snapshots.jsonl",
-    "C:\\dev\\project\\Service_Stock_Analysis\\reports\\promotion\\paper\\baseline.json",
-    "C:\\dev\\project\\Service_Stock_Analysis\\reports\\promotion\\paper\\cash_flows.json",
+    "/app/logs/paper/operational_health.jsonl",
+    "/app/logs/paper/account_snapshots.jsonl",
+    "/app/reports/promotion/paper/baseline.json",
+    "/app/reports/promotion/paper/cash_flows.json",
     "Yahoo Finance ^KS11 via data loader",
     "PostgreSQL orders + executions (strategy/venue/account scoped)",
-    "C:\\dev\\project\\Service_Stock_Analysis\\reports\\analysis\\paper_broker_history\\latest.json",
+    "/app/reports/analysis/paper_broker_history/latest.json",
     "PostgreSQL full PAPER/legacy order ledger + broker dashboard endpoint",
-    "C:\\dev\\project\\Service_Stock_Analysis\\logs\\paper\\shadow_reentry_state.json",
-    "C:\\dev\\project\\Service_Stock_Analysis\\reports\\analysis\\paper_reentry_experiments\\pass_only\\metrics.json",
-    "C:\\dev\\project\\Service_Stock_Analysis\\reports\\analysis\\paper_execution_stress\\latest\\summary.json"
+    "/app/logs/paper/shadow_reentry_state.json",
+    "/app/reports/analysis/paper_reentry_experiments/pass_only/metrics.json",
+    "/app/reports/analysis/paper_execution_stress/latest/summary.json"
   ],
   "reader_caveats": [
     "수익률은 인증 기준선 이후 계좌 NAV의 시간가중수익률입니다.",

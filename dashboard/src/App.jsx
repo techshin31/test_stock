@@ -61,7 +61,7 @@ function formatPercent(value, { decimal = false } = {}) {
 function toneForState(state) {
   if (['CURRENT', 'NORMAL', 'SCANNING', 'READY', 'FINAL'].includes(state)) return 'positive'
   if (['GENERATING', 'OBSERVING', 'ORDER_SUPPRESSION', 'DEGRADED_DATA_STALE'].includes(state)) return 'warning'
-  if (['OVERDUE', 'MISSING', 'ERROR', 'BLOCKED'].includes(state)) return 'negative'
+  if (['OVERDUE', 'MISSING', 'FAILED', 'ERROR', 'BLOCKED'].includes(state)) return 'negative'
   return 'neutral'
 }
 
@@ -307,7 +307,7 @@ function Overview({ overview, onOpenReports }) {
         <MetricCard icon={WalletCards} label="총 평가자산" value={formatMoney(dashboard.total_eval)} detail={`예수금 ${formatMoney(dashboard.cash)}`} />
         <MetricCard icon={dashboard.daily_asset_change >= 0 ? ArrowUpRight : ArrowDownRight} label="당일 자산변동" value={formatMoney(dashboard.daily_asset_change)} detail={formatPercent(dashboard.daily_asset_change_rate)} tone={dashboard.daily_asset_change >= 0 ? 'positive' : 'negative'} />
         <MetricCard icon={CircleDollarSign} label="평가손익" value={formatMoney(dashboard.unrealized_pnl)} detail={`보유 ${number.format(positions.length)}종목`} tone={dashboard.unrealized_pnl >= 0 ? 'positive' : 'negative'} />
-        <MetricCard icon={Gauge} label="공식 누적수익률" value={formatPercent(performance.net_return, { decimal: true })} detail={`KOSPI ${formatPercent(performance.benchmark_return, { decimal: true })}`} tone={performance.net_return >= 0 ? 'positive' : 'negative'} />
+        <MetricCard icon={Gauge} label="5억 시작 기준 수익률" value={formatPercent(performance.return_vs_starting_capital, { decimal: true })} detail={`손익 ${formatMoney(performance.pnl_vs_starting_capital)} · 기준선 이후 ${formatPercent(performance.net_return, { decimal: true })}`} tone={performance.return_vs_starting_capital >= 0 ? 'positive' : 'negative'} />
       </div>
 
       <div className="content-grid">

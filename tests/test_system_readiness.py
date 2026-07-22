@@ -229,6 +229,66 @@ def test_completion_requires_all_safety_and_evidence_checks(tmp_path):
     assert result["blockers"] == []
 
 
+def test_completion_requires_latest_eod_to_be_incident_free(tmp_path):
+    _fixture(tmp_path, complete=True)
+    latest_path = tmp_path / "reports/promotion/paper/latest.json"
+    latest = json.loads(latest_path.read_text(encoding="utf-8"))
+    latest["operations"]["critical_incidents"] = 1
+    _write(latest_path, latest)
+
+    result = audit_system_readiness(
+        tmp_path,
+        now=dt.datetime(2026, 7, 22, 10, 2, tzinfo=KST),
+        environ={},
+    )
+
+    assert result["paper_runtime_safe"] is True
+    assert result["full_system_complete"] is False
+    assert any(
+        "latest_eod_operational_integrity" in item
+        and "critical_incidents=1" in item
+        for item in result["blockers"]
+    )
+
+
+def test_foreign_runtime_heartbeat_is_live_only_while_fresh(tmp_path, monkeypatch):
+    from core.utils.process_lock import is_process_runtime_live
+
+    monkeypatch.setenv("QUANTPILOT_RUNTIME_ID", "windows-host")
+    metadata = {
+        "pid": 11,
+        "mode": "PAPER",
+        "label": "scheduler",
+        "runtime_id": "paper-trader",
+    }
+    heartbeat_path = tmp_path / "scheduler_runtime.json"
+    _write(
+        heartbeat_path,
+        {
+            **metadata,
+            "updated_at": "2026-07-22T16:00:00+09:00",
+        },
+    )
+
+    alive, detail = is_process_runtime_live(
+        metadata,
+        tmp_path / "scheduler.instance.lock",
+        heartbeat_path,
+        now=dt.datetime(2026, 7, 22, 16, 0, 20, tzinfo=KST),
+    )
+    stale, stale_detail = is_process_runtime_live(
+        metadata,
+        tmp_path / "scheduler.instance.lock",
+        heartbeat_path,
+        now=dt.datetime(2026, 7, 22, 16, 0, 31, tzinfo=KST),
+    )
+
+    assert alive is True
+    assert "foreign heartbeat" in detail
+    assert stale is False
+    assert "stale" in stale_detail
+
+
 def test_real_environment_marker_fails_runtime_safety(tmp_path):
     _fixture(tmp_path, complete=True)
 
@@ -554,4 +614,3 @@ def test_stale_supervisor_lock_causes_paper_runtime_safe_false(tmp_path):
         "scheduler_supervisor_runtime" in blocker
         for blocker in result["blockers"]
     )
-

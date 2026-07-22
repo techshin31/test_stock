@@ -26,6 +26,7 @@ RUN uv sync --frozen --no-install-project
 
 # Copy application source code
 COPY core /app/core
+COPY data /app/data
 COPY api /app/api
 COPY apps /app/apps
 COPY storage /app/storage

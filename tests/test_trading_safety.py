@@ -536,6 +536,16 @@ def test_scheduler_labels_candidate_suppression_separately_from_global_pause():
     )
 
 
+def test_scheduler_formats_name_rich_and_legacy_positions():
+    assert scheduler.format_position_label("005930.KS") == "005930.KS"
+    assert scheduler.format_position_label(
+        {"ticker": "021240.KS", "name": "코웨이"}
+    ) == "코웨이 (021240.KS)"
+    assert scheduler.format_position_label(
+        {"ticker": "383220.KS", "name": ""}
+    ) == "383220.KS"
+
+
 def test_scheduler_eod_report_passes_mode_and_date(tmp_path, monkeypatch):
     captured = {}
     monkeypatch.setattr(scheduler, "PROJECT_ROOT", tmp_path)
@@ -623,6 +633,56 @@ def test_scheduler_backfills_oldest_missing_completed_paper_report(tmp_path):
     assert scheduler.due_end_of_day_report_date(now, "PAPER", tmp_path) == (
         datetime.date(2026, 7, 21)
     )
+
+
+def test_scheduler_retries_failed_eod_even_when_a_valid_report_exists(tmp_path):
+    operational = tmp_path / "logs/paper/operational_health.jsonl"
+    operational.parent.mkdir(parents=True, exist_ok=True)
+    operational.write_text(
+        json.dumps(
+            {
+                "timestamp": "2026-07-22T15:20:00+09:00",
+                "operational_status": "NORMAL",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    daily = tmp_path / "reports/promotion/paper/daily"
+    daily.mkdir(parents=True, exist_ok=True)
+    (daily / "2026-07-22.json").write_text(
+        json.dumps(
+            {
+                "report_date": "2026-07-22",
+                "mode": "PAPER",
+                "report_status": "FINAL",
+                "validation": {"status": "READY"},
+                "operations": {
+                    "data_freshness_rate": 1.0,
+                    "risk_check_coverage": 1.0,
+                    "order_reconciliation_rate": 1.0,
+                    "operational_integrity": 1.0,
+                },
+                "trading": {"open_order_count": 0},
+            }
+        ),
+        encoding="utf-8",
+    )
+    status = tmp_path / "logs/paper/eod_report_status.json"
+    status.write_text(
+        json.dumps(
+            {
+                "report_date": "2026-07-22",
+                "mode": "PAPER",
+                "status": "FAILED",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert scheduler.pending_paper_eod_report_date(
+        datetime.datetime(2026, 7, 22, 16, 0), tmp_path
+    ) == datetime.date(2026, 7, 22)
 
 
 def test_scheduler_retries_failed_eod_after_bounded_delay():

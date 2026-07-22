@@ -106,3 +106,16 @@ git diff --check
 
 - `git reset --hard`, `git checkout --`, 파일 일괄 삭제, 전체 worktree 일괄 커밋을 일체 수행하지 않았습니다.
 - 커밋이 필요할 경우 본 manifest의 파일 목록을 사용자에게 제시하고 별도 승인을 받습니다.
+
+---
+
+## 9. 16:14 KST Docker PAPER 런타임 복구 검증
+
+- `Dockerfile.app`에 `/app/data`를 포함해 컨테이너의 KOSPI benchmark loader import 실패를 제거했습니다.
+- 스케줄러와 supervisor에 `paper-trader` 실행 namespace 및 5초 heartbeat를 추가했습니다. 컨테이너 내부는 OS PID/lock, Windows 호스트는 30초 이내 heartbeat로 동일한 PAPER 런타임을 검증합니다.
+- 기존 `FAILED` EOD 상태가 FINAL/READY 파일에 가려지지 않도록 API 우선순위와 스케줄러 재시도 조건을 수정했습니다.
+- 이름이 포함된 position 객체와 기존 ticker 문자열을 모두 출력하도록 스케줄러 콘솔의 position schema 호환성을 보강했습니다.
+- 대시보드 핵심 수익률을 인증 기준선 이후 수익률이 아닌 5억원 시작 기준 수익률로 표시하고 두 값을 명시적으로 분리했습니다.
+- 2026-07-22 EOD 자동 재시도 결과: `READY`, return code 0, FINAL/READY 일일 리포트 생성 완료.
+- 런타임 결과: PAPER safety 12/12, 컨테이너 재시작 0회, 미정산 주문 0건, REAL authorization=false.
+- 검증 결과: pytest 266개, dashboard lint/build, `uv lock --check`, `docker compose config --quiet`, `git diff --check` 통과.

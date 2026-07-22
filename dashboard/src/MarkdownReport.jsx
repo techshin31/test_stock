@@ -12,11 +12,11 @@ import {
 
 function CustomListItem({ children, ...props }) {
   const content = Array.isArray(children) ? children : [children]
-  
+
   // Check if list item text contains markdown checkbox patterns
   let isTask = false
   let isChecked = false
-  
+
   const processChild = (child) => {
     if (typeof child === 'string') {
       if (child.startsWith('[x] ') || child.startsWith('[X] ')) {

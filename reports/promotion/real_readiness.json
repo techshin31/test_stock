@@ -21,7 +21,7 @@
   "benchmark_anchor_adjusted": true,
   "validation_status": "READY",
   "as_of": "2026-07-22",
-  "generated_at": "2026-07-22T15:59:58+09:00",
+  "generated_at": "2026-07-22T16:13:57+09:00",
   "mode": "PAPER",
   "promotion": {
     "target_mode": "REAL",
@@ -33,5 +33,5 @@
       "excess_return -0.0359 <= 0.0000"
     ]
   },
-  "source_report": "C:\\dev\\project\\Service_Stock_Analysis\\reports\\promotion\\paper\\daily\\2026-07-22.json"
+  "source_report": "/app/reports/promotion/paper/daily/2026-07-22.json"
 }
