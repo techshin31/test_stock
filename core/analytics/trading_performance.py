@@ -41,7 +41,12 @@ KRX_CLOSE_TIME = dt.time(15, 30)
 
 def _default_benchmark_loader(start: str, end: str) -> pd.Series:
     # Keep heavy market-data dependencies out of baseline checks and DRY reports.
-    from data.loaders.kospi_data import download_kospi_index
+    try:
+        from data.loaders.kospi_data import download_kospi_index
+    except ModuleNotFoundError:
+        import sys
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from data.loaders.kospi_data import download_kospi_index
 
     return download_kospi_index(start, end)
 

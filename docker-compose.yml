@@ -4,7 +4,7 @@ services:
   ############################################################
   postgres:
     image: postgres:16
-    container_name: quantpilot-postgres
+    container_name: postgres-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: admin
@@ -41,6 +41,7 @@ services:
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
+      TZ: Asia/Seoul
     ports:
       - "8000:8000"
     volumes:
@@ -67,6 +68,7 @@ services:
       POSTGRES_PORT: 5432
       KIS_ENV: paper
       ALLOW_LIVE_ORDER: "false"
+      TZ: Asia/Seoul
     volumes:
       - ./logs:/app/logs
       - ./reports:/app/reports

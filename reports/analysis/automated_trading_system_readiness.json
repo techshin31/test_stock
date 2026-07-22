@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-22T14:10:34+09:00",
+  "generated_at": "2026-07-22T16:00:42+09:00",
   "scope": "PAPER_AUTOMATED_TRADING_SYSTEM",
-  "paper_runtime_safe": true,
+  "paper_runtime_safe": false,
   "full_system_complete": false,
   "real_execution_authorized": false,
   "progress": {
     "execution_samples": {
       "buy": 5,
-      "sell": 4,
+      "sell": 5,
       "required_per_side": 30
     },
     "shadow_sessions": {
@@ -16,11 +16,11 @@
       "required": 10
     },
     "paper_sessions": {
-      "completed": 1,
+      "completed": 2,
       "required": 60
     },
     "final_daily_reports": {
-      "completed": 1,
+      "completed": 2,
       "required": 60
     },
     "evidence_checks": {
@@ -28,7 +28,7 @@
       "total": 14
     },
     "safety_checks": {
-      "passed": 12,
+      "passed": 10,
       "total": 12
     }
   },
@@ -40,13 +40,13 @@
     },
     {
       "name": "scheduler_instance_scope",
-      "passed": true,
-      "detail": "pid=2644, mode=PAPER, label=scheduler"
+      "passed": false,
+      "detail": "pid=11, mode=PAPER, label=scheduler, lock_held=False"
     },
     {
       "name": "scheduler_supervisor_runtime",
-      "passed": true,
-      "detail": "pid=7004, mode=PAPER, event=ATTACHED_TO_EXISTING, detail=pid=2644, poll_seconds=5"
+      "passed": false,
+      "detail": "pid=10, mode=PAPER, event=SUPERVISOR_STARTED, detail=child_launch=managed, lock_held=False"
     },
     {
       "name": "certified_account_scope",
@@ -61,12 +61,12 @@
     {
       "name": "market_data_health",
       "passed": true,
-      "detail": "fresh=52/52, stale=0, missing=0, dependencies=0, held_stale=0"
+      "detail": "fresh=51/51, stale=0, missing=0, dependencies=0, held_stale=0"
     },
     {
       "name": "held_position_risk_coverage",
       "passed": true,
-      "detail": "completed=4/4, coverage=100.00%"
+      "detail": "completed=3/3, coverage=100.00%"
     },
     {
       "name": "no_unresolved_runtime_orders",
@@ -81,12 +81,12 @@
     {
       "name": "dashboard_freshness",
       "passed": true,
-      "detail": "age_seconds=6, limit=300"
+      "detail": "age_seconds=2351, limit=86400"
     },
     {
       "name": "real_environment_disabled",
       "passed": true,
-      "detail": "KIS_ENV=unset, ALLOW_LIVE_ORDER=unset"
+      "detail": "KIS_ENV=paper, ALLOW_LIVE_ORDER=false"
     },
     {
       "name": "shadow_order_disconnected",
@@ -98,12 +98,12 @@
     {
       "name": "latest_final_report",
       "passed": true,
-      "detail": "date=2026-07-21, expected=2026-07-21, status=FINAL, validation=READY"
+      "detail": "date=2026-07-22, expected=2026-07-22, status=FINAL, validation=READY"
     },
     {
       "name": "daily_final_report_coverage",
       "passed": true,
-      "detail": "covered=1/1, missing=[], invalid=0"
+      "detail": "covered=2/2, missing=[], invalid=0"
     },
     {
       "name": "latest_eod_operational_integrity",
@@ -138,7 +138,7 @@
     {
       "name": "execution_stress_evidence_integrity",
       "passed": true,
-      "detail": "ledger_orders=547, stress_orders=547, BUY=5/30, SELL=4/30, declared_ready=False"
+      "detail": "ledger_orders=548, stress_orders=548, BUY=5/30, SELL=5/30, declared_ready=False"
     },
     {
       "name": "execution_stress_robustness",
@@ -158,19 +158,21 @@
     {
       "name": "paper_operating_window",
       "passed": false,
-      "detail": "1/60 completed PAPER sessions"
+      "detail": "2/60 completed PAPER sessions"
     },
     {
       "name": "paper_final_report_window",
       "passed": false,
-      "detail": "1/60 FINAL/READY daily reports"
+      "detail": "2/60 FINAL/READY daily reports"
     }
   ],
   "blockers": [
+    "scheduler_instance_scope: pid=11, mode=PAPER, label=scheduler, lock_held=False",
+    "scheduler_supervisor_runtime: pid=10, mode=PAPER, event=SUPERVISOR_STARTED, detail=child_launch=managed, lock_held=False",
     "execution_stress_robustness: sample_ready=False, risk_fallbacks=['C_CAP10', 'C_CAP08']",
     "shadow_observation_window: 1/10 verified sessions",
-    "paper_operating_window: 1/60 completed PAPER sessions",
-    "paper_final_report_window: 1/60 FINAL/READY daily reports"
+    "paper_operating_window: 2/60 completed PAPER sessions",
+    "paper_final_report_window: 2/60 FINAL/READY daily reports"
   ],
   "sources": [
     "logs/paper/dashboard_state.json",

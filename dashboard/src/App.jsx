@@ -12,10 +12,12 @@ import {
   Clock3,
   FileText,
   Gauge,
+  Menu,
   RefreshCw,
   Server,
   ShieldCheck,
   WalletCards,
+  X,
   XCircle,
 } from 'lucide-react'
 
@@ -93,12 +95,10 @@ function Panel({ title, eyebrow, action, className = '', children }) {
 function MetricCard({ icon: Icon, label, value, detail, tone = 'neutral' }) {
   return (
     <article className="metric-card">
-      <div className={`metric-card__icon metric-card__icon--${tone}`}><Icon size={19} /></div>
-      <div>
-        <p className="metric-card__label">{label}</p>
-        <p className="metric-card__value">{value}</p>
-        <p className="metric-card__detail">{detail}</p>
-      </div>
+      <div className={`metric-card__icon metric-card__icon--${tone}`}><Icon size={16} /></div>
+      <p className="metric-card__label">{label}</p>
+      <p className="metric-card__value">{value}</p>
+      <p className="metric-card__detail">{detail}</p>
     </article>
   )
 }
@@ -332,7 +332,7 @@ function Overview({ overview, onOpenReports }) {
           ) : <div className="empty-inline">현재 보유 포지션이 없습니다.</div>}
         </Panel>
 
-        <Panel title="운영 무결성" eyebrow="LATEST OFFICIAL EOD">
+        <Panel title="운영 무결성" eyebrow="LATEST OFFICIAL EOD" className="content-grid__side">
           <div className="stack">
             <ProgressMetric label="데이터 신선도" value={operations.data_freshness_rate} />
             <ProgressMetric label="위험점검 커버리지" value={operations.risk_check_coverage} />
@@ -352,7 +352,7 @@ function Overview({ overview, onOpenReports }) {
           ) : <div className="empty-inline">표시할 운영 로그가 없습니다.</div>}
         </Panel>
 
-        <Panel title="오늘 주문" eyebrow="ACTUAL ORDERS">
+        <Panel title="오늘 주문" eyebrow="ACTUAL ORDERS" className="content-grid__side">
           <dl className="order-grid">
             <div><dt>매수 체결</dt><dd>{orders.buy_filled || 0}</dd></div>
             <div><dt>매도 체결</dt><dd>{orders.sell_filled || 0}</dd></div>
@@ -372,6 +372,7 @@ function Overview({ overview, onOpenReports }) {
         <Panel
           title={report.date ? `${report.date} 공식 리포트` : '공식 리포트'}
           eyebrow="REPORT STATUS"
+          className="content-grid__side"
           action={<StatusChip state={report.report_status}>{report.report_status || '없음'}</StatusChip>}
         >
           <p className="report-summary">{report.executive_summary || '아직 발행된 공식 리포트가 없습니다.'}</p>
@@ -507,31 +508,84 @@ function App() {
     return () => controller.abort()
   }, [activeTab, selectedDate, selectReport])
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const lastUpdated = useMemo(() => overview?.dashboard?.updated_at || '확인 중', [overview])
   const operationalStatus = overview?.dashboard?.operational_status || 'UNKNOWN'
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand"><span className="brand__mark"><BarChart3 size={20} /></span><span>QuantPilot<small>Operations</small></span></div>
+      {/* Mobile Backdrop & Drawer */}
+      {mobileMenuOpen && (
+        <div className="mobile-backdrop" onClick={() => setMobileMenuOpen(false)} aria-hidden="true" />
+      )}
+
+      <aside className={`sidebar ${mobileMenuOpen ? 'is-mobile-open' : ''}`}>
+        <div className="brand">
+          <span className="brand__mark"><BarChart3 size={20} /></span>
+          <span>QuantPilot<small>Operations</small></span>
+          <button className="mobile-close-btn" type="button" onClick={() => setMobileMenuOpen(false)} aria-label="메뉴 닫기">
+            <X size={20} />
+          </button>
+        </div>
         <nav aria-label="주요 메뉴">
-          <button className={activeTab === 'overview' ? 'is-active' : ''} type="button" onClick={() => setActiveTab('overview')}><Activity size={18} />운영 현황</button>
-          <button className={activeTab === 'reports' ? 'is-active' : ''} type="button" onClick={() => setActiveTab('reports')}><FileText size={18} />공식 리포트</button>
+          <button
+            className={activeTab === 'overview' ? 'is-active' : ''}
+            type="button"
+            onClick={() => { setActiveTab('overview'); setMobileMenuOpen(false) }}
+          >
+            <Activity size={18} />운영 현황
+          </button>
+          <button
+            className={activeTab === 'reports' ? 'is-active' : ''}
+            type="button"
+            onClick={() => { setActiveTab('reports'); setMobileMenuOpen(false) }}
+          >
+            <FileText size={18} />공식 리포트
+          </button>
         </nav>
         <div className="sidebar__footer">
-          <div><Server size={16} /><span>읽기 전용</span></div>
-          <p>주문과 모드 전환은 이 화면에서 실행할 수 없습니다.</p>
+          <div><Server size={16} /><span>읽기 전용 모드</span></div>
+          <p>안전 설계로 주문 및 모드 변경은 이 화면에서 차단됩니다.</p>
         </div>
       </aside>
 
       <main>
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">PAPER TRADING CONSOLE</p>
-            <h1>{activeTab === 'overview' ? '운영 현황' : '공식 EOD 리포트'}</h1>
-            <p className="topbar__meta">최근 계좌 업데이트 {lastUpdated}</p>
+        {/* Mobile Navbar Header */}
+        <header className="mobile-header">
+          <button className="icon-button" type="button" onClick={() => setMobileMenuOpen(true)} aria-label="메뉴 열기">
+            <Menu size={22} />
+          </button>
+          <div className="mobile-brand">
+            <BarChart3 size={18} className="text-accent" />
+            <span>QuantPilot</span>
           </div>
-          <div className="topbar__status"><StatusChip state={operationalStatus}>{operationalStatus}</StatusChip><span className="mode-badge"><ShieldCheck size={15} /> PAPER</span></div>
+          <StatusChip state={operationalStatus}>{operationalStatus}</StatusChip>
+        </header>
+
+        {/* Topbar */}
+        <header className="topbar hero-topbar">
+          <div className="hero-topbar__main">
+            <div className="hero-topbar__eyebrow">
+              <span className="hero-badge">PAPER</span>
+              <span className="hero-divider">/</span>
+              <span>***9904-01</span>
+              <span className="hero-divider">·</span>
+              <span>updated {lastUpdated}</span>
+            </div>
+            <h1>{activeTab === 'overview' ? '운영 현황' : 'EOD 리포트'}</h1>
+          </div>
+          <div className="topbar__status">
+            <StatusChip state={operationalStatus}>{operationalStatus}</StatusChip>
+            <span className="mode-badge">PAPER MODE</span>
+            <button
+              className="icon-button"
+              type="button"
+              onClick={() => loadOverview()}
+              title="새로고침"
+            >
+              <RefreshCw size={14} />
+            </button>
+          </div>
         </header>
 
         <div className="page-content">
