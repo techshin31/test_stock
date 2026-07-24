@@ -1,20 +1,36 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
-__pycache__ 
-*.pyc
-__pycache__ 
-*.pyc
-*.pyo
+# Environments
+.venv/
+env/
+venv/
 
-.venv 
-
+# Environment & Credentials
 .env
+.env.*
 .token_cache.json
 token.dat
 *.token
-database
+
+# Logs and Data
 logs/
-storage/postgres/database/  
+*.log
+*.lock
+database/
+storage/postgres/database/
+
+# Frontend Build Output
+dashboard/dist/
+dashboard/node_modules/
 
 # Obsidian workspace
-.obsidian/workspace.json
-obsidian/.obsidian/workspace.json
+.obsidian/
+obsidian/.obsidian/
+
+# Temporary / Debug Dump Files
+all_services.txt
+tasks.txt
+service_check.txt
