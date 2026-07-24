@@ -45,6 +45,10 @@ services:
     ports:
       - "8000:8000"
     volumes:
+      - ./api:/app/api
+      - ./core:/app/core
+      - ./storage:/app/storage
+      - ./data:/app/data
       - ./logs:/app/logs
       - ./reports:/app/reports
     depends_on:

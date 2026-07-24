@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-24T09:21:46+09:00",
+  "generated_at": "2026-07-24T16:13:34+09:00",
   "scope": "PAPER_AUTOMATED_TRADING_SYSTEM",
   "paper_runtime_safe": true,
   "full_system_complete": false,
   "real_execution_authorized": false,
   "progress": {
     "execution_samples": {
-      "buy": 7,
-      "sell": 7,
+      "buy": 9,
+      "sell": 8,
       "required_per_side": 30
     },
     "shadow_sessions": {
@@ -16,7 +16,7 @@
       "required": 10
     },
     "paper_sessions": {
-      "completed": 3,
+      "completed": 4,
       "required": 60
     },
     "final_daily_reports": {
@@ -24,7 +24,7 @@
       "required": 60
     },
     "evidence_checks": {
-      "passed": 9,
+      "passed": 7,
       "total": 14
     },
     "safety_checks": {
@@ -41,12 +41,12 @@
     {
       "name": "scheduler_instance_scope",
       "passed": true,
-      "detail": "pid=11, mode=PAPER, label=scheduler, runtime_live=True, evidence=foreign heartbeat age=4.2s runtime=paper-trader"
+      "detail": "pid=12, mode=PAPER, label=scheduler, runtime_live=True, evidence=local_os_lock"
     },
     {
       "name": "scheduler_supervisor_runtime",
       "passed": true,
-      "detail": "pid=9, mode=PAPER, event=SUPERVISOR_STARTED, detail=child_launch=managed, runtime_live=True, evidence=foreign heartbeat age=3.2s runtime=paper-trader"
+      "detail": "pid=10, mode=PAPER, event=SUPERVISOR_STARTED, detail=child_launch=managed, runtime_live=True, evidence=local_os_lock"
     },
     {
       "name": "certified_account_scope",
@@ -81,7 +81,7 @@
     {
       "name": "dashboard_freshness",
       "passed": true,
-      "detail": "age_seconds=3, limit=300"
+      "detail": "age_seconds=3142, limit=86400"
     },
     {
       "name": "real_environment_disabled",
@@ -97,18 +97,18 @@
   "completion_evidence_checks": [
     {
       "name": "latest_final_report",
-      "passed": true,
-      "detail": "date=2026-07-23, expected=2026-07-23, status=FINAL, validation=READY"
+      "passed": false,
+      "detail": "date=2026-07-24, expected=2026-07-24, status=FINAL, validation=READY"
     },
     {
       "name": "daily_final_report_coverage",
-      "passed": true,
-      "detail": "covered=3/3, missing=[], invalid=0"
+      "passed": false,
+      "detail": "covered=3/4, missing=['2026-07-24'], invalid=1"
     },
     {
       "name": "latest_eod_operational_integrity",
       "passed": false,
-      "detail": "data=1.0, risk=1.0, reconciliation=1.0, integrity=1.0, open_orders=0, critical_incidents=19"
+      "detail": "data=0.9986101459346769, risk=1.0, reconciliation=1.0, integrity=0.9986101459346769, open_orders=0, critical_incidents=22"
     },
     {
       "name": "scheduler_recovery_self_test",
@@ -118,7 +118,7 @@
     {
       "name": "broker_history_audit",
       "passed": true,
-      "detail": "complete=True, unresolved=0, through=2026-07-23"
+      "detail": "complete=True, unresolved=0, through=2026-07-24"
     },
     {
       "name": "historical_fill_evidence",
@@ -138,7 +138,7 @@
     {
       "name": "execution_stress_evidence_integrity",
       "passed": true,
-      "detail": "ledger_orders=552, stress_orders=552, BUY=7/30, SELL=7/30, declared_ready=False"
+      "detail": "ledger_orders=555, stress_orders=555, BUY=9/30, SELL=8/30, declared_ready=False"
     },
     {
       "name": "execution_stress_robustness",
@@ -158,7 +158,7 @@
     {
       "name": "paper_operating_window",
       "passed": false,
-      "detail": "3/60 completed PAPER sessions"
+      "detail": "4/60 completed PAPER sessions"
     },
     {
       "name": "paper_final_report_window",
@@ -167,10 +167,12 @@
     }
   ],
   "blockers": [
-    "latest_eod_operational_integrity: data=1.0, risk=1.0, reconciliation=1.0, integrity=1.0, open_orders=0, critical_incidents=19",
+    "latest_final_report: date=2026-07-24, expected=2026-07-24, status=FINAL, validation=READY",
+    "daily_final_report_coverage: covered=3/4, missing=['2026-07-24'], invalid=1",
+    "latest_eod_operational_integrity: data=0.9986101459346769, risk=1.0, reconciliation=1.0, integrity=0.9986101459346769, open_orders=0, critical_incidents=22",
     "execution_stress_robustness: sample_ready=False, risk_fallbacks=['C_CAP10', 'C_CAP08']",
     "shadow_observation_window: 3/10 verified sessions",
-    "paper_operating_window: 3/60 completed PAPER sessions",
+    "paper_operating_window: 4/60 completed PAPER sessions",
     "paper_final_report_window: 3/60 FINAL/READY daily reports"
   ],
   "sources": [
@@ -187,8 +189,8 @@
     "reports/promotion/paper/daily/*.json",
     "reports/analysis/paper_broker_history/latest.json",
     "reports/analysis/scheduler_recovery_evidence.json",
-    "reports\\analysis\\paper_ledger_latest\\summary.json",
-    "reports\\analysis\\paper_order_result_replay\\latest\\summary.json",
-    "reports\\analysis\\paper_execution_stress\\latest\\summary.json"
+    "reports/analysis/paper_ledger_latest/summary.json",
+    "reports/analysis/paper_order_result_replay/latest/summary.json",
+    "reports/analysis/paper_execution_stress/latest/summary.json"
   ]
 }

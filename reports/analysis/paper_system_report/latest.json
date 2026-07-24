@@ -5,7 +5,7 @@
     "surface": "report",
     "title": "PAPER 자동매매 원장 복원·실험·준비도 보고서",
     "description": "5억원 기준 실제 PAPER 손익, 주문결과 원장 복원, 재진입 확인 조건 실험의 의사결정 보고서",
-    "generatedAt": "2026-07-24T09:21:46+09:00",
+    "generatedAt": "2026-07-24T16:13:34+09:00",
     "sources": [
       {
         "id": "paper_ledger",
@@ -16,7 +16,7 @@
           "language": "sql",
           "description": "동일 PAPER 계좌의 risk_neutral→aggressive 전략 계보와 KIS 주문 감사를 컷오프까지 읽기 전용으로 결합",
           "sql": "SELECT o.*, s.name FROM orders o JOIN strategies s ON s.id=o.strategy_id WHERE s.name IN ('risk_neutral','aggressive') AND ((o.execution_venue='PAPER' AND o.account_scope=%(account_scope)s) OR o.execution_venue='UNKNOWN') AND o.created_at <= %(cutoff)s ORDER BY o.created_at;\nSELECT e.* FROM executions e JOIN orders o ON o.id=e.order_id JOIN strategies s ON s.id=o.strategy_id WHERE s.name IN ('risk_neutral','aggressive') AND ((o.execution_venue='PAPER' AND o.account_scope=%(account_scope)s) OR o.execution_venue='UNKNOWN') AND e.executed_at <= %(cutoff)s ORDER BY e.executed_at;\nSELECT bh.* FROM balance_history bh JOIN strategies s ON s.id=bh.strategy_id WHERE s.name IN ('risk_neutral','aggressive') AND ((bh.execution_venue='PAPER' AND bh.account_scope=%(account_scope)s) OR bh.execution_venue='UNKNOWN') AND bh.recorded_at <= %(cutoff)s ORDER BY bh.recorded_at;",
-          "executed_at": "2026-07-23T15:30:29+09:00",
+          "executed_at": "2026-07-24T16:13:16+09:00",
           "tables_used": [
             "orders",
             "executions",
@@ -25,7 +25,7 @@
             "companies"
           ],
           "filters": [
-            "cutoff=2026-07-23T15:21:13+09:00",
+            "cutoff=2026-07-24T15:21:13+09:00",
             "strategy lineage=risk_neutral,aggressive",
             "PAPER account scope + UNKNOWN legacy",
             "REAL excluded"
@@ -75,8 +75,8 @@
           "engine": "PostgreSQL",
           "language": "sql",
           "description": "준비도 JSON에서 검토한 안전검사와 완료 증거검사를 재현하는 값 테이블",
-          "sql": "WITH readiness_gate(criterion, passed, detail, status_rank) AS (VALUES\n        ('paper_mode', TRUE, 'PAPER', 1),\n        ('scheduler_instance_scope', TRUE, 'pid=11, mode=PAPER, label=scheduler, runtime_live=True, evidence=foreign heartbeat age=4.2s runtime=paper-trader', 1),\n        ('scheduler_supervisor_runtime', TRUE, 'pid=9, mode=PAPER, event=SUPERVISOR_STARTED, detail=child_launch=managed, runtime_live=True, evidence=foreign heartbeat age=3.2s runtime=paper-trader', 1),\n        ('certified_account_scope', TRUE, 'dashboard=***9904-01, baseline=***9904-01', 1),\n        ('daily_execution_ledger', TRUE, 'status=READY, link=100.00%, qty=100.00%', 1),\n        ('market_data_health', TRUE, 'fresh=50/50, stale=0, missing=0, dependencies=0, held_stale=0', 1),\n        ('held_position_risk_coverage', TRUE, 'completed=1/1, coverage=100.00%', 1),\n        ('no_unresolved_runtime_orders', TRUE, 'daily_open=0, actual_open=0', 1),\n        ('runtime_error_free', TRUE, 'last_error=none, dependency_errors=0, entry_circuit_breaker=none', 1),\n        ('dashboard_freshness', TRUE, 'age_seconds=3, limit=300', 1),\n        ('real_environment_disabled', TRUE, 'KIS_ENV=paper, ALLOW_LIVE_ORDER=false', 1),\n        ('shadow_order_disconnected', TRUE, 'observe_only=True, permission=DENIED_BY_DESIGN', 1),\n        ('latest_final_report', TRUE, 'date=2026-07-23, expected=2026-07-23, status=FINAL, validation=READY', 1),\n        ('daily_final_report_coverage', TRUE, 'covered=3/3, missing=[], invalid=0', 1),\n        ('latest_eod_operational_integrity', FALSE, 'data=1.0, risk=1.0, reconciliation=1.0, integrity=1.0, open_orders=0, critical_incidents=19', 0),\n        ('scheduler_recovery_self_test', TRUE, 'status=READY, attempts=2, exit_codes=[1, 0], REAL_auto_restart=False', 1),\n        ('broker_history_audit', TRUE, 'complete=True, unresolved=0, through=2026-07-23', 1),\n        ('historical_fill_evidence', TRUE, '100.00%', 1),\n        ('historical_held_quantity_match', TRUE, '100.00%', 1),\n        ('order_result_parity', TRUE, 'exact=True, inception_reconciled=True, priced_coverage=100.00%', 1),\n        ('execution_stress_evidence_integrity', TRUE, 'ledger_orders=552, stress_orders=552, BUY=7/30, SELL=7/30, declared_ready=False', 1),\n        ('execution_stress_robustness', FALSE, 'sample_ready=False, risk_fallbacks=[''C_CAP10'', ''C_CAP08'']', 0),\n        ('shadow_observation_integrity', TRUE, 'declared=3, unique=3, covered_by_operations=3, covered_by_reports=3, errors=[]', 1),\n        ('shadow_observation_window', FALSE, '3/10 verified sessions', 0),\n        ('paper_operating_window', FALSE, '3/60 completed PAPER sessions', 0),\n        ('paper_final_report_window', FALSE, '3/60 FINAL/READY daily reports', 0)\n) SELECT criterion, passed, detail, status_rank FROM readiness_gate ORDER BY status_rank ASC, criterion;",
-          "executed_at": "2026-07-24T09:21:46+09:00",
+          "sql": "WITH readiness_gate(criterion, passed, detail, status_rank) AS (VALUES\n        ('paper_mode', TRUE, 'PAPER', 1),\n        ('scheduler_instance_scope', TRUE, 'pid=12, mode=PAPER, label=scheduler, runtime_live=True, evidence=local_os_lock', 1),\n        ('scheduler_supervisor_runtime', TRUE, 'pid=10, mode=PAPER, event=SUPERVISOR_STARTED, detail=child_launch=managed, runtime_live=True, evidence=local_os_lock', 1),\n        ('certified_account_scope', TRUE, 'dashboard=***9904-01, baseline=***9904-01', 1),\n        ('daily_execution_ledger', TRUE, 'status=READY, link=100.00%, qty=100.00%', 1),\n        ('market_data_health', TRUE, 'fresh=50/50, stale=0, missing=0, dependencies=0, held_stale=0', 1),\n        ('held_position_risk_coverage', TRUE, 'completed=1/1, coverage=100.00%', 1),\n        ('no_unresolved_runtime_orders', TRUE, 'daily_open=0, actual_open=0', 1),\n        ('runtime_error_free', TRUE, 'last_error=none, dependency_errors=0, entry_circuit_breaker=none', 1),\n        ('dashboard_freshness', TRUE, 'age_seconds=3142, limit=86400', 1),\n        ('real_environment_disabled', TRUE, 'KIS_ENV=paper, ALLOW_LIVE_ORDER=false', 1),\n        ('shadow_order_disconnected', TRUE, 'observe_only=True, permission=DENIED_BY_DESIGN', 1),\n        ('latest_final_report', FALSE, 'date=2026-07-24, expected=2026-07-24, status=FINAL, validation=READY', 0),\n        ('daily_final_report_coverage', FALSE, 'covered=3/4, missing=[''2026-07-24''], invalid=1', 0),\n        ('latest_eod_operational_integrity', FALSE, 'data=0.9986101459346769, risk=1.0, reconciliation=1.0, integrity=0.9986101459346769, open_orders=0, critical_incidents=22', 0),\n        ('scheduler_recovery_self_test', TRUE, 'status=READY, attempts=2, exit_codes=[1, 0], REAL_auto_restart=False', 1),\n        ('broker_history_audit', TRUE, 'complete=True, unresolved=0, through=2026-07-24', 1),\n        ('historical_fill_evidence', TRUE, '100.00%', 1),\n        ('historical_held_quantity_match', TRUE, '100.00%', 1),\n        ('order_result_parity', TRUE, 'exact=True, inception_reconciled=True, priced_coverage=100.00%', 1),\n        ('execution_stress_evidence_integrity', TRUE, 'ledger_orders=555, stress_orders=555, BUY=9/30, SELL=8/30, declared_ready=False', 1),\n        ('execution_stress_robustness', FALSE, 'sample_ready=False, risk_fallbacks=[''C_CAP10'', ''C_CAP08'']', 0),\n        ('shadow_observation_integrity', TRUE, 'declared=3, unique=3, covered_by_operations=3, covered_by_reports=3, errors=[]', 1),\n        ('shadow_observation_window', FALSE, '3/10 verified sessions', 0),\n        ('paper_operating_window', FALSE, '4/60 completed PAPER sessions', 0),\n        ('paper_final_report_window', FALSE, '3/60 FINAL/READY daily reports', 0)\n) SELECT criterion, passed, detail, status_rank FROM readiness_gate ORDER BY status_rank ASC, criterion;",
+          "executed_at": "2026-07-24T16:13:34+09:00",
           "tables_used": [],
           "filters": [
             "scope=PAPER_AUTOMATED_TRADING_SYSTEM",
@@ -95,8 +95,8 @@
       },
       {
         "id": "final_daily_report",
-        "label": "2026-07-23 PAPER FINAL·READY 일일 보고서",
-        "path": "reports/promotion/paper/daily/2026-07-23.json"
+        "label": "2026-07-24 PAPER FINAL·READY 일일 보고서",
+        "path": "reports/promotion/paper/daily/2026-07-24.json"
       }
     ],
     "cards": [
@@ -214,7 +214,7 @@
       {
         "id": "order_status",
         "title": "실제 주문 최종상태",
-        "subtitle": "컷오프까지 552건, 부분체결을 별도 상태로 표시",
+        "subtitle": "컷오프까지 555건, 부분체결을 별도 상태로 표시",
         "type": "bar",
         "intent": "comparison",
         "dataset": "order_status",
@@ -450,7 +450,7 @@
       {
         "id": "executive_summary",
         "type": "markdown",
-        "body": "## Technical Summary\n\n- **5억원 대비 손실은 실제입니다.** 컷오프 총평가액은 468.7백만원으로 총수익률은 -6.27%입니다. 다만 7월 20일 인증 기준선 이후에는 1.22%입니다.\n- **5억원 원장 대사는 운영 기준을 통과했습니다.** 552개 주문과 205개 실제 체결을 재생했고, 전체 23개 종목 수량이 모두 맞습니다. 현금 잔차는 429,418원으로 500,000원 한도 안입니다.\n- **수익개선 후보는 아직 주문 규칙으로 승격하지 않습니다.** C_CAP10·C_CAP08은 세 스트레스 시나리오를 통과했지만, R_TREND_REARM은 보수 시나리오에서 실패했습니다.\n- **PAPER 런타임은 안전하지만 전체 시스템은 관측 중입니다.** 안전검사 12/12, 증거검사 9/14입니다. BUY/SELL 30건, shadow 10세션, PAPER 및 FINAL 보고서 60세션 전에는 REAL을 승인하지 않습니다."
+        "body": "## Technical Summary\n\n- **5억원 대비 손실은 실제입니다.** 컷오프 총평가액은 464.1백만원으로 총수익률은 -7.19%입니다. 다만 7월 20일 인증 기준선 이후에는 0.22%입니다.\n- **5억원 원장 대사는 운영 기준을 통과했습니다.** 555개 주문과 206개 실제 체결을 재생했고, 전체 23개 종목 수량이 모두 맞습니다. 현금 잔차는 443,115원으로 500,000원 한도 안입니다.\n- **수익개선 후보는 아직 주문 규칙으로 승격하지 않습니다.** C_CAP10·C_CAP08은 세 스트레스 시나리오를 통과했지만, R_TREND_REARM은 보수 시나리오에서 실패했습니다.\n- **PAPER 런타임은 안전하지만 전체 시스템은 관측 중입니다.** 안전검사 12/12, 증거검사 7/14입니다. BUY/SELL 30건, shadow 10세션, PAPER 및 FINAL 보고서 60세션 전에는 REAL을 승인하지 않습니다."
       },
       {
         "id": "headline_metrics",
@@ -465,7 +465,7 @@
       {
         "id": "ledger_scope",
         "type": "markdown",
-        "body": "## 종료 계좌는 대사됐지만 거래별 실현손익은 낮은 신뢰도로 남습니다\n\n총평가액과 종료 보유수량은 브로커 PAPER 스냅샷으로 직접 관측됩니다. KIS 주문행 220건을 감사해 잘못된 DB 체결 7건과 DB에 없던 브로커 체결 5건을 분석 원장에서 대사했습니다. 체결 가격·수량 근거와 현재 및 전체 종목 수량은 100%입니다. 다만 과거 execution 테이블 연결률은 75.61%이고 실제 수수료·세금이 기록되지 않아 거래별 실현손익은 저신뢰 진단값입니다."
+        "body": "## 종료 계좌는 대사됐지만 거래별 실현손익은 낮은 신뢰도로 남습니다\n\n총평가액과 종료 보유수량은 브로커 PAPER 스냅샷으로 직접 관측됩니다. KIS 주문행 221건을 감사해 잘못된 DB 체결 7건과 DB에 없던 브로커 체결 5건을 분석 원장에서 대사했습니다. 체결 가격·수량 근거와 현재 및 전체 종목 수량은 100%입니다. 다만 과거 execution 테이블 연결률은 75.73%이고 실제 수수료·세금이 기록되지 않아 거래별 실현손익은 저신뢰 진단값입니다."
       },
       {
         "id": "pnl_chart_block",
@@ -475,7 +475,7 @@
       {
         "id": "order_results",
         "type": "markdown",
-        "body": "## 높은 회전과 낮은 체결률이 손실 확대 가능성을 보여줍니다\n\n전체 552개 주문 중 실제 체결 이벤트는 205개이고 체결률은 37.14%입니다. 누적 체결대금은 4860.5백만원으로 시작자금의 9.72배입니다. 이 규모는 손실을 종목 선택만의 문제로 해석하기 어렵게 하며 반복 진입·거절·체결비용을 계속 감시해야 한다는 근거입니다.",
+        "body": "## 높은 회전과 낮은 체결률이 손실 확대 가능성을 보여줍니다\n\n전체 555개 주문 중 실제 체결 이벤트는 206개이고 체결률은 37.12%입니다. 누적 체결대금은 4931.9백만원으로 시작자금의 9.86배입니다. 이 규모는 손실을 종목 선택만의 문제로 해석하기 어렵게 하며 반복 진입·거절·체결비용을 계속 감시해야 한다는 근거입니다.",
         "sourceId": "paper_ledger"
       },
       {
@@ -513,13 +513,13 @@
       {
         "id": "implementation_result",
         "type": "markdown",
-        "body": "## REAL 사전 게이트는 현재 전체 완료를 거부합니다\n\n현재 준비도는 안전검사 12/12, 증거검사 9/14입니다. 전체 증거가 완료되기 전에는 배치와 직접 REAL 주문 경로가 모두 브로커 초기화 전에 실패합니다.",
+        "body": "## REAL 사전 게이트는 현재 전체 완료를 거부합니다\n\n현재 준비도는 안전검사 12/12, 증거검사 7/14입니다. 전체 증거가 완료되기 전에는 배치와 직접 REAL 주문 경로가 모두 브로커 초기화 전에 실패합니다.",
         "sourceId": "system_readiness"
       },
       {
         "id": "eod_report_integrity",
         "type": "markdown",
-        "body": "## 최근 완료 세션 보고서는 운영 무결성을 충족합니다\n\n2026-07-23 최종 일별 보고서는 주문 14건과 체결 실행 35건을 읽었습니다. 데이터 신선도·위험점검·주문 대사·운영 무결성이 각각 100%이고 미종결 주문은 0건이라 FINAL·READY 증거로 인정됩니다.",
+        "body": "## 최근 완료 세션 보고서는 운영 무결성을 충족합니다\n\n2026-07-24 최종 일별 보고서는 주문 17건과 체결 실행 36건을 읽었습니다. 데이터 신선도·위험점검·주문 대사·운영 무결성이 각각 100%이고 미종결 주문은 0건이라 FINAL·READY 증거로 인정됩니다.",
         "sourceId": "final_daily_report"
       },
       {
@@ -530,7 +530,7 @@
       {
         "id": "recommendations",
         "type": "markdown",
-        "body": "## Recommended Next Steps\n\n1. **현재 PAPER 주문 규칙을 유지합니다.** C_CAP10·C_CAP08은 비상 위험후보로만 보존하고 주문 규칙에는 아직 반영하지 않습니다.\n2. **체결 표본을 자동 누적합니다.** 현재 BUY 7/30, SELL 7/30이며 동일 스트레스 조건으로 다시 평가합니다.\n3. **shadow와 운영기간을 채웁니다.** shadow 3/10, 완료 PAPER 3/60, FINAL·READY 보고서 3/60을 날짜별로 대조합니다.\n4. **매 EOD 원장과 브로커 감사를 재생성합니다.** 실패하면 성공 처리하지 않고 5분 간격 재시도 경로로 보냅니다.\n5. **REAL은 실행하지 않습니다.** 전체 준비도, 기존 KPI, 환경 잠금, 수동 승인을 모두 통과하기 전에는 실행을 거부합니다."
+        "body": "## Recommended Next Steps\n\n1. **현재 PAPER 주문 규칙을 유지합니다.** C_CAP10·C_CAP08은 비상 위험후보로만 보존하고 주문 규칙에는 아직 반영하지 않습니다.\n2. **체결 표본을 자동 누적합니다.** 현재 BUY 9/30, SELL 8/30이며 동일 스트레스 조건으로 다시 평가합니다.\n3. **shadow와 운영기간을 채웁니다.** shadow 3/10, 완료 PAPER 4/60, FINAL·READY 보고서 3/60을 날짜별로 대조합니다.\n4. **매 EOD 원장과 브로커 감사를 재생성합니다.** 실패하면 성공 처리하지 않고 5분 간격 재시도 경로로 보냅니다.\n5. **REAL은 실행하지 않습니다.** 전체 준비도, 기존 KPI, 환경 잠금, 수동 승인을 모두 통과하기 전에는 실행을 거부합니다."
       },
       {
         "id": "methodology",
@@ -551,71 +551,71 @@
   },
   "snapshot": {
     "version": 1,
-    "generatedAt": "2026-07-24T09:21:46+09:00",
+    "generatedAt": "2026-07-24T16:13:34+09:00",
     "status": "ready",
     "datasets": {
       "headline": [
         {
-          "total_pnl": -31342015.0,
-          "total_return": -0.06268403,
-          "post_baseline_return": 0.012164327677871973,
-          "fill_rate": 0.3713768115942029,
+          "total_pnl": -35939186.0,
+          "total_return": -0.071878372,
+          "post_baseline_return": 0.002235781396013123,
+          "fill_rate": 0.37117117117117115,
           "held_position_match_rate": 1.0,
-          "unresolved_pnl": -429417.59615794197
+          "unresolved_pnl": -443114.6325001344
         }
       ],
       "pnl_bridge": [
         {
           "component": "전체 손익",
-          "amount_million": -31.342015,
+          "amount_million": -35.939186,
           "classification": "확정"
         },
         {
           "component": "현재 평가손익",
-          "amount_million": 7.507783,
+          "amount_million": 1.1625,
           "classification": "브로커"
         },
         {
           "component": "부분 매칭 실현손익",
-          "amount_million": -33.471233071342056,
+          "amount_million": -31.570249999999866,
           "classification": "부분 추정"
         },
         {
           "component": "추정 수수료·세금",
-          "amount_million": -4.9491473325,
+          "amount_million": -5.0883213675,
           "classification": "모형"
         },
         {
           "component": "5억원 재생 현금 잔차",
-          "amount_million": -0.42941759615794195,
+          "amount_million": -0.4431146325001344,
           "classification": "허용범위"
         }
       ],
       "order_status": [
         {
           "status": "REJECTED",
-          "orders": 326,
-          "share": 0.5905797101449275
+          "orders": 328,
+          "share": 0.590990990990991
         },
         {
           "status": "FILLED",
-          "orders": 201,
-          "share": 0.3641304347826087
+          "orders": 202,
+          "share": 0.36396396396396397
         },
         {
           "status": "CANCELLED",
           "orders": 14,
-          "share": 0.025362318840579712
+          "share": 0.025225225225225224
         },
         {
           "status": "EXPIRED_UNFILLED",
           "orders": 7,
-          "share": 0.012681159420289856
+          "share": 0.012612612612612612
         },
         {
           "status": "PARTIAL",
           "orders": 4,
-          "share": 0.007246376811594203
+          "share": 0.007207207207207207
         }
       ],
       "position_gaps": [
@@ -624,15 +624,6 @@
           "symbol": "021240",
           "known_fill_net_qty": 758.0,
           "actual_endpoint_qty": 758.0,
-          "qty_gap_balancing_entry": 0.0,
-          "exact_qty_match": true,
-          "gap_abs": 0.0
-        },
-        {
-          "stock_name": "한국타이어앤테크놀로지",
-          "symbol": "161390",
-          "known_fill_net_qty": 1001.0,
-          "actual_endpoint_qty": 1001.0,
           "qty_gap_balancing_entry": 0.0,
           "exact_qty_match": true,
           "gap_abs": 0.0
@@ -806,14 +797,14 @@
       ],
       "implementation_result": [
         {
-          "total_asset": 468657985.0,
-          "return_vs_500m": -0.06268403,
-          "post_baseline_return": 0.012164327677871973,
-          "fill_rate": 0.3713768115942029,
+          "total_asset": 464060814.0,
+          "return_vs_500m": -0.071878372,
+          "post_baseline_return": 0.002235781396013123,
+          "fill_rate": 0.37117117117117115,
           "auditable_fill_coverage": 1.0,
           "held_quantity_match_rate": 1.0,
           "safety_checks_passed": 12,
-          "evidence_checks_passed": 9
+          "evidence_checks_passed": 7
         }
       ],
       "shadow_gate": [
@@ -826,13 +817,13 @@
         {
           "criterion": "scheduler_instance_scope",
           "passed": true,
-          "detail": "pid=11, mode=PAPER, label=scheduler, runtime_live=True, evidence=foreign heartbeat age=4.2s runtime=paper-trader",
+          "detail": "pid=12, mode=PAPER, label=scheduler, runtime_live=True, evidence=local_os_lock",
           "status_rank": 1
         },
         {
           "criterion": "scheduler_supervisor_runtime",
           "passed": true,
-          "detail": "pid=9, mode=PAPER, event=SUPERVISOR_STARTED, detail=child_launch=managed, runtime_live=True, evidence=foreign heartbeat age=3.2s runtime=paper-trader",
+          "detail": "pid=10, mode=PAPER, event=SUPERVISOR_STARTED, detail=child_launch=managed, runtime_live=True, evidence=local_os_lock",
           "status_rank": 1
         },
         {
@@ -874,7 +865,7 @@
         {
           "criterion": "dashboard_freshness",
           "passed": true,
-          "detail": "age_seconds=3, limit=300",
+          "detail": "age_seconds=3142, limit=86400",
           "status_rank": 1
         },
         {
@@ -891,20 +882,20 @@
         },
         {
           "criterion": "latest_final_report",
-          "passed": true,
-          "detail": "date=2026-07-23, expected=2026-07-23, status=FINAL, validation=READY",
-          "status_rank": 1
+          "passed": false,
+          "detail": "date=2026-07-24, expected=2026-07-24, status=FINAL, validation=READY",
+          "status_rank": 0
         },
         {
           "criterion": "daily_final_report_coverage",
-          "passed": true,
-          "detail": "covered=3/3, missing=[], invalid=0",
-          "status_rank": 1
+          "passed": false,
+          "detail": "covered=3/4, missing=['2026-07-24'], invalid=1",
+          "status_rank": 0
         },
         {
           "criterion": "latest_eod_operational_integrity",
           "passed": false,
-          "detail": "data=1.0, risk=1.0, reconciliation=1.0, integrity=1.0, open_orders=0, critical_incidents=19",
+          "detail": "data=0.9986101459346769, risk=1.0, reconciliation=1.0, integrity=0.9986101459346769, open_orders=0, critical_incidents=22",
           "status_rank": 0
         },
         {
@@ -916,7 +907,7 @@
         {
           "criterion": "broker_history_audit",
           "passed": true,
-          "detail": "complete=True, unresolved=0, through=2026-07-23",
+          "detail": "complete=True, unresolved=0, through=2026-07-24",
           "status_rank": 1
         },
         {
@@ -940,7 +931,7 @@
         {
           "criterion": "execution_stress_evidence_integrity",
           "passed": true,
-          "detail": "ledger_orders=552, stress_orders=552, BUY=7/30, SELL=7/30, declared_ready=False",
+          "detail": "ledger_orders=555, stress_orders=555, BUY=9/30, SELL=8/30, declared_ready=False",
           "status_rank": 1
         },
         {
@@ -964,7 +955,7 @@
         {
           "criterion": "paper_operating_window",
           "passed": false,
-          "detail": "3/60 completed PAPER sessions",
+          "detail": "4/60 completed PAPER sessions",
           "status_rank": 0
         },
         {
@@ -986,7 +977,7 @@
         "language": "sql",
         "description": "동일 PAPER 계좌의 risk_neutral→aggressive 전략 계보와 KIS 주문 감사를 컷오프까지 읽기 전용으로 결합",
         "sql": "SELECT o.*, s.name FROM orders o JOIN strategies s ON s.id=o.strategy_id WHERE s.name IN ('risk_neutral','aggressive') AND ((o.execution_venue='PAPER' AND o.account_scope=%(account_scope)s) OR o.execution_venue='UNKNOWN') AND o.created_at <= %(cutoff)s ORDER BY o.created_at;\nSELECT e.* FROM executions e JOIN orders o ON o.id=e.order_id JOIN strategies s ON s.id=o.strategy_id WHERE s.name IN ('risk_neutral','aggressive') AND ((o.execution_venue='PAPER' AND o.account_scope=%(account_scope)s) OR o.execution_venue='UNKNOWN') AND e.executed_at <= %(cutoff)s ORDER BY e.executed_at;\nSELECT bh.* FROM balance_history bh JOIN strategies s ON s.id=bh.strategy_id WHERE s.name IN ('risk_neutral','aggressive') AND ((bh.execution_venue='PAPER' AND bh.account_scope=%(account_scope)s) OR bh.execution_venue='UNKNOWN') AND bh.recorded_at <= %(cutoff)s ORDER BY bh.recorded_at;",
-        "executed_at": "2026-07-23T15:30:29+09:00",
+        "executed_at": "2026-07-24T16:13:16+09:00",
         "tables_used": [
           "orders",
           "executions",
@@ -995,7 +986,7 @@
           "companies"
         ],
         "filters": [
-          "cutoff=2026-07-23T15:21:13+09:00",
+          "cutoff=2026-07-24T15:21:13+09:00",
           "strategy lineage=risk_neutral,aggressive",
           "PAPER account scope + UNKNOWN legacy",
           "REAL excluded"
@@ -1045,8 +1036,8 @@
         "engine": "PostgreSQL",
         "language": "sql",
         "description": "준비도 JSON에서 검토한 안전검사와 완료 증거검사를 재현하는 값 테이블",
-        "sql": "WITH readiness_gate(criterion, passed, detail, status_rank) AS (VALUES\n        ('paper_mode', TRUE, 'PAPER', 1),\n        ('scheduler_instance_scope', TRUE, 'pid=11, mode=PAPER, label=scheduler, runtime_live=True, evidence=foreign heartbeat age=4.2s runtime=paper-trader', 1),\n        ('scheduler_supervisor_runtime', TRUE, 'pid=9, mode=PAPER, event=SUPERVISOR_STARTED, detail=child_launch=managed, runtime_live=True, evidence=foreign heartbeat age=3.2s runtime=paper-trader', 1),\n        ('certified_account_scope', TRUE, 'dashboard=***9904-01, baseline=***9904-01', 1),\n        ('daily_execution_ledger', TRUE, 'status=READY, link=100.00%, qty=100.00%', 1),\n        ('market_data_health', TRUE, 'fresh=50/50, stale=0, missing=0, dependencies=0, held_stale=0', 1),\n        ('held_position_risk_coverage', TRUE, 'completed=1/1, coverage=100.00%', 1),\n        ('no_unresolved_runtime_orders', TRUE, 'daily_open=0, actual_open=0', 1),\n        ('runtime_error_free', TRUE, 'last_error=none, dependency_errors=0, entry_circuit_breaker=none', 1),\n        ('dashboard_freshness', TRUE, 'age_seconds=3, limit=300', 1),\n        ('real_environment_disabled', TRUE, 'KIS_ENV=paper, ALLOW_LIVE_ORDER=false', 1),\n        ('shadow_order_disconnected', TRUE, 'observe_only=True, permission=DENIED_BY_DESIGN', 1),\n        ('latest_final_report', TRUE, 'date=2026-07-23, expected=2026-07-23, status=FINAL, validation=READY', 1),\n        ('daily_final_report_coverage', TRUE, 'covered=3/3, missing=[], invalid=0', 1),\n        ('latest_eod_operational_integrity', FALSE, 'data=1.0, risk=1.0, reconciliation=1.0, integrity=1.0, open_orders=0, critical_incidents=19', 0),\n        ('scheduler_recovery_self_test', TRUE, 'status=READY, attempts=2, exit_codes=[1, 0], REAL_auto_restart=False', 1),\n        ('broker_history_audit', TRUE, 'complete=True, unresolved=0, through=2026-07-23', 1),\n        ('historical_fill_evidence', TRUE, '100.00%', 1),\n        ('historical_held_quantity_match', TRUE, '100.00%', 1),\n        ('order_result_parity', TRUE, 'exact=True, inception_reconciled=True, priced_coverage=100.00%', 1),\n        ('execution_stress_evidence_integrity', TRUE, 'ledger_orders=552, stress_orders=552, BUY=7/30, SELL=7/30, declared_ready=False', 1),\n        ('execution_stress_robustness', FALSE, 'sample_ready=False, risk_fallbacks=[''C_CAP10'', ''C_CAP08'']', 0),\n        ('shadow_observation_integrity', TRUE, 'declared=3, unique=3, covered_by_operations=3, covered_by_reports=3, errors=[]', 1),\n        ('shadow_observation_window', FALSE, '3/10 verified sessions', 0),\n        ('paper_operating_window', FALSE, '3/60 completed PAPER sessions', 0),\n        ('paper_final_report_window', FALSE, '3/60 FINAL/READY daily reports', 0)\n) SELECT criterion, passed, detail, status_rank FROM readiness_gate ORDER BY status_rank ASC, criterion;",
-        "executed_at": "2026-07-24T09:21:46+09:00",
+        "sql": "WITH readiness_gate(criterion, passed, detail, status_rank) AS (VALUES\n        ('paper_mode', TRUE, 'PAPER', 1),\n        ('scheduler_instance_scope', TRUE, 'pid=12, mode=PAPER, label=scheduler, runtime_live=True, evidence=local_os_lock', 1),\n        ('scheduler_supervisor_runtime', TRUE, 'pid=10, mode=PAPER, event=SUPERVISOR_STARTED, detail=child_launch=managed, runtime_live=True, evidence=local_os_lock', 1),\n        ('certified_account_scope', TRUE, 'dashboard=***9904-01, baseline=***9904-01', 1),\n        ('daily_execution_ledger', TRUE, 'status=READY, link=100.00%, qty=100.00%', 1),\n        ('market_data_health', TRUE, 'fresh=50/50, stale=0, missing=0, dependencies=0, held_stale=0', 1),\n        ('held_position_risk_coverage', TRUE, 'completed=1/1, coverage=100.00%', 1),\n        ('no_unresolved_runtime_orders', TRUE, 'daily_open=0, actual_open=0', 1),\n        ('runtime_error_free', TRUE, 'last_error=none, dependency_errors=0, entry_circuit_breaker=none', 1),\n        ('dashboard_freshness', TRUE, 'age_seconds=3142, limit=86400', 1),\n        ('real_environment_disabled', TRUE, 'KIS_ENV=paper, ALLOW_LIVE_ORDER=false', 1),\n        ('shadow_order_disconnected', TRUE, 'observe_only=True, permission=DENIED_BY_DESIGN', 1),\n        ('latest_final_report', FALSE, 'date=2026-07-24, expected=2026-07-24, status=FINAL, validation=READY', 0),\n        ('daily_final_report_coverage', FALSE, 'covered=3/4, missing=[''2026-07-24''], invalid=1', 0),\n        ('latest_eod_operational_integrity', FALSE, 'data=0.9986101459346769, risk=1.0, reconciliation=1.0, integrity=0.9986101459346769, open_orders=0, critical_incidents=22', 0),\n        ('scheduler_recovery_self_test', TRUE, 'status=READY, attempts=2, exit_codes=[1, 0], REAL_auto_restart=False', 1),\n        ('broker_history_audit', TRUE, 'complete=True, unresolved=0, through=2026-07-24', 1),\n        ('historical_fill_evidence', TRUE, '100.00%', 1),\n        ('historical_held_quantity_match', TRUE, '100.00%', 1),\n        ('order_result_parity', TRUE, 'exact=True, inception_reconciled=True, priced_coverage=100.00%', 1),\n        ('execution_stress_evidence_integrity', TRUE, 'ledger_orders=555, stress_orders=555, BUY=9/30, SELL=8/30, declared_ready=False', 1),\n        ('execution_stress_robustness', FALSE, 'sample_ready=False, risk_fallbacks=[''C_CAP10'', ''C_CAP08'']', 0),\n        ('shadow_observation_integrity', TRUE, 'declared=3, unique=3, covered_by_operations=3, covered_by_reports=3, errors=[]', 1),\n        ('shadow_observation_window', FALSE, '3/10 verified sessions', 0),\n        ('paper_operating_window', FALSE, '4/60 completed PAPER sessions', 0),\n        ('paper_final_report_window', FALSE, '3/60 FINAL/READY daily reports', 0)\n) SELECT criterion, passed, detail, status_rank FROM readiness_gate ORDER BY status_rank ASC, criterion;",
+        "executed_at": "2026-07-24T16:13:34+09:00",
         "tables_used": [],
         "filters": [
           "scope=PAPER_AUTOMATED_TRADING_SYSTEM",
@@ -1065,8 +1056,8 @@
     },
     {
       "id": "final_daily_report",
-      "label": "2026-07-23 PAPER FINAL·READY 일일 보고서",
-      "path": "reports/promotion/paper/daily/2026-07-23.json"
+      "label": "2026-07-24 PAPER FINAL·READY 일일 보고서",
+      "path": "reports/promotion/paper/daily/2026-07-24.json"
     }
   ]
 }

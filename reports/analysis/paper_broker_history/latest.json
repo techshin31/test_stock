@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-23T15:30:29+09:00",
+  "generated_at": "2026-07-24T16:13:15+09:00",
   "mode": "PAPER",
   "account_scope": "***9904-01",
   "start_date": "2026-07-03",
-  "end_date": "2026-07-23",
+  "end_date": "2026-07-24",
   "strategy_lineage": [
     "risk_neutral",
     "aggressive"
@@ -25,11 +25,12 @@
     "2026-07-20": 0,
     "2026-07-21": 5,
     "2026-07-22": 2,
-    "2026-07-23": 3
+    "2026-07-23": 3,
+    "2026-07-24": 1
   },
-  "db_order_rows": 209,
-  "broker_order_rows": 220,
-  "exact_matched_rows": 193,
+  "db_order_rows": 210,
+  "broker_order_rows": 221,
+  "exact_matched_rows": 194,
   "fill_overrides": [
     {
       "date": "2026-07-03",
@@ -4003,6 +4004,25 @@
       "db_original_status": "FILLED",
       "db_original_filled_qty": 915.0,
       "db_original_avg_fill_price": 73594.0
+    },
+    {
+      "date": "2026-07-24",
+      "broker_order_id": "0000001959",
+      "symbol": "161390",
+      "stock_name": "한국타이어앤테크놀로지",
+      "side": "SELL",
+      "ordered_qty": 1001.0,
+      "filled_qty": 1001.0,
+      "remaining_qty": 0.0,
+      "total_fill_amount": 71371300.0,
+      "avg_fill_price": 71300.0,
+      "cancelled": false,
+      "order_time": "090101",
+      "db_order_id": "1e7d3566-3351-4592-8d30-aa4fda899cdc",
+      "db_strategy_name": "aggressive",
+      "db_original_status": "FILLED",
+      "db_original_filled_qty": 1001.0,
+      "db_original_avg_fill_price": 71300.0
     }
   ],
   "broker_only_rows": [

@@ -1,47 +1,47 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-23T15:30:50+09:00",
+  "generated_at": "2026-07-24T16:13:34+09:00",
   "mode": "PAPER",
   "observe_only": true,
   "production_rule_changed": false,
   "ledger_evidence": {
-    "order_count": 552,
-    "latest_order_at": "2026-07-23T09:31:58.548373+09:00"
+    "order_count": 555,
+    "latest_order_at": "2026-07-24T09:01:13.904469+09:00"
   },
   "calibration_status": "PROVISIONAL_SMALL_SAMPLE",
   "execution_samples": {
     "BUY": {
       "side": "BUY",
-      "orders": 7,
+      "orders": 9,
       "filled_orders": 4,
-      "rejected_orders": 3,
+      "rejected_orders": 5,
       "cancelled_orders": 0,
       "status_counts": {
-        "FILLED": 4,
-        "REJECTED": 3
+        "REJECTED": 5,
+        "FILLED": 4
       },
-      "order_fill_rate": 0.5714285714285714,
-      "quantity_fill_rate": 0.5746606334841629,
-      "beta_1_1_posterior_mean_fill_rate": 0.5555555555555556,
-      "wilson_95_lower_fill_rate": 0.2504542304090258,
-      "wilson_95_upper_fill_rate": 0.8417830777373732,
+      "order_fill_rate": 0.4444444444444444,
+      "quantity_fill_rate": 0.46456332876085965,
+      "beta_1_1_posterior_mean_fill_rate": 0.45454545454545453,
+      "wilson_95_lower_fill_rate": 0.188775429471914,
+      "wilson_95_upper_fill_rate": 0.7333526542559703,
       "sample_sufficient": false
     },
     "SELL": {
       "side": "SELL",
-      "orders": 7,
-      "filled_orders": 6,
+      "orders": 8,
+      "filled_orders": 7,
       "rejected_orders": 1,
       "cancelled_orders": 0,
       "status_counts": {
-        "FILLED": 6,
+        "FILLED": 7,
         "REJECTED": 1
       },
-      "order_fill_rate": 0.8571428571428571,
-      "quantity_fill_rate": 0.7196691176470589,
-      "beta_1_1_posterior_mean_fill_rate": 0.7777777777777778,
-      "wilson_95_lower_fill_rate": 0.48686549668097007,
-      "wilson_95_upper_fill_rate": 0.9743210440510253,
+      "order_fill_rate": 0.875,
+      "quantity_fill_rate": 0.7854630715123095,
+      "beta_1_1_posterior_mean_fill_rate": 0.8,
+      "wilson_95_lower_fill_rate": 0.5291051942301386,
+      "wilson_95_upper_fill_rate": 0.9775830911367038,
       "sample_sufficient": false
     }
   },
@@ -90,85 +90,85 @@
     },
     "STABILIZED_POSTERIOR_MEAN": {
       "A_CURRENT": {
-        "total_return": 0.023500612201362348,
-        "max_drawdown": -0.19686129018322474,
-        "annualized_turnover": 36.69325529089539,
-        "total_cost_ratio": 0.03172327076056916,
-        "average_exposure": 0.6351016381534825,
+        "total_return": 0.037242946410014355,
+        "max_drawdown": -0.1759037100872186,
+        "annualized_turnover": 33.079289697663754,
+        "total_cost_ratio": 0.02852232611527537,
+        "average_exposure": 0.5976744231751916,
         "hard_stop_count": 24,
-        "trailing_stop_count": 31,
+        "trailing_stop_count": 28,
         "confirmed_reentries": 0
       },
       "R_TREND_REARM": {
-        "total_return": 0.03496505567101371,
-        "max_drawdown": -0.15225690815834192,
-        "annualized_turnover": 21.334197777701903,
-        "total_cost_ratio": 0.018188642087333163,
-        "average_exposure": 0.38743600747265,
-        "hard_stop_count": 12,
-        "trailing_stop_count": 18,
-        "confirmed_reentries": 12
+        "total_return": 0.05115065855251655,
+        "max_drawdown": -0.1378361456071472,
+        "annualized_turnover": 20.603190229656473,
+        "total_cost_ratio": 0.01757239505572613,
+        "average_exposure": 0.37481563165511805,
+        "hard_stop_count": 9,
+        "trailing_stop_count": 19,
+        "confirmed_reentries": 11
       },
       "C_CAP10": {
-        "total_return": 0.031006796677469417,
-        "max_drawdown": -0.12165065078520876,
-        "annualized_turnover": 24.910139434348277,
-        "total_cost_ratio": 0.021463325746701782,
-        "average_exposure": 0.4941143575749904,
-        "hard_stop_count": 16,
-        "trailing_stop_count": 34,
+        "total_return": -0.002654012778893766,
+        "max_drawdown": -0.13731469260095597,
+        "annualized_turnover": 23.94815718127969,
+        "total_cost_ratio": 0.020618366627246188,
+        "average_exposure": 0.4600199098824602,
+        "hard_stop_count": 15,
+        "trailing_stop_count": 32,
         "confirmed_reentries": 0
       },
       "C_CAP08": {
-        "total_return": 0.018633608684909264,
-        "max_drawdown": -0.1311295056255175,
-        "annualized_turnover": 19.53888603936724,
-        "total_cost_ratio": 0.01682756651744199,
-        "average_exposure": 0.3689388962525362,
+        "total_return": 0.005823708091321489,
+        "max_drawdown": -0.13254324105913373,
+        "annualized_turnover": 19.120907905158056,
+        "total_cost_ratio": 0.016462454683583885,
+        "average_exposure": 0.36049982155350496,
         "hard_stop_count": 16,
-        "trailing_stop_count": 33,
+        "trailing_stop_count": 30,
         "confirmed_reentries": 0
       }
     },
     "STABILIZED_WILSON_LOWER": {
       "A_CURRENT": {
-        "total_return": 0.01573061404050491,
-        "max_drawdown": -0.1757544817297989,
-        "annualized_turnover": 30.0259475996046,
-        "total_cost_ratio": 0.02588121600974431,
-        "average_exposure": 0.5465974701391448,
-        "hard_stop_count": 16,
-        "trailing_stop_count": 46,
+        "total_return": 0.04457158189577326,
+        "max_drawdown": -0.13212315510402817,
+        "annualized_turnover": 26.414915651298127,
+        "total_cost_ratio": 0.022755222552088936,
+        "average_exposure": 0.4881072269430593,
+        "hard_stop_count": 12,
+        "trailing_stop_count": 44,
         "confirmed_reentries": 0
       },
       "R_TREND_REARM": {
-        "total_return": -0.11768611662433526,
-        "max_drawdown": -0.21119831669810707,
-        "annualized_turnover": 19.082572893878492,
-        "total_cost_ratio": 0.01632017217654859,
-        "average_exposure": 0.3795954989115313,
-        "hard_stop_count": 18,
-        "trailing_stop_count": 32,
-        "confirmed_reentries": 9
+        "total_return": -0.0584406954594342,
+        "max_drawdown": -0.165142546595891,
+        "annualized_turnover": 17.568784239380317,
+        "total_cost_ratio": 0.015026808476880699,
+        "average_exposure": 0.367362790459731,
+        "hard_stop_count": 17,
+        "trailing_stop_count": 28,
+        "confirmed_reentries": 7
       },
       "C_CAP10": {
-        "total_return": -0.015338737992205864,
-        "max_drawdown": -0.13784749789953832,
-        "annualized_turnover": 20.251546451634187,
-        "total_cost_ratio": 0.017446669196263222,
-        "average_exposure": 0.405319738615855,
+        "total_return": -0.055365355708193675,
+        "max_drawdown": -0.16073917204693233,
+        "annualized_turnover": 19.511894457114924,
+        "total_cost_ratio": 0.016880196370588595,
+        "average_exposure": 0.3753748318770598,
         "hard_stop_count": 23,
-        "trailing_stop_count": 40,
+        "trailing_stop_count": 37,
         "confirmed_reentries": 0
       },
       "C_CAP08": {
-        "total_return": -0.07834449112307851,
-        "max_drawdown": -0.14025354648024235,
-        "annualized_turnover": 15.41203639463205,
-        "total_cost_ratio": 0.01325679876176828,
-        "average_exposure": 0.29654238108157693,
-        "hard_stop_count": 28,
-        "trailing_stop_count": 41,
+        "total_return": -0.05167055813696719,
+        "max_drawdown": -0.11503251153384464,
+        "annualized_turnover": 13.732742962845077,
+        "total_cost_ratio": 0.011873350461198601,
+        "average_exposure": 0.25504065028347006,
+        "hard_stop_count": 21,
+        "trailing_stop_count": 33,
         "confirmed_reentries": 0
       }
     }
@@ -195,12 +195,12 @@
       "drawdown_improves": true,
       "turnover_improves": true,
       "passed": true,
-      "candidate_return": 0.03496505567101371,
-      "baseline_return": 0.023500612201362348,
-      "candidate_mdd": -0.15225690815834192,
-      "baseline_mdd": -0.19686129018322474,
-      "candidate_turnover": 21.334197777701903,
-      "baseline_turnover": 36.69325529089539
+      "candidate_return": 0.05115065855251655,
+      "baseline_return": 0.037242946410014355,
+      "candidate_mdd": -0.1378361456071472,
+      "baseline_mdd": -0.1759037100872186,
+      "candidate_turnover": 20.603190229656473,
+      "baseline_turnover": 33.079289697663754
     },
     {
       "scenario": "STABILIZED_WILSON_LOWER",
@@ -208,12 +208,12 @@
       "drawdown_improves": false,
       "turnover_improves": true,
       "passed": false,
-      "candidate_return": -0.11768611662433526,
-      "baseline_return": 0.01573061404050491,
-      "candidate_mdd": -0.21119831669810707,
-      "baseline_mdd": -0.1757544817297989,
-      "candidate_turnover": 19.082572893878492,
-      "baseline_turnover": 30.0259475996046
+      "candidate_return": -0.0584406954594342,
+      "baseline_return": 0.04457158189577326,
+      "candidate_mdd": -0.165142546595891,
+      "baseline_mdd": -0.13212315510402817,
+      "candidate_turnover": 17.568784239380317,
+      "baseline_turnover": 26.414915651298127
     }
   ],
   "risk_control_gate": {
@@ -237,16 +237,16 @@
           {
             "scenario": "STABILIZED_POSTERIOR_MEAN",
             "passed": true,
-            "total_return": 0.031006796677469417,
-            "max_drawdown": -0.12165065078520876,
-            "annualized_turnover": 24.910139434348277
+            "total_return": -0.002654012778893766,
+            "max_drawdown": -0.13731469260095597,
+            "annualized_turnover": 23.94815718127969
           },
           {
             "scenario": "STABILIZED_WILSON_LOWER",
             "passed": true,
-            "total_return": -0.015338737992205864,
-            "max_drawdown": -0.13784749789953832,
-            "annualized_turnover": 20.251546451634187
+            "total_return": -0.055365355708193675,
+            "max_drawdown": -0.16073917204693233,
+            "annualized_turnover": 19.511894457114924
           }
         ]
       },
@@ -264,16 +264,16 @@
           {
             "scenario": "STABILIZED_POSTERIOR_MEAN",
             "passed": true,
-            "total_return": 0.018633608684909264,
-            "max_drawdown": -0.1311295056255175,
-            "annualized_turnover": 19.53888603936724
+            "total_return": 0.005823708091321489,
+            "max_drawdown": -0.13254324105913373,
+            "annualized_turnover": 19.120907905158056
           },
           {
             "scenario": "STABILIZED_WILSON_LOWER",
             "passed": true,
-            "total_return": -0.07834449112307851,
-            "max_drawdown": -0.14025354648024235,
-            "annualized_turnover": 15.41203639463205
+            "total_return": -0.05167055813696719,
+            "max_drawdown": -0.11503251153384464,
+            "annualized_turnover": 13.732742962845077
           }
         ]
       }

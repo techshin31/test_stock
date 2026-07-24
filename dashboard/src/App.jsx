@@ -12,10 +12,13 @@ import {
   Clock3,
   FileText,
   Gauge,
+  Layers,
   Menu,
+  Notebook,
   RefreshCw,
   Server,
   ShieldCheck,
+  TrendingUp,
   WalletCards,
   X,
   XCircle,
@@ -23,6 +26,9 @@ import {
 
 const PerformanceChart = lazy(() => import('./PerformanceChart.jsx'))
 const MarkdownReport = lazy(() => import('./MarkdownReport.jsx'))
+const MarketOverview = lazy(() => import('./MarketOverview.jsx'))
+const SectorAnalysis = lazy(() => import('./SectorAnalysis.jsx'))
+const TradingJournal = lazy(() => import('./TradingJournal.jsx'))
 
 const MODE = 'PAPER'
 const REFRESH_MS = 30_000
@@ -437,7 +443,7 @@ function Reports({ overview, reports, selectedDate, reportDetail, loading, error
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState('overview')
+  const [activeTab, setActiveTab] = useState('market')
   const [overview, setOverview] = useState(null)
   const [overviewError, setOverviewError] = useState('')
   const [overviewLoading, setOverviewLoading] = useState(true)
@@ -446,6 +452,22 @@ function App() {
   const [reportsLoading, setReportsLoading] = useState(false)
   const [selectedDate, setSelectedDate] = useState('')
   const [reportDetail, setReportDetail] = useState(null)
+
+  // Market Overview states
+  const [marketIndices, setMarketIndices] = useState(null)
+  const [marketBreadth, setMarketBreadth] = useState(null)
+  const [marketSectors, setMarketSectors] = useState(null)
+  const [exchangeRate, setExchangeRate] = useState(null)
+  const [marketRegime, setMarketRegime] = useState(null)
+  const [marketLoading, setMarketLoading] = useState(true)
+
+  // Sector Analysis states
+  const [sectorData, setSectorData] = useState(null)
+  const [sectorLoading, setSectorLoading] = useState(true)
+
+  // Trading Journal states
+  const [journalData, setJournalData] = useState(null)
+  const [journalLoading, setJournalLoading] = useState(true)
 
   const loadOverview = useCallback(async (signal) => {
     try {
@@ -457,6 +479,40 @@ function App() {
     } finally {
       if (!signal?.aborted) setOverviewLoading(false)
     }
+  }, [])
+
+  const loadMarketData = useCallback(async (signal) => {
+    try {
+      const [indices, breadth, sectors, rate, regime] = await Promise.allSettled([
+        requestJson('/api/market-indices', signal),
+        requestJson('/api/market-breadth', signal),
+        requestJson('/api/sectors', signal),
+        requestJson('/api/exchange-rate', signal),
+        requestJson('/api/market-regime', signal),
+      ])
+      if (indices.status === 'fulfilled') setMarketIndices(indices.value)
+      if (breadth.status === 'fulfilled') setMarketBreadth(breadth.value)
+      if (sectors.status === 'fulfilled') setMarketSectors(sectors.value)
+      if (rate.status === 'fulfilled') setExchangeRate(rate.value)
+      if (regime.status === 'fulfilled') setMarketRegime(regime.value)
+    } catch (_) { /* ignore */ }
+    finally { if (!signal?.aborted) setMarketLoading(false) }
+  }, [])
+
+  const loadSectorData = useCallback(async (signal) => {
+    try {
+      const payload = await requestJson('/api/sectors', signal)
+      setSectorData(payload)
+    } catch (_) { /* ignore */ }
+    finally { if (!signal?.aborted) setSectorLoading(false) }
+  }, [])
+
+  const loadJournalData = useCallback(async (signal) => {
+    try {
+      const payload = await requestJson('/api/journal', signal)
+      setJournalData(payload)
+    } catch (_) { /* ignore */ }
+    finally { if (!signal?.aborted) setJournalLoading(false) }
   }, [])
 
   const selectReport = useCallback(async (date, signal) => {
@@ -486,6 +542,7 @@ function App() {
     }
   }, [])
 
+  // Load overview on mount (always, for topbar status)
   useEffect(() => {
     const controller = new AbortController()
     loadOverview(controller.signal)
@@ -493,6 +550,36 @@ function App() {
     return () => { controller.abort(); window.clearInterval(interval) }
   }, [loadOverview])
 
+  // Market tab data
+  useEffect(() => {
+    if (activeTab !== 'market') return undefined
+    const controller = new AbortController()
+    setMarketLoading(true)
+    loadMarketData(controller.signal)
+    const interval = window.setInterval(() => loadMarketData(controller.signal), REFRESH_MS)
+    return () => { controller.abort(); window.clearInterval(interval) }
+  }, [activeTab, loadMarketData])
+
+  // Sector tab data
+  useEffect(() => {
+    if (activeTab !== 'sectors') return undefined
+    const controller = new AbortController()
+    setSectorLoading(true)
+    loadSectorData(controller.signal)
+    const interval = window.setInterval(() => loadSectorData(controller.signal), REFRESH_MS)
+    return () => { controller.abort(); window.clearInterval(interval) }
+  }, [activeTab, loadSectorData])
+
+  // Journal tab data
+  useEffect(() => {
+    if (activeTab !== 'journal') return undefined
+    const controller = new AbortController()
+    setJournalLoading(true)
+    loadJournalData(controller.signal)
+    return () => controller.abort()
+  }, [activeTab, loadJournalData])
+
+  // Reports tab data
   useEffect(() => {
     if (activeTab !== 'reports') return undefined
     const controller = new AbortController()
@@ -529,11 +616,32 @@ function App() {
         </div>
         <nav aria-label="주요 메뉴">
           <button
+            className={activeTab === 'market' ? 'is-active' : ''}
+            type="button"
+            onClick={() => { setActiveTab('market'); setMobileMenuOpen(false) }}
+          >
+            <TrendingUp size={18} />시장 개요
+          </button>
+          <button
             className={activeTab === 'overview' ? 'is-active' : ''}
             type="button"
             onClick={() => { setActiveTab('overview'); setMobileMenuOpen(false) }}
           >
             <Activity size={18} />운영 현황
+          </button>
+          <button
+            className={activeTab === 'sectors' ? 'is-active' : ''}
+            type="button"
+            onClick={() => { setActiveTab('sectors'); setMobileMenuOpen(false) }}
+          >
+            <Layers size={18} />섹터 분석
+          </button>
+          <button
+            className={activeTab === 'journal' ? 'is-active' : ''}
+            type="button"
+            onClick={() => { setActiveTab('journal'); setMobileMenuOpen(false) }}
+          >
+            <Notebook size={18} />매매 저널
           </button>
           <button
             className={activeTab === 'reports' ? 'is-active' : ''}
@@ -572,7 +680,13 @@ function App() {
               <span className="hero-divider">·</span>
               <span>updated {lastUpdated}</span>
             </div>
-            <h1>{activeTab === 'overview' ? '운영 현황' : 'EOD 리포트'}</h1>
+            <h1>{{
+              market: '시장 개요',
+              overview: '운영 현황',
+              sectors: '섹터 분석',
+              journal: '매매 저널',
+              reports: 'EOD 리포트',
+            }[activeTab] || '대시보드'}</h1>
           </div>
           <div className="topbar__status">
             <StatusChip state={operationalStatus}>{operationalStatus}</StatusChip>
@@ -589,10 +703,40 @@ function App() {
         </header>
 
         <div className="page-content">
-          {overviewLoading && !overview ? <LoadingState /> : null}
-          {overviewError && !overview ? <ErrorState message={overviewError} onRetry={() => { setOverviewLoading(true); loadOverview() }} /> : null}
-          {overview && activeTab === 'overview' ? <Overview overview={overview} onOpenReports={() => setActiveTab('reports')} /> : null}
-          {overview && activeTab === 'reports' ? (
+          {activeTab === 'market' ? (
+            <Suspense fallback={<LoadingState label="시장 개요를 불러오는 중입니다." />}>
+              <MarketOverview
+                indices={marketIndices}
+                breadth={marketBreadth}
+                sectors={marketSectors}
+                exchangeRate={exchangeRate}
+                regime={marketRegime}
+                loading={marketLoading}
+              />
+            </Suspense>
+          ) : null}
+
+          {activeTab === 'overview' ? (
+            <>
+              {overviewLoading && !overview ? <LoadingState /> : null}
+              {overviewError && !overview ? <ErrorState message={overviewError} onRetry={() => { setOverviewLoading(true); loadOverview() }} /> : null}
+              {overview ? <Overview overview={overview} onOpenReports={() => setActiveTab('reports')} /> : null}
+            </>
+          ) : null}
+
+          {activeTab === 'sectors' ? (
+            <Suspense fallback={<LoadingState label="섹터 분석을 불러오는 중입니다." />}>
+              <SectorAnalysis sectors={sectorData} loading={sectorLoading} />
+            </Suspense>
+          ) : null}
+
+          {activeTab === 'journal' ? (
+            <Suspense fallback={<LoadingState label="매매 저널을 불러오는 중입니다." />}>
+              <TradingJournal journal={journalData} loading={journalLoading} />
+            </Suspense>
+          ) : null}
+
+          {activeTab === 'reports' ? (
             <Reports
               overview={overview}
               reports={reports}
