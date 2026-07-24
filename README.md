@@ -137,15 +137,15 @@ uv run python scheduler.py --simulate
 uv run python scheduler.py --paper
 ```
 
-Windows 운영 배치 `run_scheduler.bat`는 인수가 없으면 `--paper`를 사용합니다.
+Windows 운영 배치 `scripts/run_scheduler.bat`는 인수가 없으면 `--paper`를 사용합니다.
 최초 PAPER 시작은 DB 마이그레이션, DRY_RUN→PAPER 승격 게이트와 인증 기준선을
 요구합니다. 인증된 PAPER 기준선이 이미 있는 재시작은 오래된 DRY_RUN 리포트를
 다시 요구하지 않고, 주문 없는 현재 계좌 스냅샷의 계좌 범위·전략 일치를 확인하는
 안전한 연속 운영 게이트를 통과한 뒤에만 스케줄러를 시작합니다.
-주문 없는 점검이 필요하면 `run_scheduler.bat --dry-run`을 명시합니다. 직접 실행하는
+주문 없는 점검이 필요하면 `scripts/run_scheduler.bat --dry-run`을 명시합니다. 직접 실행하는
 `uv run python scheduler.py`의 안전 기본값은 계속 DRY_RUN입니다. `--live`는 별도의
 REAL 승격 게이트와 수동 확인 없이는 시작되지 않습니다.
-`run_trader.bat`의 메뉴 2번은 주문 없는 DRY_RUN이며, PAPER와 REAL은 별도
+`scripts/run_trader.bat`의 메뉴 2번은 주문 없는 DRY_RUN이며, PAPER와 REAL은 별도
 메뉴와 게이트로 분리되어 있습니다. DRY_RUN 1거래일의 FINAL EOD 보고서가
 통과한 뒤 PAPER를 처음 열기 전에는 메뉴 7번으로
 주문 없는 계좌 스냅샷과 인증 기준선을 먼저 만듭니다. 기준선이 없으면 PAPER
@@ -210,7 +210,7 @@ KIS 주문·체결 조회 결과만 체결 원장에 기록합니다. 주요 운
 `MAX_DAILY_LOSS_RATE`로 조정할 수 있습니다. `TRADING_KILL_SWITCH=true`는 신규
 매수와 비중 확대만 즉시 멈추며, 보유 포지션의 매도·손절은 계속 허용합니다.
 
-`run_scheduler.bat`는 시작할 때 `storage.postgres.migrate`를 실행해 기존 DB에도
+`scripts/run_scheduler.bat`는 시작할 때 `storage.postgres.migrate`를 실행해 기존 DB에도
 주문·포지션·잔고의 전략·실행환경·마스킹 계좌 분리 마이그레이션(08/09)을
 자동 적용합니다. 적용 원장은 `schema_migrations`에 체크섬과 함께 기록되며,
 이미 적용된 버전은 안전하게 건너뜁니다.

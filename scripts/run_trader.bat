@@ -1,7 +1,8 @@
 @echo off
 setlocal
-cd /d "%~dp0"
-set PYTHONPATH=%~dp0
+cd /d "%~dp0.."
+set "PROJECT_ROOT=%cd%"
+set "PYTHONPATH=%cd%"
 set PYTHONUTF8=1
 if not defined MAX_DAILY_LOSS_RATE set "MAX_DAILY_LOSS_RATE=0.03"
 if not defined TRADING_KILL_SWITCH set "TRADING_KILL_SWITCH=false"

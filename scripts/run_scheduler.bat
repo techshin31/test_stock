@@ -1,9 +1,10 @@
 @echo off
 setlocal EnableDelayedExpansion
 chcp 65001 > nul
-cd /d "%~dp0"
+cd /d "%~dp0.."
+set "PROJECT_ROOT=%cd%"
 set PYTHONUTF8=1
-set PYTHONPATH=%~dp0
+set "PYTHONPATH=%cd%"
 if not defined MAX_DAILY_LOSS_RATE set "MAX_DAILY_LOSS_RATE=0.03"
 if not defined TRADING_KILL_SWITCH set "TRADING_KILL_SWITCH=false"
 if not defined REAL_PROMOTION_SNAPSHOT set "REAL_PROMOTION_SNAPSHOT=reports\promotion\real_readiness.json"
