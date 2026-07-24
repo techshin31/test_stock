@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-22T16:14:14+09:00",
+  "generated_at": "2026-07-23T15:30:29+09:00",
   "mode": "PAPER",
   "account_scope": "***9904-01",
   "start_date": "2026-07-03",
-  "end_date": "2026-07-22",
+  "end_date": "2026-07-23",
   "strategy_lineage": [
     "risk_neutral",
     "aggressive"
@@ -24,11 +24,12 @@
     "2026-07-17": 0,
     "2026-07-20": 0,
     "2026-07-21": 5,
-    "2026-07-22": 2
+    "2026-07-22": 2,
+    "2026-07-23": 3
   },
-  "db_order_rows": 206,
-  "broker_order_rows": 217,
-  "exact_matched_rows": 190,
+  "db_order_rows": 209,
+  "broker_order_rows": 220,
+  "exact_matched_rows": 193,
   "fill_overrides": [
     {
       "date": "2026-07-03",
@@ -3945,6 +3946,63 @@
       "db_original_status": "FILLED",
       "db_original_filled_qty": 331.0,
       "db_original_avg_fill_price": 95223.0
+    },
+    {
+      "date": "2026-07-23",
+      "broker_order_id": "0000008680",
+      "symbol": "021240",
+      "stock_name": "코웨이",
+      "side": "BUY",
+      "ordered_qty": 758.0,
+      "filled_qty": 758.0,
+      "remaining_qty": 0.0,
+      "total_fill_amount": 68573500.0,
+      "avg_fill_price": 90466.0,
+      "cancelled": false,
+      "order_time": "093158",
+      "db_order_id": "292335e5-cf6b-4969-9c36-77f20202a83d",
+      "db_strategy_name": "aggressive",
+      "db_original_status": "FILLED",
+      "db_original_filled_qty": 758.0,
+      "db_original_avg_fill_price": 90466.0
+    },
+    {
+      "date": "2026-07-23",
+      "broker_order_id": "0000004642",
+      "symbol": "021240",
+      "stock_name": "코웨이",
+      "side": "SELL",
+      "ordered_qty": 753.0,
+      "filled_qty": 753.0,
+      "remaining_qty": 0.0,
+      "total_fill_amount": 67272200.0,
+      "avg_fill_price": 89338.0,
+      "cancelled": false,
+      "order_time": "091154",
+      "db_order_id": "7ff130c4-7f95-4ca0-9afc-bfc55d524d21",
+      "db_strategy_name": "aggressive",
+      "db_original_status": "FILLED",
+      "db_original_filled_qty": 753.0,
+      "db_original_avg_fill_price": 89338.0
+    },
+    {
+      "date": "2026-07-23",
+      "broker_order_id": "0000003655",
+      "symbol": "383220",
+      "stock_name": "F&F",
+      "side": "SELL",
+      "ordered_qty": 915.0,
+      "filled_qty": 915.0,
+      "remaining_qty": 0.0,
+      "total_fill_amount": 67339000.0,
+      "avg_fill_price": 73594.0,
+      "cancelled": false,
+      "order_time": "090649",
+      "db_order_id": "e3b0d3f6-d829-4b29-8ebc-b642c46cd8e9",
+      "db_strategy_name": "aggressive",
+      "db_original_status": "FILLED",
+      "db_original_filled_qty": 915.0,
+      "db_original_avg_fill_price": 73594.0
     }
   ],
   "broker_only_rows": [

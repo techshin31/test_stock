@@ -229,6 +229,83 @@ def snapshot_from_operational_log(
     )
 
 
+def extract_critical_incidents(
+    path: Path,
+    through_date: date | None = None,
+) -> list[dict]:
+    """Extract chronological critical incident details from operational health log."""
+    if not path.exists():
+        return []
+
+    records = []
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+            timestamp = datetime.fromisoformat(row["timestamp"])
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if through_date is None or timestamp.date() <= through_date:
+            records.append((timestamp, row))
+
+    critical_statuses = {
+        "ERROR",
+        "DEGRADED_RISK_UNCHECKED",
+        "ENTRY_CIRCUIT_BREAKER",
+        "ORDER_RECONCILIATION",
+        "ORDER_SUPPRESSION",
+    }
+
+    STATUS_NAMES = {
+        "ORDER_SUPPRESSION": "주문 안전 차단",
+        "ORDER_RECONCILIATION": "주문 정산 대기",
+        "ERROR": "증권사 통신/API 오류",
+        "ENTRY_CIRCUIT_BREAKER": "시장지수 서킷브레이커",
+        "DEGRADED_RISK_UNCHECKED": "위험점검 미완료",
+    }
+
+    incidents = []
+    active_status = None
+
+    for timestamp, row in sorted(records, key=lambda item: item[0]):
+        status = row.get("operational_status")
+        if status in critical_statuses:
+            if status != active_status:
+                health = row.get("data_health") or {}
+                last_err = row.get("last_error")
+                suppressions = health.get("order_suppressions") or row.get("order_suppressions") or {}
+                breaker = health.get("entry_circuit_breaker") or row.get("entry_circuit_breaker")
+
+                detail_parts = []
+                if last_err:
+                    detail_parts.append(str(last_err))
+                if isinstance(suppressions, dict) and suppressions.get("by_reason"):
+                    reasons = [f"{k}: {v}건" for k, v in suppressions["by_reason"].items()]
+                    detail_parts.append(f"차단사유 ({', '.join(reasons)})")
+                elif isinstance(suppressions, dict) and suppressions.get("total"):
+                    detail_parts.append(f"차단 {suppressions['total']}건")
+                if breaker:
+                    detail_parts.append(f"서킷브레이커 ({breaker})")
+
+                summary = " | ".join(detail_parts) if detail_parts else STATUS_NAMES.get(status, status)
+
+                incidents.append({
+                    "timestamp": timestamp.isoformat(timespec="seconds"),
+                    "date": timestamp.date().isoformat(),
+                    "time": timestamp.strftime("%H:%M:%S"),
+                    "status": status,
+                    "status_name": STATUS_NAMES.get(status, status),
+                    "summary": summary,
+                    "last_error": last_err,
+                })
+            active_status = status
+        else:
+            active_status = None
+
+    return incidents
+
+
 def evaluate_promotion_gate(
     snapshot: TradingKpiSnapshot,
     target_mode: str,

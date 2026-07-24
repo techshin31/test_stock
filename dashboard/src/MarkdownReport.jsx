@@ -3,6 +3,7 @@ import remarkGfm from 'remark-gfm'
 import {
   CheckCircle2,
   XCircle,
+  AlertTriangle,
   FileText,
   TrendingUp,
   ListChecks,
@@ -76,6 +77,7 @@ function CustomHeading({ level, children, ...props }) {
   if (text.includes('Executive Summary') || text.includes('요약')) icon = <FileText size={16} />
   else if (text.includes('KPI') || text.includes('성과')) icon = <TrendingUp size={16} />
   else if (text.includes('기준') || text.includes('조치')) icon = <ListChecks size={16} />
+  else if (text.includes('사고') || text.includes('이슈')) icon = <AlertTriangle size={16} />
   else if (text.includes('검증') || text.includes('한계')) icon = <ShieldCheck size={16} />
   else if (text.includes('주의') || text.includes('근거')) icon = <Info size={16} />
 

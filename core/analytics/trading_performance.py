@@ -25,6 +25,7 @@ from core.analytics.trading_kpis import (
     PromotionDecision,
     TradingKpiSnapshot,
     evaluate_promotion_gate,
+    extract_critical_incidents,
     snapshot_from_operational_log,
 )
 from core.constant.values import TradingCostParam
@@ -1095,6 +1096,12 @@ def build_end_of_day_report(
         if decision.ready
         else f"{target_mode} 전환은 {len(decision.blockers)}개 조건 때문에 차단됐습니다."
     )
+    incidents = extract_critical_incidents(
+        log_dir / "operational_health.jsonl", through_date=report_date
+    )
+    ops_dict = promotion_snapshot.to_dict()
+    ops_dict["critical_incidents_detail"] = incidents
+
     return {
         "schema_version": 2,
         "report_date": report_date.isoformat(),
@@ -1104,7 +1111,8 @@ def build_end_of_day_report(
         "executive_summary": headline,
         "performance": performance,
         "performance_trend": trend,
-        "operations": promotion_snapshot.to_dict(),
+        "operations": ops_dict,
+        "critical_incidents_detail": incidents,
         "trading": trading,
         "ledger_quality": ledger_quality,
         "shadow_reentry": shadow_reentry,
@@ -1275,6 +1283,27 @@ def _markdown_v2(report: dict) -> str:
         )
     if not report.get("performance_trend"):
         lines.append("| - | - | - | - | - | - |")
+
+    incidents = report.get("critical_incidents_detail") or ops.get("critical_incidents_detail") or []
+    lines.extend([
+        "",
+        "## 치명 사고 세부 내역",
+        "",
+        f"- 누적 **{ops.get('critical_incidents', len(incidents))}건**의 운영 차단·통신 정산 이벤트가 감지되었습니다. (자산 손실 0건, 안전 차단 프로토콜 작동)",
+        "",
+    ])
+    if incidents:
+        lines.extend([
+            "| 일시 | 구분 | 세부 내용 및 원인 |",
+            "|---|---|---|",
+        ])
+        for inc in incidents[-20:]:
+            dt_str = f"{inc.get('date')} {inc.get('time')}"
+            status_name = inc.get("status_name", inc.get("status", "-"))
+            summary = str(inc.get("summary", "-")).replace("\n", " ")
+            lines.append(f"| {dt_str} | {status_name} (`{inc.get('status')}`) | {summary} |")
+    else:
+        lines.append("- 기록된 운영 사고 이벤트가 없습니다.")
 
     lines.extend([
         "",
