@@ -40,8 +40,22 @@ def calc_close_regime(
     long_ma = series.rolling(long_window, min_periods=long_window).mean()
     box_position = series / series.rolling(medium_window, min_periods=medium_window).mean() - 1.0
 
-    is_uptrend = (short_ma > medium_ma) & (medium_ma > long_ma) & (series > medium_ma)
-    is_downtrend = (short_ma < medium_ma) & (medium_ma < long_ma) & (series < medium_ma)
+    daily_ret = series.pct_change(1)
+    five_day_ret = series.pct_change(5)
+
+    is_uptrend = (
+        (short_ma > medium_ma)
+        & (medium_ma > long_ma)
+        & (series > short_ma)
+        & (series > medium_ma)
+        & (daily_ret > -0.03)
+        & (five_day_ret > -0.05)
+    )
+    is_downtrend = (
+        ((short_ma < medium_ma) & (medium_ma < long_ma) & (series < medium_ma))
+        | (daily_ret < -0.05)
+        | ((series < short_ma) & (five_day_ret < -0.05))
+    )
     is_sideways = (~is_uptrend) & (~is_downtrend) & box_position.abs().le(sideways_threshold)
 
     regime = pd.Series("TRANSITION", index=series.index, dtype=object)

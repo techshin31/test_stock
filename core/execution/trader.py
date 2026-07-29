@@ -448,11 +448,9 @@ class LiveTrader:
                 raise ValueError(
                     f"KOSPI 데이터가 오래됨(last={kospi_last_date}, expected={signal_date})"
                 )
-            ma200 = kospi_close.rolling(200, min_periods=200).mean()
-            market_regimes = pd.Series("TRANSITION", index=kospi_close.index, dtype=object)
-            market_regimes.loc[kospi_close > ma200] = "UPTREND"
-            market_regimes.loc[kospi_close <= ma200] = "DOWNTREND"
-            market_regime = str(market_regimes.iloc[-1])
+            from core.analytics.regime import calc_close_regime
+            regime_df = calc_close_regime(kospi_close)
+            market_regime = str(regime_df["REGIME"].iloc[-1])
         except Exception as exc:
             message = f"KOSPI 시장국면 오류: {exc}"
             logging.error(f"{message}; 신규 매수를 차단합니다")
