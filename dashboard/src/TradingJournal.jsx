@@ -8,8 +8,6 @@ import {
   Target,
   Percent,
   DollarSign,
-  ArrowUpRight,
-  ArrowDownRight,
   Activity
 } from 'lucide-react'
 import {
@@ -62,8 +60,9 @@ const chartTooltipStyle = {
 export default function TradingJournal({ journal, loading }) {
   const summary = journal?.summary
   const trades = journal?.trades || []
-  const dailyPnl = journal?.daily_pnl || []
+  const dailyPnl = useMemo(() => journal?.daily_pnl || [], [journal])
   const monthly = journal?.monthly || []
+  const benchmarkHistory = journal?.benchmark_history || []
 
   const chartData = useMemo(() => {
     if (!dailyPnl.length) return []
@@ -79,6 +78,17 @@ export default function TradingJournal({ journal, loading }) {
       }
     })
   }, [dailyPnl])
+
+  if (!loading && (journal?.available === false || !summary)) {
+    return (
+      <section className="journal-panel" role="status" style={{ minHeight: 180, display: 'grid', placeItems: 'center', textAlign: 'center', color: 'var(--gray-400)' }}>
+        <div>
+          <h2 className="journal-panel__title">검증된 매매 저널을 불러올 수 없습니다</h2>
+          <p>{journal?.message || '공식 EOD 리포트가 생성되면 이 화면에 표시됩니다.'}</p>
+        </div>
+      </section>
+    )
+  }
 
   return (
     <div className="journal-container">
@@ -394,39 +404,43 @@ export default function TradingJournal({ journal, loading }) {
 
       `}</style>
 
+      <p style={{ margin: 0, color: 'var(--gray-400)', fontSize: '12px' }}>
+        데이터 출처: {journal?.source || '확인 중'} · {journal?.updated_at || '갱신 시각 없음'}
+      </p>
+
       {/* Summary Metrics */}
       <div className="journal-metrics">
         <div className="journal-metric-card journal-metric-card--blue">
           <div className="journal-metric-card__header">
             <div className="journal-metric-card__icon"><BarChart3 size={18} /></div>
-            <p className="journal-metric-card__label">총 거래수</p>
+            <p className="journal-metric-card__label">관측 세션</p>
           </div>
-          <p className="journal-metric-card__value" style={mono}>{fmtNum(summary?.total_trades)}</p>
+          <p className="journal-metric-card__value" style={mono}>{fmtNum(summary?.observed_sessions)}</p>
         </div>
 
         <div className="journal-metric-card journal-metric-card--amber">
           <div className="journal-metric-card__header">
             <div className="journal-metric-card__icon"><Target size={18} /></div>
-            <p className="journal-metric-card__label">승률</p>
+            <p className="journal-metric-card__label">양(+) 세션 비율</p>
           </div>
           <p className="journal-metric-card__value" style={mono}>{fmtPct(summary?.win_rate)}</p>
-          <p className="journal-metric-card__detail" style={mono}>{fmtNum(summary?.win_count)}승 / {fmtNum(summary?.loss_count)}패</p>
+          <p className="journal-metric-card__detail" style={mono}>{fmtNum(summary?.positive_sessions)}양 / {fmtNum(summary?.negative_sessions)}음</p>
         </div>
 
-        <div className={`journal-metric-card ${((summary?.total_realized_pnl || 0) >= 0) ? 'journal-metric-card--green' : 'journal-metric-card--red'}`}>
+        <div className={`journal-metric-card ${((summary?.pnl_vs_starting_capital || 0) >= 0) ? 'journal-metric-card--green' : 'journal-metric-card--red'}`}>
           <div className="journal-metric-card__header">
             <div className="journal-metric-card__icon"><DollarSign size={18} /></div>
-            <p className="journal-metric-card__label">실현 손익</p>
+            <p className="journal-metric-card__label">기준자본 대비 손익</p>
           </div>
-          <p className={`journal-metric-card__value ${((summary?.total_realized_pnl || 0) >= 0) ? 'journal-text-positive' : 'journal-text-negative'}`} style={mono}>
-            {fmtMoney(summary?.total_realized_pnl)}
+          <p className={`journal-metric-card__value ${((summary?.pnl_vs_starting_capital || 0) >= 0) ? 'journal-text-positive' : 'journal-text-negative'}`} style={mono}>
+            {fmtMoney(summary?.pnl_vs_starting_capital)}
           </p>
         </div>
 
         <div className="journal-metric-card journal-metric-card--green">
           <div className="journal-metric-card__header">
             <div className="journal-metric-card__icon"><TrendingUp size={18} /></div>
-            <p className="journal-metric-card__label">평균 이익</p>
+            <p className="journal-metric-card__label">평균 양(+) 변동</p>
           </div>
           <p className="journal-metric-card__value journal-text-positive" style={mono}>{fmtMoney(summary?.avg_profit)}</p>
         </div>
@@ -434,7 +448,7 @@ export default function TradingJournal({ journal, loading }) {
         <div className="journal-metric-card journal-metric-card--red">
           <div className="journal-metric-card__header">
             <div className="journal-metric-card__icon"><Skull size={18} /></div>
-            <p className="journal-metric-card__label">평균 손실</p>
+            <p className="journal-metric-card__label">평균 음(-) 변동</p>
           </div>
           <p className="journal-metric-card__value journal-text-negative" style={mono}>{fmtMoney(summary?.avg_loss)}</p>
         </div>
@@ -442,7 +456,7 @@ export default function TradingJournal({ journal, loading }) {
         <div className="journal-metric-card journal-metric-card--blue">
           <div className="journal-metric-card__header">
             <div className="journal-metric-card__icon"><Percent size={18} /></div>
-            <p className="journal-metric-card__label">Profit Factor</p>
+            <p className="journal-metric-card__label">양/음 변동 비율</p>
           </div>
           <p className="journal-metric-card__value" style={mono}>{summary?.profit_factor != null ? summary.profit_factor.toFixed(2) : '—'}</p>
         </div>
@@ -452,10 +466,12 @@ export default function TradingJournal({ journal, loading }) {
       <section className="journal-panel">
         <div className="journal-panel__header">
           <p className="journal-panel__eyebrow"><Activity size={14} /> 최근 30일</p>
-          <h2 className="journal-panel__title">일별 실현 손익</h2>
+          <h2 className="journal-panel__title">일별 자산 변동</h2>
         </div>
-        {loading || !chartData.length ? (
+        {loading ? (
           <Shimmer height={280} />
+        ) : !chartData.length ? (
+          <div className="journal-panel" role="status">일별 자산 변동 이력이 없습니다.</div>
         ) : (
           <div style={{ height: 280, width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -473,7 +489,7 @@ export default function TradingJournal({ journal, loading }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--gray-800)" vertical={false} />
                 <XAxis dataKey="date" tick={{ fill: '#8b8b97', fontSize: 12, fontFamily: 'var(--font-mono)' }} axisLine={{ stroke: 'var(--gray-800)' }} tickLine={false} dy={10} />
                 <YAxis tick={{ fill: '#8b8b97', fontSize: 12, fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${Math.round(v / 10000)}만`} dx={-10} />
-                <Tooltip cursor={{ fill: 'var(--gray-800)', opacity: 0.4 }} contentStyle={chartTooltipStyle} formatter={(v, name) => [fmtMoney(v), name === 'pnl' ? '일별 손익' : '누적 손익']} />
+                <Tooltip cursor={{ fill: 'var(--gray-800)', opacity: 0.4 }} contentStyle={chartTooltipStyle} formatter={(v, name) => [fmtMoney(v), name === 'pnl' ? '일별 자산 변동' : '누적 자산 변동']} />
                 <Bar dataKey="pnl" barSize={16} radius={[4, 4, 0, 0]}>
                   {chartData.map((d, i) => (
                     <Cell key={i} fill={d.pnl >= 0 ? 'url(#journalGreenBar)' : 'url(#journalRedBar)'} />
@@ -494,23 +510,15 @@ export default function TradingJournal({ journal, loading }) {
             <p className="journal-panel__eyebrow"><TrendingUp size={14} /> 벤치마크 상대 비교</p>
             <h2 className="journal-panel__title">포트폴리오 vs KOSPI 누적 수익률 (%)</h2>
           </div>
-          {loading || !dailyPnl.length ? (
+          {loading ? (
             <Shimmer height={220} />
+          ) : !benchmarkHistory.length ? (
+            <div className="journal-panel" role="status">공식 KOSPI 벤치마크 이력이 없습니다.</div>
           ) : (
             <div style={{ height: 220, width: '100%' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart
-                  data={dailyPnl.map((d, i) => {
-                    const startingCap = summary?.starting_capital || 500000000
-                    const cumPnl = dailyPnl.slice(0, i + 1).reduce((acc, cur) => acc + cur.realized_pnl, 0)
-                    const pReturn = (cumPnl / startingCap) * 100
-                    const kospiReturns = [0.0, 3.55, 1.99, 2.47, 1.49]
-                    return {
-                      date: d.date?.slice(5) || `D+${i}`,
-                      포트폴리오: Number(pReturn.toFixed(2)),
-                      KOSPI벤치마크: kospiReturns[i % kospiReturns.length],
-                    }
-                  })}
+                  data={benchmarkHistory}
                   margin={{ top: 12, right: 20, left: 0, bottom: 4 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--gray-800)" vertical={false} />
@@ -518,8 +526,8 @@ export default function TradingJournal({ journal, loading }) {
                   <YAxis tick={{ fill: '#8b8b97', fontSize: 12, fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
                   <Tooltip cursor={{ fill: 'var(--gray-800)', opacity: 0.4 }} contentStyle={chartTooltipStyle} formatter={(v) => [`${v}%`, '']} />
                   <Legend wrapperStyle={{ paddingTop: '8px', fontSize: '12px' }} />
-                  <Line type="monotone" dataKey="포트폴리오" stroke="var(--red)" strokeWidth={3} dot={{ r: 4 }} />
-                  <Line type="monotone" dataKey="KOSPI벤치마크" stroke="var(--blue)" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3 }} />
+                  <Line type="monotone" name="포트폴리오" dataKey="portfolio_return" stroke="var(--red)" strokeWidth={3} dot={{ r: 4 }} />
+                  <Line type="monotone" name="KOSPI 벤치마크" dataKey="benchmark_return" stroke="var(--blue)" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3 }} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -529,8 +537,8 @@ export default function TradingJournal({ journal, loading }) {
         {/* 2. Win / Loss Distribution Donut Chart */}
         <section className="journal-panel">
           <div className="journal-panel__header">
-            <p className="journal-panel__eyebrow"><Target size={14} /> 매매 분포</p>
-            <h2 className="journal-panel__title">승률 / 손익 분포</h2>
+            <p className="journal-panel__eyebrow"><Target size={14} /> 세션 분포</p>
+            <h2 className="journal-panel__title">양(+) / 음(-) 세션 분포</h2>
           </div>
           {loading || !summary ? (
             <Shimmer height={220} />
@@ -540,8 +548,8 @@ export default function TradingJournal({ journal, loading }) {
                 <PieChart>
                   <Pie
                     data={[
-                      { name: '승리 거래', value: summary.win_count || 4, color: 'var(--green)' },
-                      { name: '패배 거래', value: summary.loss_count || 7, color: 'var(--red)' },
+                      { name: '양(+) 세션', value: summary.positive_sessions || 0, color: 'var(--green)' },
+                      { name: '음(-) 세션', value: summary.negative_sessions || 0, color: 'var(--red)' },
                     ]}
                     cx="50%"
                     cy="50%"
@@ -557,8 +565,8 @@ export default function TradingJournal({ journal, loading }) {
                 </PieChart>
               </ResponsiveContainer>
               <div style={{ display: 'flex', gap: '16px', fontSize: '12px', fontFamily: 'var(--font-mono)' }}>
-                <span style={{ color: 'var(--green)' }}>● 승리: {summary.win_count || 4}회 ({fmtPct(summary.win_rate)})</span>
-                <span style={{ color: 'var(--red)' }}>● 패배: {summary.loss_count || 7}회 ({fmtPct(1 - (summary.win_rate || 0.364))})</span>
+                <span style={{ color: 'var(--green)' }}>● 양(+) 세션: {summary.positive_sessions || 0}회 ({fmtPct(summary.win_rate)})</span>
+                <span style={{ color: 'var(--red)' }}>● 음(-) 세션: {summary.negative_sessions || 0}회 ({fmtPct(summary.win_rate == null ? null : 1 - summary.win_rate)})</span>
               </div>
             </div>
           )}
@@ -607,12 +615,12 @@ export default function TradingJournal({ journal, loading }) {
           ) : (
             <div className="journal-table-wrap">
               <table className="journal-table">
-                <thead><tr><th>월</th><th>거래수</th><th>실현손익</th><th>승률</th></tr></thead>
+                <thead><tr><th>월</th><th>관측 세션</th><th>기준자본 대비 손익</th><th>양(+) 세션 비율</th></tr></thead>
                 <tbody>
                   {monthly.map((m) => (
                     <tr key={m.month}>
                       <td style={{ ...mono, fontWeight: 600, color: 'var(--white)' }}>{m.month}</td>
-                      <td style={mono}>{fmtNum(m.trades)}</td>
+                      <td style={mono}>{fmtNum(m.sessions)}</td>
                       <td className={m.pnl >= 0 ? 'journal-text-positive' : 'journal-text-negative'} style={{ ...mono, fontWeight: 600 }}>{fmtMoney(m.pnl)}</td>
                       <td style={mono}>{fmtPct(m.win_rate)}</td>
                     </tr>

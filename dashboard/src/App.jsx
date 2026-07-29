@@ -40,6 +40,14 @@ const money = new Intl.NumberFormat('ko-KR', {
 })
 const number = new Intl.NumberFormat('ko-KR')
 
+const SUPPRESSION_REASON_LABELS = {
+  AMBIGUOUS_RESULT_SAME_DAY: '브로커 응답 불확실 · 당일 재시도 금지',
+  OPEN_ORDER_TODAY: '당일 미체결 주문 중복 방지',
+  FILLED_ORDER_TODAY: '당일 체결 주문 중복 방지',
+  PRICE_GUARD_COOLDOWN: '가격 편차 보호 대기',
+  RETRY_LIMIT: '당일 재시도 한도 도달',
+}
+
 function apiUrl(path) {
   const separator = path.includes('?') ? '&' : '?'
   return `${path}${separator}mode=${MODE}`
@@ -162,6 +170,7 @@ const READINESS_LABELS = {
   held_position_risk_coverage: '보유종목 위험평가',
   no_unresolved_runtime_orders: '미종결 주문',
   runtime_error_free: '런타임 오류·차단기',
+  entry_circuit_breaker_clear: '신규 진입 차단기 해제',
   latest_eod_operational_integrity: '최근 EOD 운영 무결성',
   scheduler_instance_scope: '단일 PAPER 스케줄러 범위',
   scheduler_supervisor_runtime: 'PAPER 스케줄러 무중단 감독',
@@ -293,6 +302,12 @@ function Overview({ overview, onOpenReports }) {
   const performance = report.performance || {}
   const positions = Array.isArray(dashboard.positions) ? dashboard.positions : []
   const orders = dashboard.actual_orders || dashboard.daily_orders || {}
+  const suppressions = dashboard.order_suppressions || dashboard.data_health?.order_suppressions || {}
+  const suppressionTotal = Number(suppressions.total || 0)
+  const suppressionReasons = Object.entries(suppressions.by_reason || {})
+    .map(([reason, count]) => `${SUPPRESSION_REASON_LABELS[reason] || reason} ${number.format(Number(count) || 0)}건`)
+  const incidentCodes = Object.entries(suppressions.incident_codes || {})
+    .map(([code, count]) => `${code} ${number.format(Number(count) || 0)}건`)
   const timeline = Array.isArray(dashboard.timeline) ? dashboard.timeline : []
   const health = Array.isArray(overview.health) ? overview.health : []
   const chartData = health.slice(-20).map((row, index) => ({
@@ -365,6 +380,17 @@ function Overview({ overview, onOpenReports }) {
             <div><dt>정산 대기</dt><dd>{orders.open || 0}</dd></div>
             <div><dt>거절·취소</dt><dd>{orders.rejected || 0}</dd></div>
           </dl>
+          {suppressionTotal > 0 ? (
+            <div className="order-safety-alert" role="status">
+              <div className="order-safety-alert__header">
+                <AlertTriangle size={16} aria-hidden="true" />
+                <strong>후보 주문 안전차단</strong>
+                <span>{number.format(suppressionTotal)}건</span>
+              </div>
+              {suppressionReasons.length ? <p>{suppressionReasons.join(' · ')}</p> : null}
+              {incidentCodes.length ? <p className="order-safety-alert__code">브로커 원인: {incidentCodes.join(' · ')}</p> : null}
+            </div>
+          ) : null}
         </Panel>
 
         <Panel title="최근 활동" eyebrow="TIMELINE" className="content-grid__wide">
@@ -495,7 +521,7 @@ function App() {
       if (sectors.status === 'fulfilled') setMarketSectors(sectors.value)
       if (rate.status === 'fulfilled') setExchangeRate(rate.value)
       if (regime.status === 'fulfilled') setMarketRegime(regime.value)
-    } catch (_) { /* ignore */ }
+    } catch { /* optional market data is rendered as unavailable */ }
     finally { if (!signal?.aborted) setMarketLoading(false) }
   }, [])
 
@@ -503,7 +529,7 @@ function App() {
     try {
       const payload = await requestJson('/api/sectors', signal)
       setSectorData(payload)
-    } catch (_) { /* ignore */ }
+    } catch { /* optional sector data is rendered as unavailable */ }
     finally { if (!signal?.aborted) setSectorLoading(false) }
   }, [])
 
@@ -511,7 +537,7 @@ function App() {
     try {
       const payload = await requestJson('/api/journal', signal)
       setJournalData(payload)
-    } catch (_) { /* ignore */ }
+    } catch { /* optional journal data is rendered as unavailable */ }
     finally { if (!signal?.aborted) setJournalLoading(false) }
   }, [])
 

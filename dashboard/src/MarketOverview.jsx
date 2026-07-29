@@ -62,6 +62,10 @@ function Shimmer({ height = 24, width = '100%' }) {
   return <div className="market-shimmer" style={{ height, width }} />
 }
 
+function EmptyData({ message }) {
+  return <div className="market-empty" role="status">{message}</div>
+}
+
 const chartTooltipStyle = {
   backgroundColor: 'rgba(17, 17, 19, 0.9)',
   border: '1px solid var(--gray-800)',
@@ -96,6 +100,22 @@ const styles = `
   padding: 24px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s;
+}
+.market-source-note {
+  margin: -8px 0 0;
+  color: var(--gray-400);
+  font-size: 12px;
+}
+.market-empty {
+  min-height: 84px;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  border: 1px dashed var(--gray-700);
+  border-radius: 6px;
+  color: var(--gray-400);
+  font-size: 13px;
+  text-align: center;
 }
 .market-panel:hover {
   transform: translateY(-2px);
@@ -220,8 +240,6 @@ const styles = `
   display: flex;
   flex-direction: column;
   gap: 16px;
-  border-left-width: 4px;
-  border-left-style: solid;
 }
 
 .market-index-card__header {
@@ -368,36 +386,48 @@ const styles = `
 export default function MarketOverview({ indices, breadth, sectors, exchangeRate, regime, loading }) {
   const regimeInfo = REGIME_MAP[regime?.current] || REGIME_MAP.TRANSITION
   const totalBreadth = breadth?.total || 1
+  const hasRegimeConfidence = regime?.confidence != null && Number.isFinite(Number(regime.confidence))
+  const isPaperUniverseBreadth = breadth?.source === 'YFINANCE_PAPER_UNIVERSE'
+  const sourceNote = [indices, breadth, sectors, exchangeRate, regime]
+    .filter((item) => item?.available !== false && item?.source)
+    .map((item) => item.source)
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .join(' · ')
 
   return (
     <>
       <style>{styles}</style>
       <div className="market-overview">
+        {!loading && sourceNote && <p className="market-source-note">데이터 출처: {sourceNote}</p>}
         {/* 1. Market Regime Banner */}
         <div className={`market-panel market-regime market-regime--${regimeInfo.tone}`}>
           <div className="market-regime__left">
             <Activity size={20} />
             <span>시장 국면 모델</span>
           </div>
-          {loading || !regime ? (
+          {loading ? (
             <div className="market-regime__right">
               <Shimmer height={32} width={100} />
               <Shimmer height={12} width={200} />
             </div>
+          ) : regime?.available === false || !regime?.current ? (
+            <EmptyData message={regime?.message || '시장 국면 분석 데이터가 없습니다.'} />
           ) : (
             <div className="market-regime__right">
               <span className="market-regime__badge">
                 {regimeInfo.label}
               </span>
-              <div className="market-regime__confidence">
-                <span className="market-regime__confidence-label">신뢰도</span>
-                <div className="market-regime__confidence-track">
-                  <span style={{ width: `${Math.round((regime.confidence || 0) * 100)}%` }} />
+              {hasRegimeConfidence && (
+                <div className="market-regime__confidence">
+                  <span className="market-regime__confidence-label">신뢰도</span>
+                  <div className="market-regime__confidence-track">
+                    <span style={{ width: `${Math.round(regime.confidence * 100)}%` }} />
+                  </div>
+                  <span className="market-regime__confidence-value" style={mono}>
+                    {Math.round(regime.confidence * 100)}%
+                  </span>
                 </div>
-                <span className="market-regime__confidence-value" style={mono}>
-                  {Math.round((regime.confidence || 0) * 100)}%
-                </span>
-              </div>
+              )}
               {regime.signal && (
                 <span className="market-regime__signal" style={mono}>
                   시그널: <strong>{regime.signal}</strong>
@@ -410,16 +440,18 @@ export default function MarketOverview({ indices, breadth, sectors, exchangeRate
         {/* 2. Index Cards Row */}
         <div className="market-indices-row">
           {/* KOSPI */}
-          <div className="market-panel market-index-card" style={{ borderLeftColor: indices?.kospi?.change > 0 ? 'var(--green)' : indices?.kospi?.change < 0 ? 'var(--red)' : 'var(--gray-600)' }}>
+          <div className="market-panel market-index-card">
             <div className="market-index-card__header">
               <span>코스피 (KOSPI)</span>
               <Layers size={18} />
             </div>
-            {loading || !indices?.kospi ? (
+            {loading ? (
               <div className="market-index-card__body">
                 <Shimmer height={40} width="70%" />
                 <Shimmer height={20} width="50%" />
               </div>
+            ) : indices?.available === false || !indices?.kospi ? (
+              <EmptyData message={indices?.message || 'KOSPI 데이터를 불러올 수 없습니다.'} />
             ) : (
               <div className="market-index-card__body">
                 <div className="market-index-card__price" style={mono}>{fmt(indices.kospi.price)}</div>
@@ -433,16 +465,18 @@ export default function MarketOverview({ indices, breadth, sectors, exchangeRate
           </div>
 
           {/* KOSDAQ */}
-          <div className="market-panel market-index-card" style={{ borderLeftColor: indices?.kosdaq?.change > 0 ? 'var(--green)' : indices?.kosdaq?.change < 0 ? 'var(--red)' : 'var(--gray-600)' }}>
+          <div className="market-panel market-index-card">
             <div className="market-index-card__header">
               <span>코스닥 (KOSDAQ)</span>
               <Layers size={18} />
             </div>
-            {loading || !indices?.kosdaq ? (
+            {loading ? (
               <div className="market-index-card__body">
                 <Shimmer height={40} width="70%" />
                 <Shimmer height={20} width="50%" />
               </div>
+            ) : indices?.available === false || !indices?.kosdaq ? (
+              <EmptyData message={indices?.message || 'KOSDAQ 데이터를 불러올 수 없습니다.'} />
             ) : (
               <div className="market-index-card__body">
                 <div className="market-index-card__price" style={mono}>{fmt(indices.kosdaq.price)}</div>
@@ -456,16 +490,18 @@ export default function MarketOverview({ indices, breadth, sectors, exchangeRate
           </div>
 
           {/* Exchange Rate */}
-          <div className="market-panel market-index-card" style={{ borderLeftColor: exchangeRate?.change > 0 ? 'var(--green)' : exchangeRate?.change < 0 ? 'var(--red)' : 'var(--gray-600)' }}>
+          <div className="market-panel market-index-card">
             <div className="market-index-card__header">
               <span>환율 (USD/KRW)</span>
               <Globe size={18} />
             </div>
-            {loading || !exchangeRate?.usd_krw ? (
+            {loading ? (
               <div className="market-index-card__body">
                 <Shimmer height={40} width="70%" />
                 <Shimmer height={20} width="50%" />
               </div>
+            ) : exchangeRate?.available === false || !exchangeRate?.usd_krw ? (
+              <EmptyData message={exchangeRate?.message || 'USD/KRW 데이터를 불러올 수 없습니다.'} />
             ) : (
               <div className="market-index-card__body">
                 <div className="market-index-card__price" style={mono}>{fmt(exchangeRate.usd_krw)}</div>
@@ -485,19 +521,15 @@ export default function MarketOverview({ indices, breadth, sectors, exchangeRate
             <TrendingUp size={20} />
             <span>KOSPI vs KOSDAQ 지수 추이 비교</span>
           </div>
-          {loading || !indices?.kospi ? (
+          {loading ? (
             <Shimmer height={200} />
+          ) : !indices?.history?.length ? (
+            <EmptyData message="지수 추이 이력은 아직 수집되지 않았습니다." />
           ) : (
             <div style={{ height: 200, width: '100%' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart
-                  data={[
-                    { date: '07-20', KOSPI: 7096.89, KOSDAQ: 790.28 },
-                    { date: '07-21', KOSPI: 7120.45, KOSDAQ: 782.10 },
-                    { date: '07-22', KOSPI: 6980.12, KOSDAQ: 775.40 },
-                    { date: '07-23', KOSPI: 7096.89, KOSDAQ: 790.28 },
-                    { date: '07-24', KOSPI: indices?.kospi?.price || 6690.62, KOSDAQ: indices?.kosdaq?.price || 748.22 },
-                  ]}
+                  data={indices.history}
                   margin={{ top: 10, right: 30, left: 10, bottom: 0 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--gray-800)" vertical={false} />
@@ -518,13 +550,15 @@ export default function MarketOverview({ indices, breadth, sectors, exchangeRate
         <div className="market-panel market-breadth">
           <div className="market-breadth__header">
             <BarChart3 size={20} />
-            <span>시장 등락 비율 (Market Breadth)</span>
+            <span>{isPaperUniverseBreadth ? 'PAPER 유니버스 등락 비율' : '시장 등락 비율 (Market Breadth)'}</span>
           </div>
-          {loading || !breadth ? (
+          {loading ? (
             <div className="market-breadth__shimmer" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <Shimmer height={14} width="100%" />
               <Shimmer height={12} width="40%" />
             </div>
+          ) : breadth?.available === false || !breadth ? (
+            <EmptyData message={breadth?.message || '시장 등락 비율 데이터가 없습니다.'} />
           ) : (
             <>
               <div className="market-breadth__legend" style={mono}>
@@ -538,8 +572,9 @@ export default function MarketOverview({ indices, breadth, sectors, exchangeRate
                 <span className="market-breadth__bar--dec" style={{ width: `${(breadth.declining / totalBreadth) * 100}%` }} />
               </div>
               <div className="market-breadth__stats" style={mono}>
-                <span>ADR: {fmt(breadth.advance_ratio * 100)}%</span>
-                <span>총 거래대금: ₩{fmtVolume(breadth.trading_volume)}</span>
+                <span>상승 비율: {fmt(breadth.advance_ratio * 100)}%</span>
+                {breadth.universe_size && <span>커버리지: {breadth.coverage}/{breadth.universe_size}</span>}
+                {breadth.trading_volume != null && <span>거래량 합계: {fmtVolume(breadth.trading_volume)}</span>}
               </div>
             </>
           )}

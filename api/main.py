@@ -1,5 +1,6 @@
 import datetime as dt
 import json
+import math
 import os
 import re
 import threading
@@ -13,6 +14,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+from core.analytics.trading_kpis import sanitize_incident_error
 from core.utils.trading_calendar import (
     is_krx_trading_day,
     previous_krx_trading_day,
@@ -146,7 +148,26 @@ def _dashboard(mode: ReportMode) -> dict:
         if not current_name or current_name == ticker:
             position["name"] = stock_names.get(ticker.split(".")[0], ticker)
     data["positions"] = positions
-    return data
+    return _sanitize_runtime_errors(data)
+
+
+def _sanitize_runtime_errors(payload: dict) -> dict:
+    """Do not expose append-only broker diagnostics through the local API."""
+    safe = dict(payload)
+    safe_error = sanitize_incident_error(safe.get("last_error"))
+    if safe_error is not None:
+        safe["last_error"] = safe_error
+    health = safe.get("data_health")
+    if isinstance(health, dict):
+        safe_health = dict(health)
+        dependency_errors = safe_health.get("dependency_errors")
+        if isinstance(dependency_errors, list):
+            safe_health["dependency_errors"] = [
+                sanitize_incident_error(item) or "UNSPECIFIED_DEPENDENCY_ERROR"
+                for item in dependency_errors
+            ]
+        safe["data_health"] = safe_health
+    return safe
 
 
 def _health(mode: ReportMode, limit: int) -> list[dict]:
@@ -159,7 +180,7 @@ def _health(mode: ReportMode, limit: int) -> list[dict]:
             if line.strip():
                 payload = json.loads(line)
                 if isinstance(payload, dict):
-                    rows.append(payload)
+                    rows.append(_sanitize_runtime_errors(payload))
     except (OSError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=500, detail="Operational health log is invalid") from exc
     return rows
@@ -275,7 +296,7 @@ def _report_freshness(
         state = "FAILED"
         diagnostic = next(
             (
-                line.strip()
+                sanitize_incident_error(line.strip()) or "unspecified EOD failure"
                 for line in reversed(
                     str(
                         eod_status.get("stderr_tail")
@@ -325,6 +346,24 @@ def get_health_logs(
     limit: int = Query(default=50, ge=1, le=500),
 ):
     return _health(mode, limit)
+
+
+@app.get("/api/healthz", include_in_schema=False)
+def get_service_health():
+    """Container liveness/readiness probe backed by an actual DB round trip."""
+    conn = _db_connect()
+    if conn is None:
+        raise HTTPException(status_code=503, detail="PostgreSQL is unavailable")
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 AS ok")
+                row = cur.fetchone()
+    except (OSError, psycopg.Error):
+        raise HTTPException(status_code=503, detail="PostgreSQL is unavailable") from None
+    if not isinstance(row, dict) or row.get("ok") != 1:
+        raise HTTPException(status_code=503, detail="PostgreSQL health check failed")
+    return {"status": "ok", "database": "ready"}
 
 
 @app.get("/api/overview")
@@ -419,8 +458,204 @@ def _db_connect():
         return None
 
 
-# In-memory cache for live yfinance market data
+# In-memory caches for externally fetched market data.  Values are always
+# labelled with their source at the endpoint boundary.
 _MARKET_CACHE = {"timestamp": 0, "indices": None, "exchange": None}
+_BREADTH_CACHE = {"timestamp": 0, "payload": None, "last_attempt": 0}
+_BREADTH_CACHE_SECONDS = 300
+_BREADTH_FAILURE_CACHE_SECONDS = 60
+_BREADTH_YFINANCE_TIMEOUT_SECONDS = 8
+
+
+def _finite_float(value: object) -> float | None:
+    """Return a finite numeric value without coercing missing data to zero."""
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    return result if math.isfinite(result) else None
+
+
+def _latest_volume(frame: object) -> int | None:
+    """Read the latest reported volume, preserving unavailable values as None."""
+    try:
+        if "Volume" not in frame:
+            return None
+        value = _finite_float(frame["Volume"].iloc[-1])
+    except (AttributeError, IndexError, KeyError, TypeError):
+        return None
+    return int(value) if value is not None and value >= 0 else None
+
+
+def _index_history_points(kospi: object, kosdaq: object) -> list[dict]:
+    """Build only overlapping, observed KOSPI/KOSDAQ closes for the UI chart."""
+    try:
+        if "Close" not in kospi or "Close" not in kosdaq:
+            return []
+        common_dates = kospi.index.intersection(kosdaq.index)
+    except (AttributeError, TypeError):
+        return []
+
+    history: list[dict] = []
+    for value_date in common_dates[-5:]:
+        try:
+            kospi_close = _finite_float(kospi.loc[value_date, "Close"])
+            kosdaq_close = _finite_float(kosdaq.loc[value_date, "Close"])
+        except (KeyError, TypeError):
+            continue
+        if kospi_close is None or kosdaq_close is None:
+            continue
+        date_text = (
+            value_date.strftime("%Y-%m-%d")
+            if hasattr(value_date, "strftime")
+            else str(value_date)[:10]
+        )
+        history.append(
+            {
+                "date": date_text,
+                "KOSPI": round(kospi_close, 2),
+                "KOSDAQ": round(kosdaq_close, 2),
+            }
+        )
+    return history
+
+
+def _latest_paper_decision() -> dict | None:
+    """Read the latest complete PAPER decision without treating a partial write as data."""
+    path = LOG_ROOT / "paper" / "decision_history.jsonl"
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    for line in reversed(lines[-100:]):
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            return payload
+    return None
+
+
+def _paper_universe_tickers() -> tuple[list[str], str | None]:
+    """Return the actual current strategy universe from its decision record."""
+    decision = _latest_paper_decision() or {}
+    decisions = decision.get("decisions")
+    if not isinstance(decisions, list):
+        return [], None
+    tickers: list[str] = []
+    for item in decisions:
+        if not isinstance(item, dict):
+            continue
+        ticker = str(item.get("ticker") or "").strip()
+        if ticker and ticker not in tickers:
+            tickers.append(ticker)
+    return tickers, decision.get("updated_at")
+
+
+def _fetch_paper_universe_breadth() -> dict | None:
+    """Calculate one-session breadth from the live PAPER strategy universe.
+
+    This is deliberately not a whole-market breadth figure: the caller labels it
+    as the PAPER universe and exposes coverage so partial vendor responses remain
+    visible to the operator.
+    """
+    now_ts = time.time()
+    cached = _BREADTH_CACHE.get("payload")
+    if cached and now_ts - float(_BREADTH_CACHE["timestamp"]) < _BREADTH_CACHE_SECONDS:
+        return cached
+    # A failed vendor query is real operational state, but retrying it for
+    # every dashboard panel makes the UI unresponsive.  Briefly cache only the
+    # failure outcome; no market values are fabricated.
+    if now_ts - float(_BREADTH_CACHE.get("last_attempt", 0)) < _BREADTH_FAILURE_CACHE_SECONDS:
+        return None
+    _BREADTH_CACHE["last_attempt"] = now_ts
+
+    tickers, decision_updated_at = _paper_universe_tickers()
+    if len(tickers) < 10:
+        return None
+
+    try:
+        import yfinance as yf
+
+        quotes = yf.download(
+            tickers=tickers,
+            period="5d",
+            group_by="ticker",
+            auto_adjust=False,
+            progress=False,
+            threads=True,
+            timeout=_BREADTH_YFINANCE_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        return None
+    if getattr(quotes, "empty", True):
+        return None
+
+    advancing = declining = unchanged = coverage = 0
+    volume_sum = 0
+    volume_available = False
+    as_of_dates: list[str] = []
+    for ticker in tickers:
+        try:
+            if getattr(quotes.columns, "nlevels", 1) > 1:
+                if ticker in quotes.columns.get_level_values(0):
+                    frame = quotes[ticker]
+                elif ticker in quotes.columns.get_level_values(1):
+                    frame = quotes.xs(ticker, axis=1, level=1)
+                else:
+                    continue
+            else:
+                frame = quotes
+            closes = frame["Close"].dropna().tail(2)
+        except (AttributeError, KeyError, TypeError):
+            continue
+        if len(closes) < 2:
+            continue
+        previous = _finite_float(closes.iloc[-2])
+        current = _finite_float(closes.iloc[-1])
+        if previous is None or current is None or previous <= 0:
+            continue
+
+        coverage += 1
+        if current > previous:
+            advancing += 1
+        elif current < previous:
+            declining += 1
+        else:
+            unchanged += 1
+        latest_volume = _latest_volume(frame)
+        if latest_volume is not None:
+            volume_sum += latest_volume
+            volume_available = True
+        value_date = closes.index[-1]
+        as_of_dates.append(
+            value_date.strftime("%Y-%m-%d")
+            if hasattr(value_date, "strftime")
+            else str(value_date)[:10]
+        )
+
+    minimum_coverage = max(10, math.ceil(len(tickers) * 0.8))
+    if coverage < minimum_coverage:
+        return None
+
+    payload = {
+        "advancing": advancing,
+        "declining": declining,
+        "unchanged": unchanged,
+        "total": coverage,
+        "advance_ratio": round(advancing / coverage, 6),
+        "trading_volume": volume_sum if volume_available else None,
+        "universe_size": len(tickers),
+        "coverage": coverage,
+        "coverage_rate": round(coverage / len(tickers), 6),
+        "as_of_date": max(as_of_dates) if as_of_dates else None,
+        "decision_updated_at": decision_updated_at,
+        "updated_at": dt.datetime.now(SEOUL).strftime("%Y-%m-%d %H:%M"),
+    }
+    _BREADTH_CACHE["timestamp"] = now_ts
+    _BREADTH_CACHE["payload"] = payload
+    return payload
 
 
 def _fetch_live_yfinance():
@@ -455,14 +690,15 @@ def _fetch_live_yfinance():
                     "price": round(k_price, 2),
                     "change": round(k_change, 2),
                     "change_rate": round(k_rate, 2),
-                    "volume": int(kospi_t["Volume"].iloc[-1]) if "Volume" in kospi_t else 684200000,
+                    "volume": _latest_volume(kospi_t),
                 },
                 "kosdaq": {
                     "price": round(kq_price, 2),
                     "change": round(kq_change, 2),
                     "change_rate": round(kq_rate, 2),
-                    "volume": int(kosdaq_t["Volume"].iloc[-1]) if "Volume" in kosdaq_t else 945000000,
+                    "volume": _latest_volume(kosdaq_t),
                 },
+                "history": _index_history_points(kospi_t, kosdaq_t),
                 "updated_at": now_str,
             }
 
@@ -490,90 +726,20 @@ def _fetch_live_yfinance():
     return None, None
 
 
-# Default / Fallback Demo Data with accurate 2026 market values
-DEFAULT_MARKET_INDICES = {
-    "kospi": {"price": 6690.62, "change": -406.27, "change_rate": -5.72, "volume": 684200000},
-    "kosdaq": {"price": 748.22, "change": -42.06, "change_rate": -5.32, "volume": 945000000},
-    "updated_at": dt.datetime.now(SEOUL).strftime("%Y-%m-%d %H:%M"),
-}
+def _available_market_payload(payload: dict, source: str) -> dict:
+    """Mark market data with an explicit authoritative source."""
+    return {**payload, "available": True, "source": source}
 
-DEFAULT_MARKET_BREADTH = {
-    "advancing": 542,
-    "declining": 378,
-    "unchanged": 110,
-    "total": 1030,
-    "advance_ratio": 0.589,
-    "trading_volume": 12450000000000,
-}
 
-DEFAULT_EXCHANGE_RATE = {
-    "usd_krw": 1465.88,
-    "change": -9.75,
-    "change_rate": -0.66,
-    "updated_at": dt.datetime.now(SEOUL).strftime("%Y-%m-%d %H:%M"),
-}
-
-DEFAULT_MARKET_REGIME = {
-    "current": "UPTREND",
-    "confidence": 0.85,
-    "signal": "상승 추세 지속 · 반도체/대형주 랠리 주도",
-    "adx": 28.4,
-    "trend_strength": "STRONG",
-    "updated_at": dt.datetime.now(SEOUL).strftime("%Y-%m-%d %H:%M"),
-}
-
-DEFAULT_SECTORS = {
-    "updated_at": dt.datetime.now(SEOUL).strftime("%Y-%m-%d %H:%M"),
-    "items": [
-        {"code": "G4510", "name": "반도체", "change_rate": 3.42, "volume": 3840000000000, "market_cap": 520000000000000, "stock_count": 28, "top_stock": "삼성전자"},
-        {"code": "G4520", "name": "IT부품 및 장비", "change_rate": 2.15, "volume": 1420000000000, "market_cap": 85000000000000, "stock_count": 45, "top_stock": "SK하이닉스"},
-        {"code": "G2510", "name": "2차전지", "change_rate": 1.88, "volume": 2100000000000, "market_cap": 140000000000000, "stock_count": 18, "top_stock": "LG에너지솔루션"},
-        {"code": "G3510", "name": "바이오/제약", "change_rate": 1.25, "volume": 1650000000000, "market_cap": 110000000000000, "stock_count": 62, "top_stock": "삼성바이오로직스"},
-        {"code": "G4010", "name": "인터넷/게임", "change_rate": 0.95, "volume": 890000000000, "market_cap": 65000000000000, "stock_count": 24, "top_stock": "NAVER"},
-        {"code": "G5010", "name": "금융/지주", "change_rate": 0.42, "volume": 720000000000, "market_cap": 95000000000000, "stock_count": 35, "top_stock": "KB금융"},
-        {"code": "G1510", "name": "자동차/부품", "change_rate": -0.35, "volume": 980000000000, "market_cap": 88000000000000, "stock_count": 31, "top_stock": "현대차"},
-        {"code": "G2010", "name": "화학/소재", "change_rate": -0.82, "volume": 610000000000, "market_cap": 54000000000000, "stock_count": 42, "top_stock": "LG화학"},
-        {"code": "G1010", "name": "철강/금속", "change_rate": -1.45, "volume": 430000000000, "market_cap": 38000000000000, "stock_count": 22, "top_stock": "POSCO홀딩스"},
-        {"code": "G3010", "name": "조선/기계", "change_rate": -1.92, "volume": 560000000000, "market_cap": 42000000000000, "stock_count": 19, "top_stock": "HD한국조선해양"},
-    ],
-}
-DEFAULT_SECTORS["top"] = DEFAULT_SECTORS["items"][:5]
-DEFAULT_SECTORS["bottom"] = list(reversed(DEFAULT_SECTORS["items"][-5:]))
-
-DEFAULT_JOURNAL = {
-    "updated_at": dt.datetime.now(SEOUL).strftime("%Y-%m-%d %H:%M"),
-    "summary": {
-        "total_trades": 11,
-        "win_count": 4,
-        "loss_count": 7,
-        "win_rate": 0.364,
-        "starting_capital": 500000000,
-        "ending_asset": 464060814,
-        "total_realized_pnl": -35939186,
-        "avg_profit": 6518024,
-        "avg_loss": -6000412,
-        "profit_factor": 0.82,
-        "best_trade": {"ticker": "021240", "name": "코웨이", "pnl": 1280000, "return_rate": 0.019},
-        "worst_trade": {"ticker": "034730", "name": "SK", "pnl": -1650000, "return_rate": -0.024},
-    },
-    "daily_pnl": [
-        {"date": "2026-07-20", "realized_pnl": 0, "trade_count": 0},
-        {"date": "2026-07-21", "realized_pnl": 10777109, "trade_count": 4},
-        {"date": "2026-07-22", "realized_pnl": -7403653, "trade_count": 3},
-        {"date": "2026-07-23", "realized_pnl": 2258939, "trade_count": 3},
-        {"date": "2026-07-24", "realized_pnl": -4597171, "trade_count": 1},
-    ],
-    "monthly": [
-        {"month": "2026-07", "trades": 11, "pnl": -35939186, "win_rate": 0.364},
-    ],
-    "trades": [
-        {"id": "trd-101", "date": "2026-07-24", "ticker": "161390", "name": "한국타이어앤테크놀로지", "side": "SELL", "qty": 1001, "price": 71300, "total": 71371300, "status": "FILLED"},
-        {"id": "trd-100", "date": "2026-07-23", "ticker": "021240", "name": "코웨이", "side": "BUY", "qty": 758, "price": 90466, "total": 68573228, "status": "FILLED"},
-        {"id": "trd-099", "date": "2026-07-23", "ticker": "383220", "name": "F&F", "side": "SELL", "qty": 915, "price": 73594, "total": 67338510, "status": "FILLED"},
-        {"id": "trd-098", "date": "2026-07-22", "ticker": "483650", "name": "달바글로벌", "side": "SELL", "qty": 299, "price": 221159, "total": 66126541, "status": "FILLED"},
-        {"id": "trd-097", "date": "2026-07-21", "ticker": "034730", "name": "SK", "side": "SELL", "qty": 121, "price": 571198, "total": 69114958, "status": "FILLED"},
-    ],
-}
+def _unavailable_market_payload(message: str, **payload: object) -> dict:
+    """Return an explicit empty state instead of invented market numbers."""
+    return {
+        **payload,
+        "available": False,
+        "source": "UNAVAILABLE",
+        "updated_at": None,
+        "message": message,
+    }
 
 
 @app.get("/api/market-indices")
@@ -582,7 +748,7 @@ def get_market_indices():
     # 1. Try live yfinance fetch
     live_indices, _ = _fetch_live_yfinance()
     if live_indices:
-        return live_indices
+        return _available_market_payload(live_indices, "YFINANCE_LIVE")
 
     result = {"kospi": None, "kosdaq": None}
     # 2. Try reading from dashboard state
@@ -596,7 +762,7 @@ def get_market_indices():
                     result["kospi"] = market.get("kospi")
                     result["kosdaq"] = market.get("kosdaq")
                     result["updated_at"] = data.get("updated_at")
-                    return result
+                    return _available_market_payload(result, "DASHBOARD_STATE")
             except (OSError, json.JSONDecodeError):
                 pass
 
@@ -632,10 +798,14 @@ def get_market_indices():
                             "volume": signals.get("kosdaq_volume", 0),
                         }
                         result["updated_at"] = str(rows[0]["signal_date"]) if rows else None
-                        return result
+                        return _available_market_payload(result, "DB_MACRO_SIGNALS")
         except (OSError, psycopg.Error):
             pass
-    return DEFAULT_MARKET_INDICES
+    return _unavailable_market_payload(
+        "Authoritative KOSPI/KOSDAQ data is not available.",
+        kospi=None,
+        kosdaq=None,
+    )
 
 
 @app.get("/api/market-breadth")
@@ -647,126 +817,190 @@ def get_market_breadth():
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
                 breadth = data.get("market_breadth") or data.get("breadth") or {}
-                if breadth:
-                    return breadth
-                # Derive from data_health if available
-                health = data.get("data_health") or {}
-                if health:
-                    return {
-                        "advancing": health.get("advancing", 0),
-                        "declining": health.get("declining", 0),
-                        "unchanged": health.get("unchanged", 0),
-                        "total": health.get("total", 0),
-                        "advance_ratio": health.get("advance_ratio", 0),
-                        "trading_volume": health.get("trading_volume", 0),
-                    }
+                required = {
+                    "advancing",
+                    "declining",
+                    "unchanged",
+                    "total",
+                    "advance_ratio",
+                    "trading_volume",
+                }
+                if required.issubset(breadth) and int(breadth["total"] or 0) > 0:
+                    return _available_market_payload(breadth, "DASHBOARD_STATE")
             except (OSError, json.JSONDecodeError):
                 pass
-    return DEFAULT_MARKET_BREADTH
+    paper_breadth = _fetch_paper_universe_breadth()
+    if paper_breadth:
+        return _available_market_payload(paper_breadth, "YFINANCE_PAPER_UNIVERSE")
+
+    return _unavailable_market_payload(
+        "Market breadth has not been collected and the PAPER universe could not be quoted.",
+        advancing=None,
+        declining=None,
+        unchanged=None,
+        total=None,
+        advance_ratio=None,
+        trading_volume=None,
+        universe_size=None,
+        coverage=None,
+        coverage_rate=None,
+    )
+
+
+def _expected_completed_krx_date(now: dt.datetime | None = None) -> dt.date:
+    """Return the latest KRX session expected to have a completed close."""
+    current = (now or dt.datetime.now(SEOUL)).astimezone(SEOUL)
+    today = current.date()
+    if is_krx_trading_day(today.isoformat()) and current.time() >= dt.time(15, 30):
+        return today
+    return previous_krx_trading_day(today)
+
+
+def _sector_payload_from_prices(
+    cur: object,
+    *,
+    source_code: str,
+    method_version: str,
+    source_label: str,
+) -> dict | None:
+    """Build a current WICS sector payload from one clearly identified source."""
+    cur.execute(
+        "SELECT DISTINCT price_date FROM wics_industry_prices "
+        "WHERE source_code = %s AND method_version = %s "
+        "ORDER BY price_date DESC LIMIT 2",
+        (source_code, method_version),
+    )
+    dates = [row["price_date"] for row in cur.fetchall()]
+    if len(dates) < 2:
+        return None
+    latest_date, previous_date = dates[0], dates[1]
+    if latest_date != _expected_completed_krx_date():
+        return None
+
+    cur.execute(
+        "SELECT code, name FROM codes "
+        "WHERE code_group = 'WICS_INDUSTRY_CODE' "
+        "AND name IS NOT NULL"
+    )
+    industry_names = {row["code"]: row["name"] for row in cur.fetchall()}
+    cur.execute(
+        "SELECT industry_code, price_date, index_value "
+        "FROM wics_industry_prices "
+        "WHERE source_code = %s AND method_version = %s "
+        "AND price_date IN (%s, %s) "
+        "ORDER BY industry_code, price_date",
+        (source_code, method_version, latest_date, previous_date),
+    )
+    by_industry: dict[str, dict] = {}
+    for row in cur.fetchall():
+        by_industry.setdefault(row["industry_code"], {})[row["price_date"]] = float(
+            row["index_value"]
+        )
+
+    items: list[dict] = []
+    for code, prices in by_industry.items():
+        previous_value = prices.get(previous_date)
+        latest_value = prices.get(latest_date)
+        if previous_value is None or latest_value is None or previous_value <= 0:
+            continue
+        items.append(
+            {
+                "code": code,
+                "name": industry_names.get(code, code),
+                "change_rate": round(
+                    (latest_value - previous_value) / previous_value * 100, 2
+                ),
+                "index_value": round(latest_value, 2),
+                "prev_value": round(previous_value, 2),
+            }
+        )
+    if not items:
+        return None
+    items.sort(key=lambda item: item["change_rate"], reverse=True)
+
+    cur.execute(
+        "SELECT MAX(base_date) AS base_date FROM wics_companies "
+        "WHERE base_date <= %s",
+        (latest_date,),
+    )
+    snapshot = cur.fetchone() or {}
+    snapshot_date = snapshot.get("base_date")
+    if snapshot_date:
+        cur.execute(
+            "SELECT industry_code, SUM(NULLIF(trd_amt, 'NaN'::numeric)) AS volume, "
+            "SUM(NULLIF(mkt_val, 'NaN'::numeric)) AS market_cap, "
+            "COUNT(*) AS stock_count FROM wics_companies WHERE base_date = %s "
+            "GROUP BY industry_code",
+            (snapshot_date,),
+        )
+        metrics = {row["industry_code"]: row for row in cur.fetchall()}
+        cur.execute(
+            "SELECT wc.industry_code, c.company_name, wc.stock_code "
+            "FROM wics_companies wc JOIN companies c ON wc.stock_code = c.stock_code "
+            "WHERE wc.base_date = %s AND wc.mkt_val IS NOT NULL "
+            "ORDER BY wc.industry_code, wc.mkt_val DESC",
+            (snapshot_date,),
+        )
+        top_stocks: dict[str, str] = {}
+        for row in cur.fetchall():
+            top_stocks.setdefault(
+                row["industry_code"], row["company_name"] or row["stock_code"]
+            )
+    else:
+        metrics = {}
+        top_stocks = {}
+    for item in items:
+        metric = metrics.get(item["code"], {})
+        volume = _finite_float(metric.get("volume"))
+        market_cap = _finite_float(metric.get("market_cap"))
+        stock_count = _finite_float(metric.get("stock_count"))
+        item["volume"] = int(volume) if volume is not None else None
+        item["market_cap"] = int(market_cap) if market_cap is not None else None
+        item["stock_count"] = int(stock_count) if stock_count is not None else None
+        item["top_stock"] = top_stocks.get(item["code"], "")
+
+    return _available_market_payload(
+        {
+            "items": items,
+            "updated_at": latest_date.isoformat(),
+            "constituent_snapshot_date": (
+                snapshot_date.isoformat() if snapshot_date else None
+            ),
+            "top": items[:5],
+            "bottom": list(reversed(items[-5:])) if len(items) >= 5 else list(reversed(items)),
+        },
+        source_label,
+    )
 
 
 @app.get("/api/sectors")
 def get_sectors():
-    """Sector performance data from WICS industry prices."""
+    """Current WICS sector performance, preferring official over derived levels."""
     conn = _db_connect()
     if conn:
         try:
             with conn:
                 with conn.cursor() as cur:
-                    # Get the latest two dates for calculating change rates
-                    cur.execute(
-                        "SELECT DISTINCT price_date FROM wics_industry_prices "
-                        "WHERE source_code = 'WISEINDEX' AND method_version = 'OFFICIAL' "
-                        "ORDER BY price_date DESC LIMIT 2"
-                    )
-                    dates = [r["price_date"] for r in cur.fetchall()]
-                    if len(dates) >= 2:
-                        latest_date, prev_date = dates[0], dates[1]
-
-                        # Get industry codes and names
-                        cur.execute(
-                            "SELECT code, name FROM codes "
-                            "WHERE group_id = (SELECT id FROM code_groups WHERE group_code = 'WICS_INDUSTRY_CODE') "
-                            "AND name IS NOT NULL"
+                    for source_code, method_version, source_label in (
+                        ("WISEINDEX", "OFFICIAL", "WICS_OFFICIAL"),
+                        ("DERIVED", "mcap-v1", "WICS_DERIVED_MCAP_V1"),
+                    ):
+                        payload = _sector_payload_from_prices(
+                            cur,
+                            source_code=source_code,
+                            method_version=method_version,
+                            source_label=source_label,
                         )
-                        industry_names = {r["code"]: r["name"] for r in cur.fetchall()}
-
-                        # Get latest and previous index values
-                        cur.execute(
-                            "SELECT industry_code, price_date, index_value "
-                            "FROM wics_industry_prices "
-                            "WHERE source_code = 'WISEINDEX' AND method_version = 'OFFICIAL' "
-                            "AND price_date IN (%s, %s) "
-                            "ORDER BY industry_code, price_date",
-                            (latest_date, prev_date),
-                        )
-                        rows = cur.fetchall()
-
-                        # Build sector items
-                        by_industry: dict[str, dict] = {}
-                        for row in rows:
-                            code = row["industry_code"]
-                            if code not in by_industry:
-                                by_industry[code] = {}
-                            by_industry[code][row["price_date"]] = float(row["index_value"])
-
-                        items = []
-                        for code, prices in by_industry.items():
-                            if latest_date in prices and prev_date in prices and prices[prev_date] > 0:
-                                change_rate = ((prices[latest_date] - prices[prev_date]) / prices[prev_date]) * 100
-                                items.append({
-                                    "code": code,
-                                    "name": industry_names.get(code, code),
-                                    "change_rate": round(change_rate, 2),
-                                    "index_value": round(prices[latest_date], 2),
-                                    "prev_value": round(prices[prev_date], 2),
-                                })
-
-                        items.sort(key=lambda x: x["change_rate"], reverse=True)
-
-                        # Add volume data from wics_companies if available
-                        cur.execute(
-                            "SELECT industry_code, SUM(trd_amt) as volume, SUM(mkt_val) as market_cap, "
-                            "COUNT(*) as stock_count "
-                            "FROM wics_companies WHERE base_date = %s "
-                            "GROUP BY industry_code",
-                            (latest_date,),
-                        )
-                        vol_data = {r["industry_code"]: r for r in cur.fetchall()}
-                        for item in items:
-                            vd = vol_data.get(item["code"], {})
-                            item["volume"] = int(vd.get("volume") or 0)
-                            item["market_cap"] = int(vd.get("market_cap") or 0)
-                            item["stock_count"] = int(vd.get("stock_count") or 0)
-
-                        # Find top stock per sector
-                        cur.execute(
-                            "SELECT wc.industry_code, c.company_name, wc.stock_code "
-                            "FROM wics_companies wc "
-                            "JOIN companies c ON wc.stock_code = c.stock_code "
-                            "WHERE wc.base_date = %s "
-                            "AND wc.mkt_val IS NOT NULL "
-                            "ORDER BY wc.industry_code, wc.mkt_val DESC",
-                            (latest_date,),
-                        )
-                        top_stocks: dict[str, str] = {}
-                        for r in cur.fetchall():
-                            code = r["industry_code"]
-                            if code not in top_stocks:
-                                top_stocks[code] = r["company_name"] or r["stock_code"]
-                        for item in items:
-                            item["top_stock"] = top_stocks.get(item["code"], "")
-
-                        if items:
-                            return {
-                                "items": items,
-                                "updated_at": latest_date.isoformat() if latest_date else None,
-                                "top": items[:5],
-                                "bottom": list(reversed(items[-5:])) if len(items) >= 5 else list(reversed(items)),
-                            }
+                        if payload:
+                            return payload
         except (OSError, psycopg.Error):
             pass
-    return DEFAULT_SECTORS
+    return _unavailable_market_payload(
+        "Current official or derived WICS sector data is not available.",
+        items=[],
+        top=[],
+        bottom=[],
+    )
 
 
 @app.get("/api/exchange-rate")
@@ -774,7 +1008,7 @@ def get_exchange_rate():
     """USD/KRW exchange rate from yfinance or macro_signals."""
     _, live_exchange = _fetch_live_yfinance()
     if live_exchange:
-        return live_exchange
+        return _available_market_payload(live_exchange, "YFINANCE_LIVE")
 
     conn = _db_connect()
     if conn:
@@ -792,15 +1026,20 @@ def get_exchange_rate():
                         prev = float(rows[1]["signal_value"]) if len(rows) > 1 else latest
                         change = latest - prev
                         change_rate = (change / prev * 100) if prev != 0 else 0
-                        return {
+                        return _available_market_payload({
                             "usd_krw": round(latest, 2),
                             "change": round(change, 2),
                             "change_rate": round(change_rate, 2),
                             "updated_at": rows[0]["signal_date"].isoformat() if rows[0].get("signal_date") else None,
-                        }
+                        }, "DB_MACRO_SIGNALS")
         except (OSError, psycopg.Error):
             pass
-    return DEFAULT_EXCHANGE_RATE
+    return _unavailable_market_payload(
+        "Authoritative USD/KRW data is not available.",
+        usd_krw=None,
+        change=None,
+        change_rate=None,
+    )
 
 
 @app.get("/api/journal")
@@ -813,10 +1052,11 @@ def get_journal(
     now = dt.datetime.now(SEOUL)
 
     # 1. Try loading performance data from certified latest report
-    latest_report_path = REPORT_ROOT / "promotion" / _mode_key(mode) / "latest.json"
+    latest_report_path = REPORT_ROOT / _mode_key(mode) / "latest.json"
     summary = None
     daily_pnl = []
     monthly = []
+    benchmark_history = []
 
     if latest_report_path.exists():
         try:
@@ -824,9 +1064,11 @@ def get_journal(
             perf = report_data.get("performance") or {}
             trend = report_data.get("performance_trend") or []
 
-            starting_cap = float(perf.get("starting_capital_reference", 500000000.0))
-            ending_asset = float(perf.get("ending_total_asset", 464060814.0))
-            total_realized_pnl = float(perf.get("pnl_vs_starting_capital", ending_asset - starting_cap))
+            starting_cap = float(perf["starting_capital_reference"])
+            ending_asset = float(perf["ending_total_asset"])
+            total_realized_pnl = float(
+                perf.get("pnl_vs_starting_capital", ending_asset - starting_cap)
+            )
 
             # Calculate daily asset changes
             if trend:
@@ -839,8 +1081,20 @@ def get_journal(
                     daily_pnl.append({
                         "date": d_date,
                         "realized_pnl": round(d_pnl),
-                        "trade_count": 3,
+                        "trade_count": 0,
                     })
+                    benchmark_return = d_item.get("benchmark_return")
+                    cumulative_return = d_item.get("cumulative_return")
+                    if isinstance(benchmark_return, (int, float)) and isinstance(
+                        cumulative_return, (int, float)
+                    ):
+                        benchmark_history.append(
+                            {
+                                "date": d_date,
+                                "portfolio_return": round(cumulative_return * 100, 2),
+                                "benchmark_return": round(benchmark_return * 100, 2),
+                            }
+                        )
 
             pos_days = [dp for dp in daily_pnl if dp["realized_pnl"] > 0]
             neg_days = [dp for dp in daily_pnl if dp["realized_pnl"] < 0]
@@ -850,18 +1104,18 @@ def get_journal(
 
             avg_profit = round(total_pos / len(pos_days)) if pos_days else 0
             avg_loss = round(-total_neg / len(neg_days)) if neg_days else 0
-            profit_factor = round(total_pos / total_neg, 2) if total_neg > 0 else 0.82
+            profit_factor = round(total_pos / total_neg, 2) if total_neg > 0 else None
 
-            win_rate = round(len(pos_days) / len(daily_pnl), 3) if daily_pnl else 0.364
+            win_rate = round(len(pos_days) / len(daily_pnl), 3) if daily_pnl else None
 
             summary = {
-                "total_trades": len(daily_pnl),
-                "win_count": len(pos_days),
-                "loss_count": len(neg_days),
+                "observed_sessions": len(daily_pnl),
+                "positive_sessions": len(pos_days),
+                "negative_sessions": len(neg_days),
                 "win_rate": win_rate,
                 "starting_capital": starting_cap,
                 "ending_asset": ending_asset,
-                "total_realized_pnl": round(total_realized_pnl),
+                "pnl_vs_starting_capital": round(total_realized_pnl),
                 "avg_profit": avg_profit,
                 "avg_loss": avg_loss,
                 "profit_factor": profit_factor,
@@ -869,11 +1123,11 @@ def get_journal(
 
             monthly = [{
                 "month": now.strftime("%Y-%m"),
-                "trades": len(daily_pnl),
+                "sessions": len(daily_pnl),
                 "pnl": round(total_realized_pnl),
                 "win_rate": win_rate,
             }]
-        except (OSError, json.JSONDecodeError):
+        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
             pass
 
     # 2. Get executed trades from DB orders
@@ -912,34 +1166,77 @@ def get_journal(
         except (OSError, psycopg.Error):
             pass
 
-    if summary and daily_pnl:
+    if summary:
         return {
-            "trades": trades if trades else DEFAULT_JOURNAL["trades"],
+            "available": True,
+            "source": "CERTIFIED_EOD_REPORT",
+            "trades": trades,
             "daily_pnl": list(reversed(daily_pnl)),
             "monthly": monthly,
+            "benchmark_history": benchmark_history,
             "summary": summary,
             "updated_at": now.isoformat(),
         }
 
-    return DEFAULT_JOURNAL
+    return {
+        "available": False,
+        "source": "UNAVAILABLE",
+        "message": "A certified EOD performance report is not available.",
+        "trades": [],
+        "daily_pnl": [],
+        "monthly": [],
+        "benchmark_history": [],
+        "summary": None,
+        "updated_at": None,
+    }
 
 
 @app.get("/api/market-regime")
 def get_market_regime():
-    """Current market regime classification."""
+    """Current market regime classification, retaining only observed model output."""
+    valid_regimes = {"UPTREND", "DOWNTREND", "SIDEWAYS", "TRANSITION"}
+
+    def payload_for(
+        current: object,
+        source: str,
+        *,
+        confidence: object = None,
+        signal: object = None,
+        adx: object = None,
+        trend_strength: object = None,
+        updated_at: object = None,
+    ) -> dict | None:
+        normalized = str(current or "").upper()
+        if normalized not in valid_regimes:
+            return None
+        return _available_market_payload(
+            {
+                "current": normalized,
+                "confidence": _finite_float(confidence),
+                "signal": str(signal) if signal else None,
+                "adx": _finite_float(adx),
+                "trend_strength": str(trend_strength) if trend_strength else None,
+                "updated_at": updated_at,
+            },
+            source,
+        )
+
     # Try analysis report first
     regime_path = ANALYSIS_ROOT / "market_regime.json"
     if regime_path.exists():
         try:
             data = json.loads(regime_path.read_text(encoding="utf-8"))
-            return {
-                "current": data.get("regime", "UPTREND"),
-                "confidence": data.get("confidence", 0.85),
-                "signal": data.get("signal", "상승 추세 지속"),
-                "adx": data.get("adx"),
-                "trend_strength": data.get("trend_strength"),
-                "updated_at": data.get("updated_at") or data.get("analysis_date"),
-            }
+            payload = payload_for(
+                data.get("regime") or data.get("current"),
+                "MARKET_REGIME_ANALYSIS",
+                confidence=data.get("confidence"),
+                signal=data.get("signal"),
+                adx=data.get("adx"),
+                trend_strength=data.get("trend_strength"),
+                updated_at=data.get("updated_at") or data.get("analysis_date"),
+            )
+            if payload:
+                return payload
         except (OSError, json.JSONDecodeError):
             pass
 
@@ -952,17 +1249,46 @@ def get_market_regime():
                 regime = data.get("market_regime") or data.get("regime")
                 if regime:
                     if isinstance(regime, str):
-                        return {"current": regime, "confidence": 0.85, "signal": "상승 추세 지속", "updated_at": data.get("updated_at")}
-                    return {
-                        "current": regime.get("current", regime.get("regime", "UPTREND")),
-                        "confidence": regime.get("confidence", 0.85),
-                        "signal": regime.get("signal", "상승 추세 지속"),
-                        "updated_at": regime.get("updated_at", data.get("updated_at")),
-                    }
+                        payload = payload_for(
+                            regime,
+                            "DASHBOARD_STATE",
+                            updated_at=data.get("updated_at"),
+                        )
+                    elif isinstance(regime, dict):
+                        payload = payload_for(
+                            regime.get("current") or regime.get("regime"),
+                            "DASHBOARD_STATE",
+                            confidence=regime.get("confidence"),
+                            signal=regime.get("signal"),
+                            adx=regime.get("adx"),
+                            trend_strength=regime.get("trend_strength"),
+                            updated_at=regime.get("updated_at") or data.get("updated_at"),
+                        )
+                    else:
+                        payload = None
+                    if payload:
+                        return payload
             except (OSError, json.JSONDecodeError):
                 pass
 
-    return DEFAULT_MARKET_REGIME
+    decision = _latest_paper_decision()
+    if decision:
+        payload = payload_for(
+            decision.get("market_regime"),
+            "PAPER_DECISION_HISTORY",
+            updated_at=decision.get("updated_at"),
+        )
+        if payload:
+            return payload
+
+    return _unavailable_market_payload(
+        "Market regime analysis is not available.",
+        current=None,
+        confidence=None,
+        signal=None,
+        adx=None,
+        trend_strength=None,
+    )
 
 
 if __name__ == "__main__":

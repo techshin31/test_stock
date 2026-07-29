@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react'
-import { Layers, TrendingUp, TrendingDown, Flame, Snowflake } from 'lucide-react'
+import { Layers, TrendingUp, Flame, Snowflake } from 'lucide-react'
 import {
   ResponsiveContainer,
   BarChart,
@@ -19,6 +19,7 @@ function fmtRate(rate) {
 }
 
 function fmtVolume(vol) {
+  if (vol == null) return '—'
   if (!vol) return '0'
   if (vol >= 1_000_000_000_000) return `${(vol / 1_000_000_000_000).toFixed(1)}조`
   if (vol >= 100_000_000) return `${Math.floor(vol / 100_000_000)}억`
@@ -89,6 +90,10 @@ function SectorShimmer({ height = 24, width = '100%' }) {
   return <div className="sector-shimmer" style={{ height, width }} />
 }
 
+function SectorEmpty({ message }) {
+  return <div className="sector-empty" role="status">{message}</div>
+}
+
 const chartTooltipStyle = {
   backgroundColor: 'var(--gray-900)',
   border: '1px solid var(--gray-800)',
@@ -100,9 +105,22 @@ const chartTooltipStyle = {
 }
 
 export default function SectorAnalysis({ sectors, loading }) {
-  const items = sectors?.items || []
+  const items = useMemo(() => sectors?.items || [], [sectors])
   const top5 = useMemo(() => items.slice(0, 5), [items])
   const bottom5 = useMemo(() => [...items].reverse().slice(0, 5), [items])
+  const sourceLabel = sectors?.source === 'WICS_DERIVED_MCAP_V1'
+    ? '구성종목 시가총액 가중 재구성'
+    : sectors?.source === 'WICS_OFFICIAL'
+      ? 'WiseIndex 공식'
+      : sectors?.source === 'UNAVAILABLE'
+        ? '검증된 데이터 대기'
+        : sectors?.source
+  const sourceBadge = sectors?.source === 'UNAVAILABLE'
+    ? '데이터 상태: 검증 대기'
+    : sourceLabel && `출처 ${sourceLabel}`
+  const emptyMessage = sectors?.source === 'UNAVAILABLE'
+    ? 'WICS 섹터 지표를 표시할 수 없습니다. 최신 공식 또는 검증된 재구성 데이터가 확보되면 자동으로 표시됩니다.'
+    : sectors?.message || '현재 WICS 섹터 데이터가 없습니다.'
   const chartData = useMemo(
     () => items.map((s) => ({ name: s.name, change_rate: s.change_rate })),
     [items],
@@ -132,6 +150,13 @@ export default function SectorAnalysis({ sectors, loading }) {
           display: flex;
           justify-content: space-between;
           align-items: flex-end;
+          gap: 16px;
+        }
+        .sector-provenance {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          gap: 6px;
         }
 
         .sector-eyebrow {
@@ -344,6 +369,17 @@ export default function SectorAnalysis({ sectors, loading }) {
         .sector-chart-wrapper {
           margin-top: 20px;
         }
+        .sector-empty {
+          min-height: 110px;
+          display: grid;
+          place-items: center;
+          padding: 16px;
+          border: 1px dashed var(--gray-700);
+          border-radius: 6px;
+          color: var(--gray-400);
+          font-size: 13px;
+          text-align: center;
+        }
       `}</style>
 
       {/* Heatmap */}
@@ -353,15 +389,21 @@ export default function SectorAnalysis({ sectors, loading }) {
             <p className="sector-eyebrow"><Layers size={14} /> WICS 업종분류</p>
             <h2 className="sector-title">섹터 히트맵</h2>
           </div>
-          {sectors?.updated_at && (
-            <span className="sector-updated" style={mono}>갱신 {sectors.updated_at}</span>
-          )}
+          <div className="sector-provenance" style={mono}>
+            {sectors?.updated_at && <span className="sector-updated">갱신 {sectors.updated_at}</span>}
+            {sourceBadge && <span className="sector-updated">{sourceBadge}</span>}
+            {sectors?.constituent_snapshot_date && sectors.constituent_snapshot_date !== sectors.updated_at && (
+              <span className="sector-updated">구성종목 기준 {sectors.constituent_snapshot_date}</span>
+            )}
+          </div>
         </div>
         
-        {loading || !items.length ? (
+        {loading ? (
           <div className="sector-shimmer-grid">
             {Array.from({ length: 12 }, (_, i) => <SectorShimmer key={i} height={100} />)}
           </div>
+        ) : !items.length ? (
+          <SectorEmpty message={emptyMessage} />
         ) : (
           <div className="sector-heatmap-grid">
             {items.map((s) => (
@@ -393,10 +435,12 @@ export default function SectorAnalysis({ sectors, loading }) {
             </div>
           </div>
           
-          {loading || !top5.length ? (
+          {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               {[1,2,3,4,5].map(i => <SectorShimmer key={i} height={46} />)}
             </div>
+          ) : !top5.length ? (
+            <SectorEmpty message={emptyMessage} />
           ) : (
             <div className="sector-table-wrap">
               <table className="sector-table">
@@ -427,10 +471,12 @@ export default function SectorAnalysis({ sectors, loading }) {
             </div>
           </div>
           
-          {loading || !bottom5.length ? (
+          {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               {[1,2,3,4,5].map(i => <SectorShimmer key={i} height={46} />)}
             </div>
+          ) : !bottom5.length ? (
+            <SectorEmpty message={emptyMessage} />
           ) : (
             <div className="sector-table-wrap">
               <table className="sector-table">
@@ -463,8 +509,10 @@ export default function SectorAnalysis({ sectors, loading }) {
           </div>
         </div>
         
-        {loading || !chartData.length ? (
+        {loading ? (
           <SectorShimmer height={300} />
+        ) : !chartData.length ? (
+          <SectorEmpty message={emptyMessage} />
         ) : (
           <div className="sector-chart-wrapper">
             <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 28)}>
