@@ -18,6 +18,7 @@ from core.analytics.paper_portfolio_cap_shadow import (
 from core.analytics.paper_shadow_reentry import evaluate_paper_shadow_reentry
 from core.broker.kis_api import BrokerResponseError, KisBroker, normalize_symbol
 from core.broker.simulation import LocalSimulationBroker
+from core.constant.types import Tickers
 from core.utils.trading_calendar import previous_krx_trading_day
 
 class LiveTrader:
@@ -376,7 +377,7 @@ class LiveTrader:
             dependency_errors.append(message)
             fa_candidates = []
 
-        tickers = sorted(set(fa_candidates) | set(positions))
+        tickers = sorted(set(fa_candidates) | set(positions) | {Tickers.INVERSE_ETF.ticker})
         logging.info(f"[데이터 로드] 관심 종목 + 보유 종목 ({len(tickers)}개) 병합 중...")
         try:
             downloaded = download_multiple_stocks(
@@ -518,6 +519,32 @@ class LiveTrader:
                 "momentum": None,
                 "signal_reason": "DATA_UNAVAILABLE_HOLD",
             }
+
+        # ── 하락장(DOWNTREND) 인버스 ETF 헤지 (KODEX 인버스 153131.KS) ───────
+        inverse_ticker = Tickers.INVERSE_ETF.ticker
+        if market_regime == "DOWNTREND":
+            for t in list(target_positions.keys()):
+                if t != inverse_ticker:
+                    target_positions[t] = 0.0
+                    if t in target_details:
+                        target_details[t]["signal_reason"] = "DOWNTREND"
+
+            target_positions[inverse_ticker] = 0.50
+            target_details[inverse_ticker] = {
+                "signal_reason": "INVERSE_HEDGE_ENTRY",
+                "fa_score": None,
+                "momentum": None,
+            }
+        else:
+            if inverse_ticker in positions:
+                target_positions[inverse_ticker] = 0.0
+                target_details[inverse_ticker] = {
+                    "signal_reason": "DOWNTREND_EXIT",
+                    "fa_score": None,
+                    "momentum": None,
+                }
+            elif inverse_ticker in target_positions:
+                target_positions[inverse_ticker] = 0.0
 
         data_health["insufficient_history_tickers"] = sorted(insufficient_history)
         data_health["held_stale_tickers"] = sorted(set(positions) - usable_signal_tickers)
@@ -1265,6 +1292,8 @@ class LiveTrader:
             "TRAILING_STOP",
             "COMPANY_RISK_BLOCKED",
             "DOWNTREND",
+            "DOWNTREND_EXIT",
+            "INVERSE_HEDGE_ENTRY",
             "FA_SCORE_DETERIORATED",
             "TA_MOMENTUM_LOSS",
         }
@@ -1375,9 +1404,10 @@ class LiveTrader:
             else:
                 current_price = 0.0
             if current_price <= 0:
-                if ticker not in ohlcv_store or ohlcv_store[ticker].empty:
+                df_ticker = ohlcv_store.get(ticker)
+                if df_ticker is None or not isinstance(df_ticker, pd.DataFrame) or df_ticker.empty:
                     continue
-                current_price = float(ohlcv_store[ticker].iloc[-1]['close'])
+                current_price = float(df_ticker.iloc[-1]['close'])
 
             if current_price <= 0:
                 continue
