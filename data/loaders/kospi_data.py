@@ -53,6 +53,8 @@ KOSPI_LARGE_CAP_POOL: dict[str, str] = {
     "010950.KS": "S-Oil",
     "012330.KS": "현대모비스",
     "028260.KS": "삼성물산",
+    "153130.KS": "KODEX 단기채권",
+    "153131.KS": "KODEX 인버스",
 }
 
 BOND_ANNUAL_RATES: dict[int, float] = {
