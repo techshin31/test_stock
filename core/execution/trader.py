@@ -1148,6 +1148,7 @@ class LiveTrader:
             ticker
             for ticker in active
             if str(details.get(ticker, {}).get("signal_reason", "")).endswith("_HOLD")
+            or details.get(ticker, {}).get("signal_reason") == "INVERSE_HEDGE_ENTRY"
         }
         protected_total = sum(result[ticker] for ticker in protected)
         allocatable = [ticker for ticker in active if ticker not in protected]

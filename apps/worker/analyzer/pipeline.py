@@ -349,12 +349,12 @@ def run(
         )
         update_analysis_run_status(
             db, context.run_id, status,
-            selected_industry_count=len(selected_industries),
+            selected_industry_count=len(by_industry),
             selected_company_count=len(selected_companies),
             validation_summary={
                 "phase": 9, "target": request.target,
                 **macro_quality,
-                "selected_industry_count": len(selected_industries),
+                "selected_industry_count": len(by_industry),
                 "selected_company_count": len(selected_companies),
                 "company_risk_source": "company_risk_states",
                 "input_quality": context.input_quality,

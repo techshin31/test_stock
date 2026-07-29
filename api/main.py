@@ -39,7 +39,12 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=False,
     allow_methods=["GET"],
     allow_headers=["*"],
@@ -522,6 +527,14 @@ def _index_history_points(kospi: object, kosdaq: object) -> list[dict]:
 
 def _latest_paper_decision() -> dict | None:
     """Read the latest complete PAPER decision without treating a partial write as data."""
+    state_path = LOG_ROOT / "paper" / "decision_state.json"
+    if state_path.exists():
+        try:
+            payload = json.loads(state_path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                return payload
+        except (OSError, json.JSONDecodeError):
+            pass
     path = LOG_ROOT / "paper" / "decision_history.jsonl"
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
