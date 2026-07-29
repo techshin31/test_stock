@@ -26,6 +26,7 @@ from core.analytics.trading_kpis import (
     TradingKpiSnapshot,
     evaluate_promotion_gate,
     extract_critical_incidents,
+    promotion_snapshot_from_operational_log,
     snapshot_from_operational_log,
 )
 from core.constant.values import TradingCostParam
@@ -755,12 +756,21 @@ def build_end_of_day_report(
         operational = snapshot_from_operational_log(
             log_dir / "operational_health.jsonl", through_date=report_date
         )
+        daily_operational = snapshot_from_operational_log(
+            log_dir / "operational_health.jsonl",
+            start_date=report_date,
+            through_date=report_date,
+        )
         validation_checks.append({
             "name": "operational_log", "passed": True,
-            "detail": f"{operational.scan_count} completed scans",
+            "detail": (
+                f"{operational.scan_count} cumulative scans; "
+                f"{daily_operational.scan_count} daily scans"
+            ),
         })
     except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
         operational = _unavailable_snapshot(report_date)
+        daily_operational = _unavailable_snapshot(report_date)
         validation_errors.append(str(exc))
         validation_checks.append({
             "name": "operational_log", "passed": False, "detail": str(exc),
@@ -1070,7 +1080,7 @@ def build_end_of_day_report(
     if mode == "DRY_RUN":
         validation_status = "NOT_APPLICABLE"
     performance["validation_status"] = validation_status
-    promotion_snapshot = TradingKpiSnapshot(
+    operations_snapshot = TradingKpiSnapshot(
         **{
             key: value
             for key, value in operational.__dict__.items()
@@ -1085,6 +1095,17 @@ def build_end_of_day_report(
         cost_drag=performance.get("cost_drag"),
         performance_validation_status=performance.get("validation_status"),
     )
+    try:
+        promotion_snapshot, qualification_window = promotion_snapshot_from_operational_log(
+            log_dir / "operational_health.jsonl",
+            target_mode,
+            performance=performance,
+            through_date=report_date,
+        )
+    except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
+        promotion_snapshot = _unavailable_snapshot(report_date)
+        qualification_window = None
+        validation_errors.append(f"promotion qualification window unavailable: {exc}")
     decision = evaluate_promotion_gate(promotion_snapshot, target_mode)
     headline = (
         f"{target_mode} 승격 조건을 충족했습니다. 단, 수동 승인이 필요합니다."
@@ -1099,7 +1120,11 @@ def build_end_of_day_report(
     incidents = extract_critical_incidents(
         log_dir / "operational_health.jsonl", through_date=report_date
     )
-    ops_dict = promotion_snapshot.to_dict()
+    ops_dict = operations_snapshot.to_dict()
+    ops_dict["promotion_qualification_window"] = (
+        qualification_window.to_dict() if qualification_window else None
+    )
+    ops_dict["promotion_qualification_operations"] = promotion_snapshot.to_dict()
     ops_dict["critical_incidents_detail"] = incidents
 
     return {
@@ -1112,6 +1137,7 @@ def build_end_of_day_report(
         "performance": performance,
         "performance_trend": trend,
         "operations": ops_dict,
+        "daily_operations": daily_operational.to_dict(),
         "critical_incidents_detail": incidents,
         "trading": trading,
         "ledger_quality": ledger_quality,
@@ -1489,6 +1515,75 @@ def write_end_of_day_report(
     return report
 
 
+def refresh_daily_operations_fields(
+    *,
+    mode: str,
+    log_dir: Path,
+    promotion_dir: Path,
+) -> dict:
+    """Backfill per-session operational snapshots in existing EOD reports.
+
+    The repair preserves the original performance, ledger, benchmark, and
+    report timestamps.  It only adds the per-session snapshot for reports
+    produced before ``daily_operations`` existed, so it never needs a market
+    download, broker refresh, or order-path interaction.
+    """
+    normalized_mode = mode.upper()
+    output_dir = promotion_dir / normalized_mode.lower()
+    daily_dir = output_dir / "daily"
+    if not daily_dir.exists():
+        raise FileNotFoundError(f"daily report directory not found: {daily_dir}")
+
+    refreshed: dict[str, dict] = {}
+    skipped_report_dates: list[str] = []
+    for path in sorted(daily_dir.glob("*.json")):
+        report = json.loads(path.read_text(encoding="utf-8-sig"))
+        if str(report.get("mode") or "").upper() != normalized_mode:
+            continue
+        report_date = dt.date.fromisoformat(str(report["report_date"]))
+        if report.get("report_status") != "FINAL":
+            skipped_report_dates.append(report_date.isoformat())
+            continue
+        report["daily_operations"] = snapshot_from_operational_log(
+            log_dir / "operational_health.jsonl",
+            start_date=report_date,
+            through_date=report_date,
+        ).to_dict()
+        _atomic_json(path, report)
+        refreshed[report_date.isoformat()] = report
+
+    latest_path = output_dir / "latest.json"
+    latest_refreshed = False
+    if latest_path.exists():
+        latest = json.loads(latest_path.read_text(encoding="utf-8-sig"))
+        latest_report = refreshed.get(str(latest.get("report_date") or ""))
+        if latest_report is not None:
+            _atomic_json(latest_path, latest_report)
+            latest_refreshed = True
+
+    readiness_path = None
+    if normalized_mode == "PAPER":
+        project_root = promotion_dir.resolve().parents[1]
+        dashboard_path = project_root / "logs" / "paper" / "dashboard_state.json"
+        if dashboard_path.exists():
+            from core.analytics.system_readiness import audit_system_readiness
+
+            readiness_path = (
+                project_root
+                / "reports"
+                / "analysis"
+                / "automated_trading_system_readiness.json"
+            )
+            _atomic_json(readiness_path, audit_system_readiness(project_root))
+
+    return {
+        "refreshed_report_dates": sorted(refreshed),
+        "skipped_report_dates": sorted(skipped_report_dates),
+        "latest_refreshed": latest_refreshed,
+        "system_readiness_path": str(readiness_path) if readiness_path else None,
+    }
+
+
 def initialize_baseline(
     *,
     mode: str,
@@ -1619,13 +1714,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--confirm-baseline")
     parser.add_argument("--check-baseline", action="store_true")
     parser.add_argument("--check-latest-snapshot", action="store_true")
+    parser.add_argument(
+        "--refresh-daily-operations",
+        action="store_true",
+        help="Backfill per-session operational snapshots in existing EOD reports",
+    )
     args = parser.parse_args(argv)
     report_date = dt.date.fromisoformat(args.date)
     mode = args.mode.upper()
     log_dir = Path(args.log_dir) if args.log_dir else PROJECT_ROOT / "logs" / mode.lower()
     promotion_dir = Path(args.promotion_dir)
     try:
-        if args.check_baseline:
+        if args.refresh_daily_operations:
+            result = refresh_daily_operations_fields(
+                mode=mode,
+                log_dir=log_dir,
+                promotion_dir=promotion_dir,
+            )
+        elif args.check_baseline:
             result = check_baseline(
                 mode,
                 promotion_dir,

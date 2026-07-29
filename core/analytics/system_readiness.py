@@ -93,7 +93,10 @@ def _final_daily_report_dates(daily_dir: Path) -> tuple[set[dt.date], list[str]]
                 raise ValueError("report_status is not FINAL")
             if (payload.get("validation") or {}).get("status") != "READY":
                 raise ValueError("validation status is not READY")
-            operations = payload.get("operations") or {}
+            # Newer reports expose a per-session snapshot. Retain the legacy
+            # cumulative field as a fallback so existing immutable evidence is
+            # still audited rather than silently reinterpreted.
+            operations = payload.get("daily_operations") or payload.get("operations") or {}
             trading = payload.get("trading") or {}
             required_rates = {
                 "data_freshness_rate": operations.get("data_freshness_rate"),
@@ -350,12 +353,17 @@ def audit_system_readiness(
     add(
         safety_checks,
         "runtime_error_free",
-        not last_error and not dependency_errors and not entry_circuit_breaker,
+        not last_error and not dependency_errors,
         (
             f"last_error={last_error or 'none'}, "
-            f"dependency_errors={len(dependency_errors)}, "
-            f"entry_circuit_breaker={entry_circuit_breaker or 'none'}"
+            f"dependency_errors={len(dependency_errors)}"
         ),
+    )
+    add(
+        safety_checks,
+        "entry_circuit_breaker_clear",
+        not entry_circuit_breaker,
+        f"entry_circuit_breaker={entry_circuit_breaker or 'none'}",
     )
     updated = _timestamp(dashboard.get("updated_at"))
     age_seconds = max((now - updated).total_seconds(), 0.0)
@@ -417,7 +425,7 @@ def audit_system_readiness(
             else operational_error
         ),
     )
-    latest_operations = latest.get("operations") or {}
+    latest_operations = latest.get("daily_operations") or latest.get("operations") or {}
     latest_trading = latest.get("trading") or {}
     latest_operational_rates = {
         "data": latest_operations.get("data_freshness_rate"),

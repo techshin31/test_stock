@@ -1,6 +1,7 @@
 import logging
 import json
 import os
+import re
 import pandas as pd
 import datetime
 import hashlib
@@ -11,6 +12,9 @@ from data.loaders.fa_ta_loader import enrich_ohlcv_with_fa
 from apps.worker.fa_contract import DEFAULT_CONFIG as FA_CONTRACT
 from storage.postgres.connection import PostgreDB
 from core.strategy.fa_ta_momentum import FaTaMomentumStrategy
+from core.analytics.paper_portfolio_cap_shadow import (
+    evaluate_paper_portfolio_cap_shadow,
+)
 from core.analytics.paper_shadow_reentry import evaluate_paper_shadow_reentry
 from core.broker.kis_api import BrokerResponseError, KisBroker, normalize_symbol
 from core.broker.simulation import LocalSimulationBroker
@@ -137,9 +141,9 @@ class LiveTrader:
             ):
                 fa_candidates.append(ticker)
         
-        os.makedirs("logs", exist_ok=True)
-        with open("logs/fa_candidates.json", "w", encoding="utf-8") as f:
-            json.dump({
+        self._write_json_state(
+            Path("logs") / "fa_candidates.json",
+            {
                 "source": "published_fa",
                 "run_id": published_run["id"],
                 "signal_date": signal_date.isoformat(),
@@ -147,7 +151,8 @@ class LiveTrader:
                 "minimum_fa_score": self.strategy.FA_SCORE_MIN,
                 "minimum_score_confidence": self.strategy.MIN_SCORE_CONFIDENCE,
                 "score_model_code": FA_CONTRACT.model_version,
-            }, f, ensure_ascii=False, indent=2)
+            },
+        )
         logging.info(f"프리마켓 FA 필터링 완료. 관심 종목 {len(fa_candidates)}개 저장.")
         
         # 타임라인 업데이트
@@ -180,8 +185,7 @@ class LiveTrader:
             "; ".join(data_health.get("dependency_errors", [])) or None
         )
         
-        with dashboard_path.open("w", encoding="utf-8") as f:
-            json.dump(dashboard_state, f, ensure_ascii=False, indent=2)
+        self._write_json_state(dashboard_path, dashboard_state)
         self._append_operational_health(dashboard_state)
 
         return fa_candidates
@@ -315,13 +319,22 @@ class LiveTrader:
         dashboard_state["actual_orders"] = actual_orders
         dashboard_state["daily_orders"] = actual_orders
         dashboard_state["order_candidates"] = self._candidate_order_summary([])
-        dashboard_state["operational_status"] = (
-            "ORDER_RECONCILIATION" if unresolved_error else "SCANNING"
+        previous_data_health = dashboard_state.get("data_health") or {}
+        previous_suppressions = (
+            dashboard_state.get("order_suppressions")
+            or previous_data_health.get("order_suppressions")
+        )
+        if previous_suppressions:
+            previous_data_health = dict(previous_data_health)
+            previous_data_health["order_suppressions"] = previous_suppressions
+        dashboard_state["operational_status"] = self._derive_scan_operational_status(
+            previous_data_health,
+            actual_orders,
+            unresolved_error=unresolved_error,
         )
         dashboard_state["last_error"] = unresolved_error
         
-        with dashboard_path.open("w", encoding="utf-8") as f:
-            json.dump(dashboard_state, f, ensure_ascii=False, indent=2)
+        self._write_json_state(dashboard_path, dashboard_state)
             
         # ponytail: append to csv for timeseries tracking
         self._append_account_history(balance_info, total_eval)
@@ -527,6 +540,7 @@ class LiveTrader:
             or dependency_entry_blocker
         )
         shadow_reentry = None
+        portfolio_cap_shadow = None
         if self.execution_venue == "PAPER":
             try:
                 shadow_reentry = evaluate_paper_shadow_reentry(
@@ -589,6 +603,35 @@ class LiveTrader:
                 total_eval,
                 entry_circuit_breaker,
             )
+        if self.execution_venue == "PAPER":
+            try:
+                portfolio_cap_shadow = evaluate_paper_portfolio_cap_shadow(
+                    mode=self.execution_venue,
+                    strategy=self.strategy_name,
+                    account_scope=getattr(self.broker, "masked_account", "UNKNOWN"),
+                    signal_date=signal_date,
+                    target_positions=target_positions,
+                    log_dir=self.log_dir,
+                )
+                data_health["portfolio_cap_shadow"] = {
+                    "variants": [
+                        challenger["variant"]
+                        for challenger in portfolio_cap_shadow["challengers"]
+                    ],
+                    "observe_only": True,
+                    "order_permission": "DENIED_BY_DESIGN",
+                    "observed_session_count": len(
+                        portfolio_cap_shadow["observed_sessions"]
+                    ),
+                }
+            except Exception as exc:
+                logging.exception("PAPER portfolio-cap observation failed: %s", exc)
+                data_health["portfolio_cap_shadow"] = {
+                    "variants": ["C_CAP10", "C_CAP08"],
+                    "observe_only": True,
+                    "status": "OBSERVATION_ERROR",
+                    "error": str(exc),
+                }
         self._write_decision_snapshot(
             total_eval,
             positions,
@@ -612,6 +655,8 @@ class LiveTrader:
         dashboard_state["data_health"] = data_health
         if shadow_reentry is not None:
             dashboard_state["shadow_reentry"] = shadow_reentry
+        if portfolio_cap_shadow is not None:
+            dashboard_state["portfolio_cap_shadow"] = portfolio_cap_shadow
         dashboard_state["order_candidates"] = candidate_summary
         dashboard_state["order_suppressions"] = suppression_summary
         dashboard_state["actual_orders"] = actual_orders
@@ -679,12 +724,16 @@ class LiveTrader:
         dashboard_state["actual_orders"] = actual_orders
         dashboard_state["daily_orders"] = actual_orders  # backward-compatible alias
         dashboard_state["order_candidates"] = self._candidate_order_summary(candidates)
-        dashboard_state["order_suppressions"] = self._suppression_summary(
+        suppression_summary = self._suppression_summary(
             getattr(self, "last_order_suppressions", [])
         )
+        dashboard_state["order_suppressions"] = suppression_summary
         data_health = getattr(self, "last_data_health", {}) or dashboard_state.get(
             "data_health", {}
         )
+        data_health = dict(data_health)
+        data_health["order_suppressions"] = suppression_summary
+        self.last_data_health = data_health
         dashboard_state["data_health"] = data_health
         dashboard_state["operational_status"] = self._derive_operational_status(
             data_health,
@@ -709,16 +758,56 @@ class LiveTrader:
     def _suppression_summary(suppressions):
         rows = list(suppressions or [])
         by_reason = {}
+        incident_codes = {}
         for row in rows:
             reason = row.get("reason") or "UNKNOWN"
             by_reason[reason] = by_reason.get(reason, 0) + 1
+            incident_code = row.get("incident_code")
+            if incident_code:
+                incident_codes[incident_code] = incident_codes.get(incident_code, 0) + 1
         return {
             "total": len(rows),
             "buy": sum(row.get("side") == "BUY" for row in rows),
             "sell": sum(row.get("side") == "SELL" for row in rows),
             "by_reason": by_reason,
+            "incident_codes": incident_codes,
             "symbols": sorted({row.get("ticker") for row in rows if row.get("ticker")}),
         }
+
+    @staticmethod
+    def _broker_incident_code(message):
+        """Return a safe, aggregate-only broker failure code for audit output."""
+        text = str(message or "")
+        existing = re.search(
+            r"\b(BROKER_(?:HTTP_[45]\d{2}|TIMEOUT|TRANSPORT_ERROR|REJECTED|"
+            r"UNKNOWN_RESULT|PRICE_LOOKUP_FAILED|BALANCE_LOOKUP_FAILED|"
+            r"STATUS_LOOKUP_FAILED))\b",
+            text,
+            re.I,
+        )
+        if existing:
+            return existing.group(1).upper()
+        match = re.search(
+            r"\b([45]\d{2})\s+(?:server|client)\s+error\b",
+            text,
+            re.I,
+        )
+        if match:
+            return f"BROKER_HTTP_{match.group(1)}"
+        lowered = text.lower()
+        if "timeout" in lowered or "timed out" in lowered:
+            return "BROKER_TIMEOUT"
+        if any(marker in lowered for marker in (
+            "connection", "network", "transport", "ssl", "socket",
+            "connectionpool", "remote disconnected",
+        )):
+            return "BROKER_TRANSPORT_ERROR"
+        return None
+
+    @staticmethod
+    def _safe_broker_failure_code(message, default):
+        """Return an operator-safe failure code without persisting broker text."""
+        return LiveTrader._broker_incident_code(message) or default
 
     @staticmethod
     def _derive_operational_status(data_health, actual_orders, last_error=None):
@@ -752,6 +841,19 @@ class LiveTrader:
         if last_error:
             return "ERROR"
         return "NORMAL"
+
+    @staticmethod
+    def _derive_scan_operational_status(
+        previous_data_health, actual_orders, unresolved_error=None
+    ):
+        """Keep a prior actionable safety state visible while a new scan runs."""
+        if unresolved_error:
+            return "ORDER_RECONCILIATION"
+        status = LiveTrader._derive_operational_status(
+            previous_data_health,
+            actual_orders,
+        )
+        return "SCANNING" if status == "NORMAL" else status
 
     def record_operational_error(self, error):
         """Persist an unexpected failure so the dashboard cannot remain NORMAL."""
@@ -853,6 +955,7 @@ class LiveTrader:
 
     @staticmethod
     def _write_json_state(path, payload):
+        path.parent.mkdir(parents=True, exist_ok=True)
         temp_path = path.with_suffix(path.suffix + ".tmp")
         temp_path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -1117,7 +1220,14 @@ class LiveTrader:
                                   SELECT 1 FROM order_status_history h
                                   WHERE h.order_id = o.id
                                     AND h.event_type = 'UNKNOWN_RESULT'
-                              ) AS had_unknown_result
+                              ) AS had_unknown_result,
+                              (
+                                  SELECT h.message FROM order_status_history h
+                                  WHERE h.order_id = o.id
+                                    AND h.event_type = 'UNKNOWN_RESULT'
+                                  ORDER BY h.created_at DESC
+                                  LIMIT 1
+                              ) AS unknown_result_message
                        FROM orders o
                        JOIN strategies s ON s.id = o.strategy_id
                        WHERE o.created_at::date = %s::date
@@ -1138,8 +1248,10 @@ class LiveTrader:
             (normalize_symbol(r['symbol']), r['order_side_code'])
             for r in rows if r['order_status_code'] == 'FILLED'
         }
-        ambiguous_keys = {
-            (normalize_symbol(r['symbol']), r['order_side_code'])
+        ambiguous_messages = {
+            (normalize_symbol(r['symbol']), r['order_side_code']): r.get(
+                'unknown_result_message'
+            )
             for r in rows if r.get('had_unknown_result')
         }
         retry_counts = {}
@@ -1180,16 +1292,20 @@ class LiveTrader:
                     "ticker": ticker, "side": side, "reason": "FILLED_ORDER_TODAY"
                 })
                 return False
-            if key in ambiguous_keys:
+            if key in ambiguous_messages:
                 logging.warning(
                     f"[{ticker}] ambiguous {side} broker result occurred today; "
                     "same-day retry is blocked"
                 )
-                self.last_order_suppressions.append({
+                suppression = {
                     "ticker": ticker,
                     "side": side,
                     "reason": "AMBIGUOUS_RESULT_SAME_DAY",
-                })
+                }
+                suppression["incident_code"] = self._safe_broker_failure_code(
+                    ambiguous_messages[key], "BROKER_UNKNOWN_RESULT"
+                )
+                self.last_order_suppressions.append(suppression)
                 return False
             if retry_counts.get(key, 0) >= self.max_order_attempts:
                 logging.warning(f"[{ticker}] 오늘 {side} 주문 재시도 한도에 도달했습니다.")
@@ -1315,7 +1431,13 @@ class LiveTrader:
             today_cash = float(balance_info.get("today_cash", balance_info.get("cash", 0.0)))
             logging.info(f"[주문 실행 전 잔고 검증] 실시간 당일 가용 예수금: {today_cash:,.0f}원")
         except Exception as e:
-            raise RuntimeError(f"실시간 잔고 조회 실패로 모든 주문을 중단합니다: {e}") from e
+            failure_code = self._safe_broker_failure_code(
+                e, "BROKER_BALANCE_LOOKUP_FAILED"
+            )
+            logging.error("Broker balance lookup failed; all orders halted: %s", failure_code)
+            raise RuntimeError(
+                f"Broker balance check failed; all orders halted: {failure_code}"
+            ) from None
 
         live_positions = balance_info.get("positions", {})
         results = []
@@ -1334,8 +1456,15 @@ class LiveTrader:
                 else:
                     current_price = self.broker.get_current_price(ticker)
             except Exception as e:
-                logging.error(f"[{ticker}] 실시간 현재가 조회 실패로 주문을 건너뜁니다: {e}")
-                results.append({**order, "status": "SKIPPED", "message": str(e)})
+                failure_code = self._safe_broker_failure_code(
+                    e, "BROKER_PRICE_LOOKUP_FAILED"
+                )
+                logging.error(
+                    "[%s] current-price lookup failed; order skipped: %s",
+                    ticker,
+                    failure_code,
+                )
+                results.append({**order, "status": "SKIPPED", "message": failure_code})
                 continue
 
             expected_price = float(order.get("expected_price") or current_price)
@@ -1412,9 +1541,21 @@ class LiveTrader:
                 output = resp.get("output", {})
                 odno = output.get("ODNO") if isinstance(output, dict) else None
                 if not odno:
-                    msg = resp.get("msg1", "주문번호가 없는 주문 응답")
-                    update_order_status(self.db, order_id, "REJECTED", note=msg, raw_payload=resp)
-                    results.append({**order, "status": "REJECTED", "message": msg})
+                    failure_code = self._safe_broker_failure_code(
+                        resp.get("msg1"), "BROKER_REJECTED"
+                    )
+                    update_order_status(
+                        self.db,
+                        order_id,
+                        "REJECTED",
+                        note=failure_code,
+                        raw_payload={"incident_code": failure_code},
+                    )
+                    results.append({
+                        **order,
+                        "status": "REJECTED",
+                        "message": failure_code,
+                    })
                     continue
 
                 attach_broker_order_id(self.db, order_id, odno, resp)
@@ -1428,7 +1569,14 @@ class LiveTrader:
                         if final_status in {"FILLED", "CANCELLED", "REJECTED"}:
                             break
                     except BrokerResponseError as poll_error:
-                        logging.warning(f"[{ticker}] 체결 확인 대기: {poll_error}")
+                        failure_code = self._safe_broker_failure_code(
+                            poll_error, "BROKER_STATUS_LOOKUP_FAILED"
+                        )
+                        logging.warning(
+                            "[%s] fill-status lookup deferred: %s",
+                            ticker,
+                            failure_code,
+                        )
                     time.sleep(self.fill_poll_interval)
 
                 if self.broker.is_mock and final_status == "ACCEPTED":
@@ -1444,14 +1592,28 @@ class LiveTrader:
                     today_cash -= qty * current_price
                 results.append({**order, "status": final_status, "broker_order_id": odno})
             except BrokerResponseError as e:
-                logging.error(f"[{ticker}] 증권사 주문 거부: {e}")
+                failure_code = self._safe_broker_failure_code(e, "BROKER_REJECTED")
+                logging.error("[%s] broker order rejected: %s", ticker, failure_code)
                 update_order_status(
-                    self.db, order_id, "REJECTED", note=str(e), event_type="BROKER_REJECTED"
+                    self.db,
+                    order_id,
+                    "REJECTED",
+                    note=failure_code,
+                    event_type="BROKER_REJECTED",
                 )
-                results.append({**order, "status": "REJECTED", "message": str(e)})
+                results.append({
+                    **order,
+                    "status": "REJECTED",
+                    "message": failure_code,
+                })
             except Exception as e:
                 # 네트워크 타임아웃은 주문 성공 여부가 불명확하므로 REJECTED로 단정하지 않는다.
-                logging.exception(f"[{ticker}] 주문 결과 확인 불가: {e}")
+                failure_code = self._safe_broker_failure_code(
+                    e, "BROKER_UNKNOWN_RESULT"
+                )
+                logging.error(
+                    "[%s] broker order outcome is unknown: %s", ticker, failure_code
+                )
                 inferred = None
                 if self.broker.is_mock:
                     inferred = self._infer_paper_fill_from_balance(
@@ -1467,12 +1629,19 @@ class LiveTrader:
                 if order_id:
                     try:
                         update_order_status(
-                            self.db, order_id, "SUBMITTED", note=f"UNKNOWN_BROKER_RESULT: {e}",
-                            event_type="UNKNOWN_RESULT"
+                            self.db,
+                            order_id,
+                            "SUBMITTED",
+                            note=f"UNKNOWN_BROKER_RESULT: {failure_code}",
+                            event_type="UNKNOWN_RESULT",
                         )
                     except Exception as status_error:
                         logging.error(f"주문 결과 불명 상태 기록에도 실패했습니다: {status_error}")
-                results.append({**order, "status": "UNKNOWN", "message": str(e)})
+                results.append({
+                    **order,
+                    "status": "UNKNOWN",
+                    "message": failure_code,
+                })
 
         return results
 

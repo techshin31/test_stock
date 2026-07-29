@@ -8,12 +8,53 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from core.utils.trading_calendar import is_krx_trading_day, previous_krx_trading_day
+
+
+_INCIDENT_URL_PATTERN = re.compile(r"(?i)\bhttps?://[^\s'\"<>]+")
+_INCIDENT_SECRET_PATTERN = re.compile(
+    r"(?i)(\b(?:CANO|ACNT_PRDT_CD|authorization|app[_-]?key|"
+    r"app[_-]?secret|hashkey|access[_-]?token|password)=)([^&\s]+)"
+)
+_INCIDENT_HTTP_PATTERN = re.compile(
+    r"\b([45]\d{2})\s+(?:server|client)\s+error\b", re.I
+)
+
+
+def sanitize_incident_error(value: object) -> str | None:
+    """Convert a persisted error into a report-safe diagnostic.
+
+    Incident reports are operator-facing artifacts.  They may not reproduce a
+    broker URL, account field, token, or raw transport exception from the
+    append-only operational log.
+    """
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    lowered = raw.lower()
+    is_broker_transport = any(marker in lowered for marker in (
+        "koreainvestment",
+        "openapivts",
+        "connectionpool",
+        "mojito",
+    ))
+    status = _INCIDENT_HTTP_PATTERN.search(raw)
+    if status and is_broker_transport:
+        return f"BROKER_HTTP_{status.group(1)}"
+    if is_broker_transport and ("timeout" in lowered or "timed out" in lowered):
+        return "BROKER_TIMEOUT"
+    if is_broker_transport:
+        return "BROKER_TRANSPORT_ERROR"
+
+    safe = _INCIDENT_SECRET_PATTERN.sub(r"\1***", raw)
+    safe = _INCIDENT_URL_PATTERN.sub("[redacted-url]", safe)
+    return safe[:500]
 
 
 def _safe_rate(numerator: int, denominator: int) -> float:
@@ -91,6 +132,33 @@ class PromotionPolicy:
 
 
 @dataclass(frozen=True)
+class PromotionQualificationWindow:
+    """Completed sessions used for a promotion decision.
+
+    Historical incidents remain in the audit log.  They do not, however,
+    permanently prevent promotion once a full, fresh observation window has
+    subsequently demonstrated clean operation.
+    """
+
+    target_mode: str
+    required_completed_sessions: int
+    available_completed_sessions: int
+    selected_completed_sessions: int
+    start_date: date | None
+    end_date: date | None
+
+    def to_dict(self) -> dict:
+        return {
+            "target_mode": self.target_mode,
+            "required_completed_sessions": self.required_completed_sessions,
+            "available_completed_sessions": self.available_completed_sessions,
+            "selected_completed_sessions": self.selected_completed_sessions,
+            "start_date": self.start_date.isoformat() if self.start_date else None,
+            "end_date": self.end_date.isoformat() if self.end_date else None,
+        }
+
+
+@dataclass(frozen=True)
 class PromotionDecision:
     target_mode: str
     ready: bool
@@ -139,9 +207,18 @@ def snapshot_from_operational_log(
     log_path: str | Path,
     *,
     performance: dict | None = None,
+    start_date: date | None = None,
     through_date: date | None = None,
 ) -> TradingKpiSnapshot:
-    """Build a promotion snapshot from append-only operational observations."""
+    """Build a promotion snapshot from a bounded operational-log window.
+
+    Without ``start_date`` this preserves the cumulative history used for
+    promotion evidence. EOD reporting supplies its report date as both bounds
+    so a historical incident cannot make every later daily report look
+    unhealthy.
+    """
+    if start_date is not None and through_date is not None and start_date > through_date:
+        raise ValueError("start_date cannot be later than through_date")
     path = Path(log_path)
     if not path.exists():
         raise FileNotFoundError(f"operational log not found: {path}")
@@ -157,6 +234,7 @@ def snapshot_from_operational_log(
             raise ValueError(f"invalid operational log record at line {line_number}") from exc
         if (
             row.get("operational_status") != "SCANNING"
+            and (start_date is None or timestamp.date() >= start_date)
             and (through_date is None or timestamp.date() <= through_date)
         ):
             records.append((timestamp, row))
@@ -229,6 +307,89 @@ def snapshot_from_operational_log(
     )
 
 
+def _completed_operational_dates(
+    log_path: str | Path,
+    *,
+    through_date: date | None = None,
+) -> list[date]:
+    """Return dates with at least one completed, non-scanning observation."""
+    path = Path(log_path)
+    if not path.exists():
+        raise FileNotFoundError(f"operational log not found: {path}")
+
+    completed_dates: set[date] = set()
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+            timestamp = datetime.fromisoformat(row["timestamp"])
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ValueError(
+                f"invalid operational log record at line {line_number}"
+            ) from exc
+        if (
+            row.get("operational_status") != "SCANNING"
+            and (through_date is None or timestamp.date() <= through_date)
+        ):
+            completed_dates.add(timestamp.date())
+    if not completed_dates:
+        raise ValueError("operational log has no completed observations")
+    return sorted(completed_dates)
+
+
+def promotion_snapshot_from_operational_log(
+    log_path: str | Path,
+    target_mode: str,
+    *,
+    performance: dict | None = None,
+    policy: PromotionPolicy | None = None,
+    through_date: date | None = None,
+    as_of: datetime | None = None,
+) -> tuple[TradingKpiSnapshot, PromotionQualificationWindow]:
+    """Build a snapshot over the latest required completed-session window.
+
+    A REAL gate requires 60 completed PAPER sessions by default.  Incidents in
+    that rolling qualification window block promotion; older incidents remain
+    auditable but do not make recovery mathematically impossible forever.
+    """
+    mode = target_mode.upper()
+    if mode not in {"PAPER", "REAL"}:
+        raise ValueError("target_mode must be PAPER or REAL")
+    policy = policy or PromotionPolicy()
+    required_sessions = policy.dry_run_days if mode == "PAPER" else policy.paper_days
+    effective_through_date = through_date
+    if effective_through_date is None:
+        local_as_of = as_of or datetime.now(ZoneInfo("Asia/Seoul"))
+        if local_as_of.tzinfo is None:
+            local_as_of = local_as_of.replace(tzinfo=ZoneInfo("Asia/Seoul"))
+        local_as_of = local_as_of.astimezone(ZoneInfo("Asia/Seoul"))
+        market_close = datetime.min.time().replace(hour=15, minute=30)
+        if local_as_of.time() < market_close:
+            effective_through_date = previous_krx_trading_day(local_as_of.date())
+    completed_dates = _completed_operational_dates(
+        log_path,
+        through_date=effective_through_date,
+    )
+    selected_dates = completed_dates[-required_sessions:]
+    start_date = selected_dates[0] if selected_dates else None
+    end_date = selected_dates[-1] if selected_dates else None
+    snapshot = snapshot_from_operational_log(
+        log_path,
+        performance=performance,
+        start_date=start_date,
+        through_date=effective_through_date,
+    )
+    return snapshot, PromotionQualificationWindow(
+        target_mode=mode,
+        required_completed_sessions=required_sessions,
+        available_completed_sessions=len(completed_dates),
+        selected_completed_sessions=len(selected_dates),
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
 def extract_critical_incidents(
     path: Path,
     through_date: date | None = None,
@@ -273,7 +434,7 @@ def extract_critical_incidents(
         if status in critical_statuses:
             if status != active_status:
                 health = row.get("data_health") or {}
-                last_err = row.get("last_error")
+                last_err = sanitize_incident_error(row.get("last_error"))
                 suppressions = health.get("order_suppressions") or row.get("order_suppressions") or {}
                 breaker = health.get("entry_circuit_breaker") or row.get("entry_circuit_breaker")
 
@@ -285,6 +446,14 @@ def extract_critical_incidents(
                     detail_parts.append(f"차단사유 ({', '.join(reasons)})")
                 elif isinstance(suppressions, dict) and suppressions.get("total"):
                     detail_parts.append(f"차단 {suppressions['total']}건")
+                if isinstance(suppressions, dict) and suppressions.get("incident_codes"):
+                    codes = [
+                        f"{code}: {count}"
+                        for code, count in suppressions["incident_codes"].items()
+                    ]
+                    detail_parts.append(
+                        f"broker incident code ({', '.join(codes)})"
+                    )
                 if breaker:
                     detail_parts.append(f"서킷브레이커 ({breaker})")
 
@@ -406,8 +575,9 @@ def main(argv: list[str] | None = None) -> int:
         performance = json.loads(performance_path.read_text(encoding="utf-8"))
 
     try:
-        snapshot = snapshot_from_operational_log(
+        snapshot, qualification_window = promotion_snapshot_from_operational_log(
             args.operational_log,
+            args.target,
             performance=performance,
         )
         decision = evaluate_promotion_gate(snapshot, args.target)
@@ -434,6 +604,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(json.dumps({
         "snapshot": snapshot.to_dict(),
+        "qualification_window": qualification_window.to_dict(),
         "decision": {
             "target_mode": decision.target_mode,
             "ready": decision.ready,
