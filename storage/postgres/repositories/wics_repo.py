@@ -151,14 +151,15 @@ def fetch_distinct_stock_codes(db: PostgreDB) -> list[str]:
 
 
 def fetch_kospi_wics_stock_codes(db: PostgreDB) -> list[str]:
-    """Return WICS constituents supported by the v1 KOSPI price provider."""
+    """Return current KOSPI WICS constituents in market-cap repair priority."""
     rows = db.fetch_all(
         """
-        SELECT DISTINCT w.stock_code
+        SELECT w.stock_code
         FROM wics_companies w
         JOIN companies c ON c.stock_code = w.stock_code
-        WHERE c.market_type_code = 'KOSPI'
-        ORDER BY w.stock_code
+        WHERE w.base_date = (SELECT MAX(base_date) FROM wics_companies)
+          AND c.market_type_code = 'KOSPI'
+        ORDER BY w.mkt_val DESC NULLS LAST, w.stock_code
         """
     )
     return [row["stock_code"] for row in rows]

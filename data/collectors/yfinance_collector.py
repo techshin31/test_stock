@@ -27,15 +27,25 @@ _TRANSIENT_ERRORS = (
 )
 
 
-def _yf_download_with_retry(**kwargs) -> pd.DataFrame:
-    for attempt in range(_MAX_ATTEMPTS):
+def _yf_download_with_retry(
+    *,
+    max_attempts: int = _MAX_ATTEMPTS,
+    backoff_base: float = _BACKOFF_BASE,
+    **kwargs,
+) -> pd.DataFrame:
+    """Download Yahoo data with a caller-configurable bounded retry budget."""
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be positive")
+    if backoff_base < 0:
+        raise ValueError("backoff_base must be non-negative")
+    for attempt in range(max_attempts):
         try:
             with contextlib.redirect_stdout(io.StringIO()):
                 return yf.download(**kwargs)
         except _TRANSIENT_ERRORS:
-            if attempt >= _MAX_ATTEMPTS - 1:
+            if attempt >= max_attempts - 1:
                 raise
-            time.sleep(_BACKOFF_BASE * (2 ** attempt))
+            time.sleep(backoff_base * (2 ** attempt))
     return pd.DataFrame()
 
 
@@ -51,6 +61,50 @@ def _ensure_utc_index(obj: pd.DataFrame | pd.Series) -> pd.DataFrame | pd.Series
     else:
         obj.index = obj.index.tz_convert("UTC")
     return obj
+
+
+def _before_end(
+    frame: pd.DataFrame | pd.Series,
+    end: str | date | None,
+) -> pd.DataFrame | pd.Series:
+    """Keep the loaders' end-exclusive contract across data providers."""
+    if end is None:
+        return frame
+    end_ts = pd.Timestamp(end)
+    end_ts = (
+        end_ts.tz_localize("UTC")
+        if end_ts.tz is None
+        else end_ts.tz_convert("UTC")
+    )
+    return frame[frame.index < end_ts]
+
+
+def _normalise_stock_frame(frame: pd.DataFrame, ticker: str) -> pd.DataFrame:
+    """Convert a Yahoo or FinanceDataReader frame to one canonical OHLCV shape."""
+    if isinstance(frame.columns, pd.MultiIndex):
+        frame = frame.copy()
+        frame.columns = frame.columns.get_level_values(0)
+    expected = ["Open", "High", "Low", "Close", "Volume"]
+    missing = [column for column in expected if column not in frame.columns]
+    if missing:
+        raise ValueError(f"missing OHLCV columns for {ticker}: {missing}")
+    normalized = frame[expected].copy()
+    normalized["Adj Close"] = (
+        frame["Adj Close"] if "Adj Close" in frame.columns else normalized["Close"]
+    )
+    return _ensure_utc_index(
+        normalized[["Open", "High", "Low", "Close", "Adj Close", "Volume"]]
+    )
+
+
+def _stock_data_is_stale(frame: pd.DataFrame, end: str | date | None) -> bool:
+    """Request the secondary provider only when Yahoo cannot reach the requested day."""
+    if frame.empty:
+        return True
+    if end is None:
+        return False
+    expected_date = (pd.Timestamp(end) - pd.Timedelta(days=1)).date()
+    return frame.index.max().date() < expected_date
 
 
 def fetch_yfinance_close(
@@ -82,30 +136,60 @@ def fetch_stock(
     start: str,
     end: str | date | None = None,
 ) -> pd.DataFrame:
-    """Fetch raw OHLCV data for a Korean stock from yfinance."""
+    """Fetch Korean-stock OHLCV with FinanceDataReader as a bounded fallback.
+
+    Yahoo remains the primary provider.  The secondary request is made only when
+    the primary request failed or did not reach the requested end-exclusive day;
+    it does not silently replace available Yahoo rows.
+    """
     ticker = f"{code}{market.suffix}"
-    df = _yf_download_with_retry(
-        tickers=ticker,
-        start=start,
-        end=_normalize_end(end),
-        auto_adjust=True,
-        progress=False,
-        actions=False,
-        group_by="column",
+    yahoo = None
+    errors = []
+    try:
+        yahoo = _normalise_stock_frame(
+            _yf_download_with_retry(
+                tickers=ticker,
+                start=start,
+                end=_normalize_end(end),
+                auto_adjust=True,
+                progress=False,
+                actions=False,
+                group_by="column",
+            ),
+            ticker,
+        )
+    except Exception as exc:
+        errors.append(f"yfinance: {exc}")
+
+    fallback = None
+    if yahoo is None or _stock_data_is_stale(yahoo, end):
+        try:
+            fallback = _before_end(
+                _normalise_stock_frame(fdr.DataReader(code, start, end), ticker), end
+            )
+        except Exception as exc:
+            errors.append(f"FinanceDataReader: {exc}")
+
+    if yahoo is None and fallback is None:
+        raise ValueError(f"stock OHLCV unavailable for {ticker}: {'; '.join(errors)}")
+    if yahoo is None:
+        logging.warning("using FinanceDataReader fallback for %s", ticker)
+        return fallback
+    if fallback is None:
+        return yahoo
+
+    combined = yahoo.combine_first(fallback)
+    combined = combined[~combined.index.duplicated(keep="first")].sort_index().dropna(
+        subset=["Close"]
     )
-
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-
-    expected = ["Open", "High", "Low", "Close", "Volume"]
-    missing = [col for col in expected if col not in df.columns]
-    if missing:
-        raise ValueError(f"missing yfinance columns for {ticker}: {missing}")
-
-    if "Adj Close" not in df.columns:
-        df["Adj Close"] = df["Close"]
-
-    return _ensure_utc_index(df[["Open", "High", "Low", "Close", "Adj Close", "Volume"]])
+    if fallback.index.max() > yahoo.index.max():
+        logging.warning(
+            "yfinance %s was stale at %s; extended through %s with FinanceDataReader",
+            ticker,
+            yahoo.index.max().date(),
+            fallback.index.max().date(),
+        )
+    return combined
 
 
 def fetch_market_index(
@@ -141,10 +225,7 @@ def fetch_market_index(
         if "Close" not in fdr_frame.columns:
             raise ValueError(f"missing FinanceDataReader Close column for {fdr_symbol}")
         fdr_close = _ensure_utc_index(fdr_frame["Close"].rename(market.name))
-        if end is not None:
-            end_ts = pd.Timestamp(end)
-            end_ts = end_ts.tz_localize("UTC") if end_ts.tz is None else end_ts.tz_convert("UTC")
-            fdr_close = fdr_close[fdr_close.index < end_ts]
+        fdr_close = _before_end(fdr_close, end)
         sources.append(fdr_close)
     except Exception as exc:
         errors.append(f"FinanceDataReader: {exc}")

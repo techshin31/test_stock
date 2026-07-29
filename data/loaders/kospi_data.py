@@ -165,6 +165,8 @@ def download_multiple_stocks(
     end: str,
     show_progress: bool = True,
     sleep_seconds: float = 0.5,
+    retry_attempts: int = 1,
+    retry_backoff_seconds: float = 2.0,
 ) -> dict[str, pd.DataFrame]:
     """여러 종목 OHLCV 데이터를 일괄 다운로드한다.
 
@@ -178,23 +180,54 @@ def download_multiple_stocks(
         True이면 tqdm 진행 바 표시.
     sleep_seconds : float
         API 호출 간 대기 시간 (rate limit 방지).
+    retry_attempts : int
+        최초 조회에서 실패한 종목만 다시 조회하는 횟수. 정상 응답 종목은
+        재조회하지 않는다.
+    retry_backoff_seconds : float
+        실패 종목 재시도 전 대기 시간. 반복 시 선형으로 증가한다.
 
     Returns
     -------
     dict[str, pd.DataFrame]
         ohlcv_store 형태의 딕셔너리. 실패 종목은 제외된다.
     """
+    if retry_attempts < 0:
+        raise ValueError("retry_attempts must be non-negative")
+    if sleep_seconds < 0 or retry_backoff_seconds < 0:
+        raise ValueError("download sleep intervals must be non-negative")
+
+    pending = list(dict.fromkeys(tickers))
     iterator = (
-        _tqdm(tickers, desc="종목 데이터 수집")
+        _tqdm(pending, desc="종목 데이터 수집")
         if (show_progress and _HAS_TQDM)
-        else tickers
+        else pending
     )
     ohlcv_store: dict[str, pd.DataFrame] = {}
+    failed: list[str] = []
     for ticker in iterator:
         time.sleep(sleep_seconds)
         df = download_stock_ohlcv(ticker, start, end)
         if df is not None:
             ohlcv_store[ticker] = df
+        else:
+            failed.append(ticker)
+
+    # Vendor responses occasionally omit a small, transient subset of KRX
+    # symbols. Retry only that subset: it improves signal completeness without
+    # multiplying normal collection traffic or weakening stale-data safeguards.
+    for attempt in range(1, retry_attempts + 1):
+        if not failed:
+            break
+        time.sleep(retry_backoff_seconds * attempt)
+        retrying = failed
+        failed = []
+        for ticker in retrying:
+            time.sleep(sleep_seconds)
+            df = download_stock_ohlcv(ticker, start, end)
+            if df is not None:
+                ohlcv_store[ticker] = df
+            else:
+                failed.append(ticker)
     return ohlcv_store
 
 

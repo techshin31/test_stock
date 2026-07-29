@@ -59,7 +59,7 @@ python -m apps.worker collect --help
 | 대상 | 저장 데이터 | 주요 테이블 | 증분 처리 |
 |---|---|---|---|
 | `macro` | COPPER, GOLD, WTI, TNX, CPI, SOX, BDRY, DXY, VIX, USDKRW, US2Y, GPR, US_MFG_IP, SEMIPROD, GTREND_KPOP, GTREND_KDRAMA, KR_TOURIST | `macro_signals` | 시그널별 최신 저장일 이후 수집 |
-| `wics` | WICS 구성종목과 업종 가격 | `wics_companies`, `wics_industry_prices` | 기수집 스냅샷 생략 |
+| `wics` | WICS 구성종목, 종목 종가와 파생 업종 지수 | `wics_companies`, `wics_constituent_prices`, `wics_industry_prices` | 기수집 스냅샷 생략 |
 | `company` | 기업, DART 공시, 분기 재무제표, 위험상태 | `companies`, `dart_events`, `financial_statements`, `company_risk_states` | 공시 중첩 재조회와 보고서 단위 upsert |
 | `all` | 위 세 대상을 순서대로 수집 | 위 테이블 전체 | `macro -> wics -> company` |
 
@@ -69,7 +69,7 @@ python -m apps.worker collect --help
 # 매크로 시그널 수집
 python -m apps.worker collect macro
 
-# 오늘 WICS 스냅샷과 업종 가격 수집
+# 오늘 WICS 스냅샷·종목 종가 수집 및 파생 업종 지수 재구성
 python -m apps.worker collect wics
 
 # 기본 연도의 재무제표, DART 이벤트와 기업 위험상태 수집
@@ -162,7 +162,10 @@ python -m apps.worker collect wics --force-refresh
 `company`의 `--end`는 DART 이벤트 종료일도 제한한다. `collect all`에서
 `--end`를 생략하면 DART 이벤트, 기업 위험상태 기준일, readiness cutoff 모두
 KST 오늘 기준 전날로 맞춰진다.
-WICS 가격 수집은 종목별 출력 대신 `tqdm` 진행바로 표시된다.
+WICS 가격 수집은 종목별 출력 대신 `tqdm` 진행바로 표시된다. 정상 `wics`/`all`
+수집은 원시 구성종목 종가를 적재한 뒤 시점 안전 시가총액 가중 방식(`DERIVED`,
+`mcap-v1`)으로 업종 지수 레벨도 재구성한다. 이는 WiseIndex 공식 지수값이 아니라
+구성종목·종가로 계산한 파생 시계열이며, 대시보드와 분석 결과에서 원천이 구분된다.
 
 ## 7. 권장 실행 주기
 

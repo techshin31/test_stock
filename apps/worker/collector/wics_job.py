@@ -79,6 +79,7 @@ def run(
             start=price_start,
             end=price_end,
             show_progress=show_progress,
+            rebuild_industry_prices=True,
         )
     return count
 
