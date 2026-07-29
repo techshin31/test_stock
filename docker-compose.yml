@@ -6,12 +6,14 @@ services:
     image: postgres:16
     container_name: postgres-db
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin1234
-      POSTGRES_DB: quantpilot_db
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-quantpilot_db}
     ports:
-      - "5433:5432"
+      - "${POSTGRES_HOST_BIND:-127.0.0.1}:5433:5432"
     volumes:
       - ./storage/postgres/database:/var/lib/postgresql/data
       - ./storage/postgres/schema/01_codes_schema.sql:/docker-entrypoint-initdb.d/01_codes_schema.sql:ro
@@ -22,7 +24,7 @@ services:
       - ./storage/postgres/schema/06_fa_analysis_schema.sql:/docker-entrypoint-initdb.d/06_fa_analysis_schema.sql:ro
       - ./storage/postgres/schema/07_strategy_seed.sql:/docker-entrypoint-initdb.d/07_strategy_seed.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d quantpilot_db"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -43,7 +45,7 @@ services:
       POSTGRES_PORT: 5432
       TZ: Asia/Seoul
     ports:
-      - "8000:8000"
+      - "${API_HOST_BIND:-127.0.0.1}:8000:8000"
     volumes:
       - ./api:/app/api
       - ./core:/app/core
@@ -54,6 +56,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/healthz >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
 
   ############################################################
   # 3. PAPER Trader Scheduler Daemon
@@ -81,7 +89,13 @@ services:
       postgres:
         condition: service_healthy
       api:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "uv run python -m core.utils.runtime_health --quiet || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 25s
 
   ############################################################
   # 4. React Web Console Dashboard (Nginx)
@@ -93,6 +107,13 @@ services:
     container_name: quantpilot-dashboard
     restart: unless-stopped
     ports:
-      - "3000:80"
+      - "${DASHBOARD_HOST_BIND:-127.0.0.1}:3000:80"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s

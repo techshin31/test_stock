@@ -6,9 +6,11 @@ import os
 import subprocess
 import time
 import traceback
+from dataclasses import dataclass
 from pathlib import Path
 
 from core.broker.kis_api import redact_sensitive_text
+from core.utils.io import write_json
 from core.utils.trading_calendar import is_krx_trading_day
 from core.utils.process_lock import (
     ProcessAlreadyRunning,
@@ -77,6 +79,8 @@ def log_error(message: str, mode: str) -> None:
 
 
 def clear_screen():
+    if os.name != "nt" and not os.getenv("TERM"):
+        return
     os.system("cls" if os.name == "nt" else "clear")
 
 
@@ -222,19 +226,90 @@ def get_next_run_time(now):
 
 
 REPORT_RETRY_INTERVAL = datetime.timedelta(minutes=5)
+COLD_START_RETRY_INITIAL_SECONDS = 10
+COLD_START_RETRY_MAX_SECONDS = 300
+
+
+def cold_start_retry_delay_seconds(
+    failed_attempts: int,
+    *,
+    initial_seconds: int = COLD_START_RETRY_INITIAL_SECONDS,
+    max_seconds: int = COLD_START_RETRY_MAX_SECONDS,
+) -> int:
+    """Return a bounded exponential delay for a failed premarket cold start."""
+    if failed_attempts < 1:
+        return 0
+    if initial_seconds < 1 or max_seconds < initial_seconds:
+        raise ValueError("invalid cold-start retry delay configuration")
+    return min(max_seconds, initial_seconds * (2 ** (failed_attempts - 1)))
+
+
+@dataclass
+class ColdStartRetryState:
+    """Keep one scheduler's recovery attempts finite, observable, and testable."""
+
+    failed_attempts: int = 0
+    next_retry_at: datetime.datetime | None = None
+    last_error: str | None = None
+
+    def record_failure(self, now: datetime.datetime, error: object) -> int:
+        self.failed_attempts += 1
+        delay = cold_start_retry_delay_seconds(self.failed_attempts)
+        self.next_retry_at = now + datetime.timedelta(seconds=delay)
+        self.last_error = str(error)
+        return delay
+
+    def due(self, now: datetime.datetime) -> bool:
+        return self.next_retry_at is None or now >= self.next_retry_at
+
+    def reset(self) -> None:
+        self.failed_attempts = 0
+        self.next_retry_at = None
+        self.last_error = None
+
+    def payload(self, mode: str) -> dict:
+        return {
+            "schema_version": 1,
+            "updated_at": datetime.datetime.now().astimezone().isoformat(
+                timespec="seconds"
+            ),
+            "mode": mode,
+            "status": "DEGRADED" if self.failed_attempts else "READY",
+            "failed_attempts": self.failed_attempts,
+            "next_retry_at": (
+                self.next_retry_at.isoformat(timespec="seconds")
+                if self.next_retry_at
+                else None
+            ),
+            "last_error": self.last_error,
+        }
+
+
+def write_cold_start_retry_state(
+    retry_state: ColdStartRetryState,
+    mode: str,
+    *,
+    project_root: Path = PROJECT_ROOT,
+) -> None:
+    """Publish recovery state without relying on the human-readable scheduler log."""
+    write_json(
+        project_root / "logs" / mode.lower() / "scheduler_recovery_state.json",
+        retry_state.payload(mode),
+    )
 
 
 def should_attempt_daily_report(
     completed_date,
     report_date,
+    last_attempted_report_date,
     last_attempt_at,
     now,
     retry_interval=REPORT_RETRY_INTERVAL,
 ):
-    """Return whether an EOD report may run without creating a tight retry loop."""
+    """Retry only a failed report slowly; run a newer completed session at once."""
     if completed_date == report_date:
         return False
-    if last_attempt_at is None:
+    if last_attempted_report_date != report_date or last_attempt_at is None:
         return True
     return now - last_attempt_at >= retry_interval
 
@@ -243,19 +318,34 @@ def pending_paper_eod_report_date(
     now: datetime.datetime,
     project_root: Path = PROJECT_ROOT,
 ):
-    """Return the oldest completed PAPER session without a valid daily report."""
-    from core.analytics.system_readiness import (
-        _completed_operational_dates,
-        _final_daily_report_dates,
-    )
+    """Return the next completed PAPER session without a generated daily artifact.
+
+    A report can be FINAL but still fail the much stricter REAL-promotion
+    operational-integrity gate.  That must remain visible to readiness checks,
+    but it must not prevent later PAPER sessions from receiving their own EOD
+    artifact.
+    """
+    from core.analytics.system_readiness import _completed_operational_dates
 
     log_path = project_root / "logs" / "paper" / "operational_health.jsonl"
     if not log_path.exists():
         return None
     completed_dates = _completed_operational_dates(log_path, now)
-    valid_dates, _ = _final_daily_report_dates(
-        project_root / "reports" / "promotion" / "paper" / "daily"
-    )
+    generated_dates: set[datetime.date] = set()
+    daily_dir = project_root / "reports" / "promotion" / "paper" / "daily"
+    if daily_dir.exists():
+        for path in daily_dir.glob("*.json"):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                report_date = datetime.date.fromisoformat(str(payload["report_date"]))
+                if (
+                    path.stem == report_date.isoformat()
+                    and str(payload.get("mode") or "").upper() == "PAPER"
+                    and payload.get("report_status") == "FINAL"
+                ):
+                    generated_dates.add(report_date)
+            except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+                continue
     status_path = project_root / "logs" / "paper" / "eod_report_status.json"
     failed_report_date = None
     if status_path.exists():
@@ -267,12 +357,10 @@ def pending_paper_eod_report_date(
                 )
         except (OSError, TypeError, ValueError, json.JSONDecodeError):
             failed_report_date = None
+    if failed_report_date in completed_dates:
+        return failed_report_date
     return next(
-        (
-            session_date
-            for session_date in completed_dates
-            if session_date not in valid_dates or session_date == failed_report_date
-        ),
+        (session_date for session_date in completed_dates if session_date not in generated_dates),
         None,
     )
 
@@ -364,12 +452,7 @@ def run_end_of_day_report(report_date, execution_mode):
     status_path = (
         PROJECT_ROOT / "logs" / execution_mode.lower() / "eod_report_status.json"
     )
-    status_path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = status_path.with_suffix(status_path.suffix + ".tmp")
-    temporary.write_text(
-        json.dumps(status, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    temporary.replace(status_path)
+    write_json(status_path, status)
     if result.returncode != 0:
         diagnostic = next(
             (
@@ -429,24 +512,42 @@ def main():
     ).start()
     atexit.register(heartbeat.stop)
     report_run_date = None
+    report_last_attempt_date = None
     report_last_attempt_at = None
+    cold_start_retry = ColdStartRetryState()
 
     try:
         last_run_mark = check_and_run_cold_start(live=args.live, dry_run=dry_run, simulate=args.simulate)
         last_run_mode = "premarket" if last_run_mark else None
         cold_start_pending = False
+        write_cold_start_retry_state(cold_start_retry, execution_mode)
     except Exception as exc:
         log_error(f"cold-start premarket failed: {exc}", execution_mode)
+        delay = cold_start_retry.record_failure(datetime.datetime.now(), exc)
+        write_cold_start_retry_state(cold_start_retry, execution_mode)
         last_run_mark = None
         last_run_mode = f"ERROR: {exc} (10초 후 재시도)"
         cold_start_pending = True
+        last_run_mode = f"ERROR: {exc} ({delay}s retry backoff)"
     while True:
         now = datetime.datetime.now()
         try:
-            if cold_start_pending:
-                last_run_mark = check_and_run_cold_start(live=args.live, dry_run=dry_run, simulate=args.simulate)
-                last_run_mode = "premarket" if last_run_mark else last_run_mode
-                cold_start_pending = False
+            if cold_start_pending and cold_start_retry.due(now):
+                try:
+                    last_run_mark = check_and_run_cold_start(
+                        live=args.live,
+                        dry_run=dry_run,
+                        simulate=args.simulate,
+                    )
+                    last_run_mode = "premarket" if last_run_mark else last_run_mode
+                    cold_start_pending = False
+                    cold_start_retry.reset()
+                    write_cold_start_retry_state(cold_start_retry, execution_mode)
+                except Exception as exc:
+                    log_error(f"cold-start premarket failed: {exc}", execution_mode)
+                    delay = cold_start_retry.record_failure(now, exc)
+                    write_cold_start_retry_state(cold_start_retry, execution_mode)
+                    last_run_mode = f"ERROR: {exc} ({delay}s retry backoff)"
             if is_trading_day(now):
                 if now.hour == 8 and now.minute == 30 and last_run_mark != "8:30":
                     last_run_mark = "8:30"
@@ -473,10 +574,15 @@ def main():
                     args.simulate
                     and (now.hour > 15 or (now.hour == 15 and now.minute >= 21))
                     and should_attempt_daily_report(
-                        report_run_date, now.date(), report_last_attempt_at, now
+                        report_run_date,
+                        now.date(),
+                        report_last_attempt_date,
+                        report_last_attempt_at,
+                        now,
                     )
                 ):
                     report_last_attempt_at = now
+                    report_last_attempt_date = now.date()
                     run_simulation_report(now.date())
                     report_run_date = now.date()
                     last_run_mode = "simulation_report"
@@ -487,10 +593,12 @@ def main():
                 if pending_report_date and should_attempt_daily_report(
                     report_run_date,
                     pending_report_date,
+                    report_last_attempt_date,
                     report_last_attempt_at,
                     now,
                 ):
                     report_last_attempt_at = now
+                    report_last_attempt_date = pending_report_date
                     run_end_of_day_report(pending_report_date, execution_mode)
                     report_run_date = pending_report_date
                     last_run_mode = (

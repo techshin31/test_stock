@@ -230,6 +230,7 @@ def run_collect(args: argparse.Namespace) -> None:
                 start=collect_start,
                 end=collect_end,
                 show_progress=show,
+                rebuild_industry_prices=True,
             )
 
         if args.check_readiness:

@@ -11,6 +11,7 @@ venv/
 # Environment & Credentials
 .env
 .env.*
+!.env.example
 .token_cache.json
 token.dat
 *.token
@@ -31,6 +32,8 @@ dashboard/node_modules/
 obsidian/.obsidian/
 
 # Temporary / Debug Dump Files
+.cache/
+.tmp_*/
 all_services.txt
 tasks.txt
 service_check.txt
