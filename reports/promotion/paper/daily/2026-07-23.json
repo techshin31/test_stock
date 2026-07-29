@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "report_date": "2026-07-23",
-  "generated_at": "2026-07-24T09:21:37+09:00",
+  "generated_at": "2026-07-28T17:56:06+09:00",
   "report_status": "FINAL",
   "mode": "PAPER",
   "executive_summary": "REAL 전환은 3개 조건 때문에 차단됐습니다.",
@@ -12,8 +12,8 @@
     "baseline_total_asset": 463025590.0,
     "ending_total_asset": 468657985.0,
     "net_return": 0.012164327677872011,
-    "benchmark_return": 0.0891031186136324,
-    "excess_return": -0.07693879093576039,
+    "benchmark_return": 0.08910313959476879,
+    "excess_return": -0.07693881191689678,
     "max_drawdown": -0.015626025380661712,
     "annualized_volatility": 0.25438178205995926,
     "total_costs": 219045.47249999992,
@@ -63,7 +63,7 @@
       "daily_return": 0.004843361107561117,
       "cumulative_return": 0.012164327677872011,
       "drawdown": -0.010858346756695059,
-      "benchmark_return": 0.0891031186136324
+      "benchmark_return": 0.08910313959476879
     }
   ],
   "operations": {
@@ -77,7 +77,7 @@
     "reconciled_orders": 14,
     "critical_incidents": 19,
     "net_return": 0.012164327677872011,
-    "benchmark_return": 0.0891031186136324,
+    "benchmark_return": 0.08910313959476879,
     "max_drawdown": -0.015626025380661712,
     "cost_drag": 0.00047307422576795357,
     "performance_validation_status": "READY",
@@ -85,7 +85,7 @@
     "risk_check_coverage": 1.0,
     "order_reconciliation_rate": 1.0,
     "operational_integrity": 1.0,
-    "excess_return": -0.07693879093576039,
+    "excess_return": -0.07693881191689678,
     "critical_incidents_detail": [
       {
         "timestamp": "2026-07-21T09:14:51+09:00",
@@ -210,8 +210,8 @@
         "time": "14:16:43",
         "status": "ERROR",
         "status_name": "증권사 통신/API 오류",
-        "summary": "잔고 조회 통신 실패: HTTPSConnectionPool(host='openapivts.koreainvestment.com', port=29443): Read timed out. (read timeout=10) | 차단사유 (PRICE_GUARD_COOLDOWN: 1건, AMBIGUOUS_RESULT_SAME_DAY: 1건)",
-        "last_error": "잔고 조회 통신 실패: HTTPSConnectionPool(host='openapivts.koreainvestment.com', port=29443): Read timed out. (read timeout=10)"
+        "summary": "잔고 조회 통신 실패: BROKER_TIMEOUT | 차단사유 (PRICE_GUARD_COOLDOWN: 1건, AMBIGUOUS_RESULT_SAME_DAY: 1건)",
+        "last_error": "잔고 조회 통신 실패: BROKER_TIMEOUT"
       },
       {
         "timestamp": "2026-07-23T14:17:53+09:00",
@@ -228,8 +228,8 @@
         "time": "14:46:22",
         "status": "ERROR",
         "status_name": "증권사 통신/API 오류",
-        "summary": "잔고 조회 통신 실패: HTTPSConnectionPool(host='openapivts.koreainvestment.com', port=29443): Read timed out. (read timeout=10) | 차단사유 (PRICE_GUARD_COOLDOWN: 1건, AMBIGUOUS_RESULT_SAME_DAY: 1건)",
-        "last_error": "잔고 조회 통신 실패: HTTPSConnectionPool(host='openapivts.koreainvestment.com', port=29443): Read timed out. (read timeout=10)"
+        "summary": "잔고 조회 통신 실패: BROKER_TIMEOUT | 차단사유 (PRICE_GUARD_COOLDOWN: 1건, AMBIGUOUS_RESULT_SAME_DAY: 1건)",
+        "last_error": "잔고 조회 통신 실패: BROKER_TIMEOUT"
       },
       {
         "timestamp": "2026-07-23T14:47:23+09:00",
@@ -246,8 +246,8 @@
         "time": "15:00:53",
         "status": "ERROR",
         "status_name": "증권사 통신/API 오류",
-        "summary": "잔고 조회 통신 실패: HTTPSConnectionPool(host='openapivts.koreainvestment.com', port=29443): Read timed out. (read timeout=10) | 차단사유 (PRICE_GUARD_COOLDOWN: 1건, AMBIGUOUS_RESULT_SAME_DAY: 1건)",
-        "last_error": "잔고 조회 통신 실패: HTTPSConnectionPool(host='openapivts.koreainvestment.com', port=29443): Read timed out. (read timeout=10)"
+        "summary": "잔고 조회 통신 실패: BROKER_TIMEOUT | 차단사유 (PRICE_GUARD_COOLDOWN: 1건, AMBIGUOUS_RESULT_SAME_DAY: 1건)",
+        "last_error": "잔고 조회 통신 실패: BROKER_TIMEOUT"
       },
       {
         "timestamp": "2026-07-23T15:02:57+09:00",
@@ -259,6 +259,27 @@
         "last_error": null
       }
     ]
+  },
+  "daily_operations": {
+    "as_of": "2026-07-23",
+    "observed_trading_days": 1,
+    "scan_count": 377,
+    "fresh_scan_count": 377,
+    "risk_checks_total": 744,
+    "risk_checks_completed": 744,
+    "submitted_orders": 4,
+    "reconciled_orders": 4,
+    "critical_incidents": 10,
+    "net_return": null,
+    "benchmark_return": null,
+    "max_drawdown": null,
+    "cost_drag": null,
+    "performance_validation_status": null,
+    "data_freshness_rate": 1.0,
+    "risk_check_coverage": 1.0,
+    "order_reconciliation_rate": 1.0,
+    "operational_integrity": 1.0,
+    "excess_return": null
   },
   "critical_incidents_detail": [
     {
@@ -384,8 +405,8 @@
       "time": "14:16:43",
       "status": "ERROR",
       "status_name": "증권사 통신/API 오류",
-      "summary": "잔고 조회 통신 실패: HTTPSConnectionPool(host='openapivts.koreainvestment.com', port=29443): Read timed out. (read timeout=10) | 차단사유 (PRICE_GUARD_COOLDOWN: 1건, AMBIGUOUS_RESULT_SAME_DAY: 1건)",
-      "last_error": "잔고 조회 통신 실패: HTTPSConnectionPool(host='openapivts.koreainvestment.com', port=29443): Read timed out. (read timeout=10)"
+      "summary": "잔고 조회 통신 실패: BROKER_TIMEOUT | 차단사유 (PRICE_GUARD_COOLDOWN: 1건, AMBIGUOUS_RESULT_SAME_DAY: 1건)",
+      "last_error": "잔고 조회 통신 실패: BROKER_TIMEOUT"
     },
     {
       "timestamp": "2026-07-23T14:17:53+09:00",
@@ -402,8 +423,8 @@
       "time": "14:46:22",
       "status": "ERROR",
       "status_name": "증권사 통신/API 오류",
-      "summary": "잔고 조회 통신 실패: HTTPSConnectionPool(host='openapivts.koreainvestment.com', port=29443): Read timed out. (read timeout=10) | 차단사유 (PRICE_GUARD_COOLDOWN: 1건, AMBIGUOUS_RESULT_SAME_DAY: 1건)",
-      "last_error": "잔고 조회 통신 실패: HTTPSConnectionPool(host='openapivts.koreainvestment.com', port=29443): Read timed out. (read timeout=10)"
+      "summary": "잔고 조회 통신 실패: BROKER_TIMEOUT | 차단사유 (PRICE_GUARD_COOLDOWN: 1건, AMBIGUOUS_RESULT_SAME_DAY: 1건)",
+      "last_error": "잔고 조회 통신 실패: BROKER_TIMEOUT"
     },
     {
       "timestamp": "2026-07-23T14:47:23+09:00",
@@ -420,8 +441,8 @@
       "time": "15:00:53",
       "status": "ERROR",
       "status_name": "증권사 통신/API 오류",
-      "summary": "잔고 조회 통신 실패: HTTPSConnectionPool(host='openapivts.koreainvestment.com', port=29443): Read timed out. (read timeout=10) | 차단사유 (PRICE_GUARD_COOLDOWN: 1건, AMBIGUOUS_RESULT_SAME_DAY: 1건)",
-      "last_error": "잔고 조회 통신 실패: HTTPSConnectionPool(host='openapivts.koreainvestment.com', port=29443): Read timed out. (read timeout=10)"
+      "summary": "잔고 조회 통신 실패: BROKER_TIMEOUT | 차단사유 (PRICE_GUARD_COOLDOWN: 1건, AMBIGUOUS_RESULT_SAME_DAY: 1건)",
+      "last_error": "잔고 조회 통신 실패: BROKER_TIMEOUT"
     },
     {
       "timestamp": "2026-07-23T15:02:57+09:00",
@@ -462,7 +483,7 @@
   "ledger_quality": {},
   "shadow_reentry": {
     "schema_version": 1,
-    "generated_at": "2026-07-24T09:21:29+09:00",
+    "generated_at": "2026-07-28T15:20:53+09:00",
     "mode": "PAPER",
     "strategy": "aggressive",
     "account_scope": "***9904-01",
@@ -485,9 +506,11 @@
     "observed_sessions": [
       "2026-07-21",
       "2026-07-22",
-      "2026-07-23"
+      "2026-07-23",
+      "2026-07-24",
+      "2026-07-27"
     ],
-    "completed_observation_sessions": 3,
+    "completed_observation_sessions": 5,
     "required_observation_sessions": 10,
     "observation_window_complete": false,
     "risk_exit_count": 5,
@@ -501,14 +524,14 @@
         "exit_price_source": "ORDER_EXPECTED_PRICE",
         "exit_reason": "TRAILING_STOP",
         "broker_order_id": "0000004843",
-        "signal_date": "2026-07-23",
+        "signal_date": "2026-07-27",
         "production_position_present": false,
         "observation": {
           "data_ready": true,
-          "close": 270000.0,
-          "ma20": 290250.0,
-          "previous_ma20": 293775.0,
-          "momentum20": -0.2070484581497798,
+          "close": 254000.0,
+          "ma20": 280525.0,
+          "previous_ma20": 284800.0,
+          "momentum20": -0.25184094256259204,
           "conditions": {
             "above_exit_price": true,
             "above_ma20": false,
@@ -532,16 +555,16 @@
         "exit_price_source": "ORDER_EXPECTED_PRICE",
         "exit_reason": "HARD_STOP_LOSS",
         "broker_order_id": "0000038017",
-        "signal_date": "2026-07-23",
+        "signal_date": "2026-07-27",
         "production_position_present": false,
         "observation": {
           "data_ready": true,
-          "close": 679000.0,
-          "ma20": 778150.0,
-          "previous_ma20": 792050.0,
-          "momentum20": -0.290491118077325,
+          "close": 614000.0,
+          "ma20": 745900.0,
+          "previous_ma20": 761750.0,
+          "momentum20": -0.3404940923737916,
           "conditions": {
-            "above_exit_price": true,
+            "above_exit_price": false,
             "above_ma20": false,
             "ma20_rising": false,
             "momentum20_positive": false
@@ -563,14 +586,14 @@
         "exit_price_source": "ORDER_EXPECTED_PRICE",
         "exit_reason": "TRAILING_STOP",
         "broker_order_id": "0000006063",
-        "signal_date": "2026-07-23",
+        "signal_date": "2026-07-27",
         "production_position_present": false,
         "observation": {
           "data_ready": true,
-          "close": 655000.0,
-          "ma20": 668600.0,
-          "previous_ma20": 671450.0,
-          "momentum20": -0.0800561797752809,
+          "close": 623000.0,
+          "ma20": 647600.0,
+          "previous_ma20": 657200.0,
+          "momentum20": -0.23558282208588954,
           "conditions": {
             "above_exit_price": true,
             "above_ma20": false,
@@ -594,14 +617,14 @@
         "exit_price_source": "ORDER_EXPECTED_PRICE",
         "exit_reason": "HARD_STOP_LOSS",
         "broker_order_id": "0000037707",
-        "signal_date": "2026-07-23",
+        "signal_date": "2026-07-27",
         "production_position_present": false,
         "observation": {
           "data_ready": true,
-          "close": 104900.0,
-          "ma20": 120355.0,
-          "previous_ma20": 120810.0,
-          "momentum20": -0.0798245614035088,
+          "close": 110700.0,
+          "ma20": 119335.0,
+          "previous_ma20": 119560.0,
+          "momentum20": -0.0390625,
           "conditions": {
             "above_exit_price": false,
             "above_ma20": false,
@@ -625,16 +648,16 @@
         "exit_price_source": "ORDER_EXPECTED_PRICE",
         "exit_reason": "HARD_STOP_LOSS",
         "broker_order_id": "0000037871",
-        "signal_date": "2026-07-23",
+        "signal_date": "2026-07-27",
         "production_position_present": false,
         "observation": {
           "data_ready": true,
-          "close": 1221000.0,
-          "ma20": 1425500.0,
-          "previous_ma20": 1454400.0,
-          "momentum20": -0.3212896053362979,
+          "close": 1096000.0,
+          "ma20": 1354800.0,
+          "previous_ma20": 1386000.0,
+          "momentum20": -0.3627906976744186,
           "conditions": {
-            "above_exit_price": true,
+            "above_exit_price": false,
             "above_ma20": false,
             "ma20_rising": false,
             "momentum20_positive": false
@@ -674,12 +697,12 @@
       {
         "name": "execution_stress_matches_current_ledger",
         "passed": false,
-        "detail": "current=None, stress=552"
+        "detail": "current=None, stress=559"
       },
       {
         "name": "execution_model_sample_ready",
         "passed": false,
-        "detail": "BUY=7/30, SELL=7/30"
+        "detail": "BUY=12/30, SELL=9/30"
       },
       {
         "name": "execution_stress_all_scenarios_pass",
@@ -689,7 +712,7 @@
       {
         "name": "live_shadow_observation_window",
         "passed": false,
-        "detail": "3/10 completed sessions"
+        "detail": "5/10 completed sessions"
       },
       {
         "name": "shadow_is_observe_only",
@@ -723,10 +746,10 @@
       }
     ],
     "blockers": [
-      "current=None, stress=552",
-      "BUY=7/30, SELL=7/30",
+      "current=None, stress=559",
+      "BUY=12/30, SELL=9/30",
       "2/3 scenarios",
-      "3/10 completed sessions",
+      "5/10 completed sessions",
       "unavailable",
       "unavailable",
       "unavailable",
@@ -802,7 +825,7 @@
         "confirmed_reentries": 14
       },
       "execution_stress": {
-        "generated_at": "2026-07-23T15:30:50+09:00",
+        "generated_at": "2026-07-28T15:55:42+09:00",
         "calibration_status": "PROVISIONAL_SMALL_SAMPLE",
         "scenario_checks": [
           {
@@ -824,25 +847,25 @@
             "drawdown_improves": true,
             "turnover_improves": true,
             "passed": true,
-            "candidate_return": 0.03496505567101371,
-            "baseline_return": 0.023500612201362348,
-            "candidate_mdd": -0.15225690815834192,
+            "candidate_return": 0.04162543421155562,
+            "baseline_return": 0.014995342202965611,
+            "candidate_mdd": -0.15398745239419565,
             "baseline_mdd": -0.19686129018322474,
-            "candidate_turnover": 21.334197777701903,
-            "baseline_turnover": 36.69325529089539
+            "candidate_turnover": 21.323686760121895,
+            "baseline_turnover": 37.333299294168974
           },
           {
             "scenario": "STABILIZED_WILSON_LOWER",
             "return_improves": false,
-            "drawdown_improves": false,
+            "drawdown_improves": true,
             "turnover_improves": true,
             "passed": false,
-            "candidate_return": -0.11768611662433526,
-            "baseline_return": 0.01573061404050491,
-            "candidate_mdd": -0.21119831669810707,
-            "baseline_mdd": -0.1757544817297989,
-            "candidate_turnover": 19.082572893878492,
-            "baseline_turnover": 30.0259475996046
+            "candidate_return": -0.019182651041851795,
+            "baseline_return": -0.013701366322538266,
+            "candidate_mdd": -0.1558256037100062,
+            "baseline_mdd": -0.19710009788513028,
+            "candidate_turnover": 19.233913378813483,
+            "baseline_turnover": 33.12934901866531
           }
         ],
         "promotion_gate": {
@@ -865,7 +888,7 @@
       {
         "name": "operational_log",
         "passed": true,
-        "detail": "1063 completed scans"
+        "detail": "1063 cumulative scans; 377 daily scans"
       },
       {
         "name": "certified_baseline",
@@ -900,7 +923,7 @@
       {
         "name": "paper_ledger_reconstruction",
         "passed": true,
-        "detail": "not recomputed for historical report date; dashboard endpoint is 2026-07-24"
+        "detail": "not recomputed for historical report date; dashboard endpoint is 2026-07-28"
       },
       {
         "name": "performance_calculation",

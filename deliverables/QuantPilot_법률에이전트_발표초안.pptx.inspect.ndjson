@@ -1,0 +1,261 @@
+{"kind":"deck","id":"pr/1njip1","name":"Deck"}
+{"kind":"layout","layoutId":"8f3259ca-850b-4cf0-9eb5-6744f0441eed","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"0dc38c60-b83b-4984-93ed-5de0f62f8561","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/pfl76n","slide":1,"title":"QUANTPILOT","textShapes":6}
+{"kind":"textbox","id":"sh/ny1kjqx4","slide":1,"name":"brand","text":"QUANTPILOT","textPreview":"QUANTPILOT","textChars":10,"textLines":1,"bbox":[48,42,310,28]}
+{"kind":"textbox","id":"sh/oza1svep","slide":1,"name":"cover-title","text":"법률·규제 리스크\n검토 에이전트","textPreview":"법률·규제 리스크 | 검토 에이전트","textChars":17,"textLines":2,"bbox":[48,184,880,190]}
+{"kind":"textbox","id":"sh/90j2l0fa","slide":1,"name":"cover-subtitle","text":"자동매매 운영 통제 위에 법률 검토의 근거·한계·승인을 연결하는 제안","textPreview":"자동매매 운영 통제 위에 법률 검토의 근거·한계·승인을 연결하는 제안","textChars":38,"textLines":1,"bbox":[52,404,770,46]}
+{"kind":"shape","id":"sh/a1sjulwf","slide":1,"bbox":[48,514,1120,1]}
+{"kind":"textbox","id":"sh/b21knqx0","slide":1,"name":"cover-meta","text":"코드 기반 발표 초안  |  운영 기준선: PAPER","textPreview":"코드 기반 발표 초안  |  운영 기준선: PAPER","textChars":29,"textLines":1,"bbox":[48,548,700,28]}
+{"kind":"shape","id":"sh/w3alwvel","slide":1,"name":"cover-panel","bbox":[934,174,252,252]}
+{"kind":"textbox","id":"sh/x4j2p0f6","slide":1,"name":"cover-panel-title","text":"법률\n에이전트","textPreview":"법률 | 에이전트","textChars":7,"textLines":2,"bbox":[978,242,170,104]}
+{"kind":"textbox","id":"sh/y5c3y5wr","slide":1,"name":"cover-panel-sub","text":"판단이 아니라\n검토를 구조화","textPreview":"판단이 아니라 | 검토를 구조화","textChars":15,"textLines":2,"bbox":[970,360,184,44]}
+{"kind":"notes","id":"nt/pfl76n","slide":1,"text":"[Sources]\n- Local codebase: README.md; core/execution/trader.py; run_live_trader.py\n- Local operating evidence: reports/analysis/automated_trading_system_readiness.json (generated 2026-07-28)\n- This deck proposes product controls; it is not a legal opinion.\nOpening: this is a product/control proposal, not a statement that the system already provides legal advice."}
+{"kind":"slide","id":"sl/v6a3q6","slide":2,"title":"QUANTPILOT · LEGAL AGENT DRAFT","textShapes":22}
+{"kind":"textbox","id":"sh/32lk7i5w","slide":2,"name":"kicker-2","text":"QUANTPILOT · LEGAL AGENT DRAFT","textPreview":"QUANTPILOT · LEGAL AGENT DRAFT","textChars":30,"textLines":1,"bbox":[48,30,600,24]}
+{"kind":"textbox","id":"sh/43u10nm1","slide":2,"name":"title-2","text":"안전한 실행 통제, 법률 검토는 공백","textPreview":"안전한 실행 통제, 법률 검토는 공백","textChars":20,"textLines":1,"bbox":[48,64,1110,60]}
+{"kind":"textbox","id":"sh/54329snm","slide":2,"name":"page-2","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1180,34,52,24]}
+{"kind":"shape","id":"sh/uxsjut4z","slide":2,"bbox":[48,140,1184,1]}
+{"kind":"textbox","id":"sh/vyl03y5k","slide":2,"name":"left-head","text":"코드에서 이미 확인되는 운영 통제","textPreview":"코드에서 이미 확인되는 운영 통제","textChars":18,"textLines":1,"bbox":[48,190,420,32]}
+{"kind":"textbox","id":"sh/gzu1w3m5","slide":2,"name":"right-head","text":"제안하는 법률 에이전트의 보완 역할","textPreview":"제안하는 법률 에이전트의 보완 역할","textChars":19,"textLines":1,"bbox":[684,190,480,32]}
+{"kind":"shape","id":"sh/h03i58nq","slide":2,"name":"current-zone","bbox":[48,244,500,310]}
+{"kind":"shape","id":"sh/etwj6x4j","slide":2,"name":"proposed-zone","bbox":[684,244,500,310]}
+{"kind":"textbox","id":"sh/fu5kf25o","slide":2,"name":"l-dot-0","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[74,274,24,24]}
+{"kind":"textbox","id":"sh/v6dkjqxc","slide":2,"name":"l-0","text":"DRY_RUN · PAPER · REAL 실행 모드 분리","textPreview":"DRY_RUN · PAPER · REAL 실행 모드 분리","textChars":31,"textLines":1,"bbox":[104,272,408,34]}
+{"kind":"textbox","id":"sh/a543alwr","slide":2,"name":"l-dot-1","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[74,338,24,24]}
+{"kind":"textbox","id":"sh/x8v2lgfi","slide":2,"name":"l-1","text":"REAL 주문은 별도 게이트와 수동 확인","textPreview":"REAL 주문은 별도 게이트와 수동 확인","textChars":22,"textLines":1,"bbox":[104,336,408,34]}
+{"kind":"textbox","id":"sh/w7mlcbex","slide":2,"name":"l-dot-2","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[74,402,24,24]}
+{"kind":"textbox","id":"sh/jad4nqxo","slide":2,"name":"l-2","text":"주문·체결·일일 리포트의 감사 추적","textPreview":"주문·체결·일일 리포트의 감사 추적","textChars":19,"textLines":1,"bbox":[104,400,408,34]}
+{"kind":"textbox","id":"sh/i943elw3","slide":2,"name":"l-dot-3","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[74,466,24,24]}
+{"kind":"textbox","id":"sh/5wfmp0fe","slide":2,"name":"l-3","text":"신규 매수 차단·손절/청산 허용","textPreview":"신규 매수 차단·손절/청산 허용","textChars":17,"textLines":1,"bbox":[104,464,408,34]}
+{"kind":"textbox","id":"sh/kbmlgve9","slide":2,"name":"r-dot-0","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[710,274,24,24]}
+{"kind":"textbox","id":"sh/7yx4raxk","slide":2,"name":"r-0","text":"데이터·콘텐츠 사용권 위험을 사전 표시","textPreview":"데이터·콘텐츠 사용권 위험을 사전 표시","textChars":21,"textLines":1,"bbox":[740,272,410,38]}
+{"kind":"textbox","id":"sh/6xo3i5wz","slide":2,"name":"r-dot-1","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[710,338,24,24]}
+{"kind":"textbox","id":"sh/2t8nq9g7","slide":2,"name":"r-1","text":"공시·뉴스의 규제 쟁점을 근거와 함께 요약","textPreview":"공시·뉴스의 규제 쟁점을 근거와 함께 요약","textChars":23,"textLines":1,"bbox":[740,336,410,38]}
+{"kind":"textbox","id":"sh/3uhojuhs","slide":2,"name":"r-dot-2","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[710,402,24,24]}
+{"kind":"textbox","id":"sh/4vq5szyd","slide":2,"name":"r-2","text":"사용자 문구가 투자자문처럼 보이는지 점검","textPreview":"사용자 문구가 투자자문처럼 보이는지 점검","textChars":22,"textLines":1,"bbox":[740,400,410,38]}
+{"kind":"textbox","id":"sh/pwj6l4zy","slide":2,"name":"r-dot-3","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[710,466,24,24]}
+{"kind":"textbox","id":"sh/u58nmpgb","slide":2,"name":"r-3","text":"법률 확정 판단은 담당자 승인으로 이관","textPreview":"법률 확정 판단은 담당자 승인으로 이관","textChars":21,"textLines":1,"bbox":[740,464,410,38]}
+{"kind":"textbox","id":"sh/fqhofuhw","slide":2,"name":"motivation-takeaway","text":"핵심: “거래 실행 제어”와 “법률·규제 검토”를 분리한 뒤, 검토 결과만 의사결정 게이트에 연결합니다.","textPreview":"핵심: “거래 실행 제어”와 “법률·규제 검토”를 분리한 뒤, 검토 결과만 의사결정 게이트에 연결합니다.","textChars":58,"textLines":1,"bbox":[48,604,1110,34]}
+{"kind":"notes","id":"nt/v6a3q6","slide":2,"text":"[Sources]\n- Local codebase: README.md; core/execution/trader.py; run_live_trader.py\n- Local operating evidence: reports/analysis/automated_trading_system_readiness.json (generated 2026-07-28)\n- This deck proposes product controls; it is not a legal opinion."}
+{"kind":"slide","id":"sl/f9f44i","slide":3,"title":"QUANTPILOT · LEGAL AGENT DRAFT","textShapes":18}
+{"kind":"textbox","id":"sh/q9kbqlk3","slide":3,"name":"kicker-3","text":"QUANTPILOT · LEGAL AGENT DRAFT","textPreview":"QUANTPILOT · LEGAL AGENT DRAFT","textChars":30,"textLines":1,"bbox":[48,30,600,24]}
+{"kind":"textbox","id":"sh/dwva1gju","slide":3,"name":"title-3","text":"비교의 출발점: 현재 PAPER 운영 기준선","textPreview":"비교의 출발점: 현재 PAPER 운영 기준선","textChars":24,"textLines":1,"bbox":[48,64,1110,60]}
+{"kind":"textbox","id":"sh/cv2tsb29","slide":3,"name":"page-3","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1180,34,52,24]}
+{"kind":"shape","id":"sh/36tsv61s","slide":3,"bbox":[48,140,1184,1]}
+{"kind":"textbox","id":"sh/25kbm1k7","slide":3,"name":"baseline-sub","text":"법률 지표는 아직 측정되지 않으므로, 먼저 코드가 생성하는 운영 지표를 기준선으로 둡니다.","textPreview":"법률 지표는 아직 측정되지 않으므로, 먼저 코드가 생성하는 운영 지표를 기준선으로 둡니다.","textChars":50,"textLines":1,"bbox":[48,164,960,30]}
+{"kind":"shape","id":"sh/p8baxgji","slide":3,"name":"safety","bbox":[48,226,250,222]}
+{"kind":"shape","id":"sh/472tob2x","slide":3,"bbox":[48,226,8,222]}
+{"kind":"textbox","id":"sh/n2dc7q1w","slide":3,"name":"safety-value","text":"12 / 13","textPreview":"12 / 13","textChars":7,"textLines":1,"bbox":[76,254,194,68]}
+{"kind":"textbox","id":"sh/m14by50b","slide":3,"name":"safety-label","text":"안전검사 통과","textPreview":"안전검사 통과","textChars":7,"textLines":1,"bbox":[76,328,194,30]}
+{"kind":"textbox","id":"sh/k7et4ni9","slide":3,"name":"safety-sub","text":"1건: 일일 손실 한도에 따른 진입 차단","textPreview":"1건: 일일 손실 한도에 따른 진입 차단","textChars":22,"textLines":1,"bbox":[76,372,196,48]}
+{"kind":"shape","id":"sh/58nuxsju","slide":3,"name":"evidence","bbox":[330,226,250,222]}
+{"kind":"shape","id":"sh/i5wb2x03","slide":3,"bbox":[330,226,8,222]}
+{"kind":"textbox","id":"sh/j65cvi1o","slide":3,"name":"evidence-value","text":"6 / 14","textPreview":"6 / 14","textChars":6,"textLines":1,"bbox":[358,254,194,68]}
+{"kind":"textbox","id":"sh/wjet0nid","slide":3,"name":"evidence-label","text":"완료 증거 통과","textPreview":"완료 증거 통과","textChars":8,"textLines":1,"bbox":[358,328,194,30]}
+{"kind":"textbox","id":"sh/x4nutsji","slide":3,"name":"evidence-sub","text":"운영 창·리포트 커버리지 보강 필요","textPreview":"운영 창·리포트 커버리지 보강 필요","textChars":19,"textLines":1,"bbox":[358,372,196,48]}
+{"kind":"shape","id":"sh/ahcbyd07","slide":3,"name":"sessions","bbox":[612,226,250,222]}
+{"kind":"shape","id":"sh/vi5cri1s","slide":3,"bbox":[612,226,8,222]}
+{"kind":"textbox","id":"sh/8futw3i1","slide":3,"name":"sessions-value","text":"6 / 60","textPreview":"6 / 60","textChars":6,"textLines":1,"bbox":[640,254,194,68]}
+{"kind":"textbox","id":"sh/9g3up8jm","slide":3,"name":"sessions-label","text":"PAPER 세션","textPreview":"PAPER 세션","textChars":8,"textLines":1,"bbox":[640,328,194,30]}
+{"kind":"textbox","id":"sh/pcvat4ba","slide":3,"name":"sessions-sub","text":"REAL 전환 전 검증을 위한 누적 운영","textPreview":"REAL 전환 전 검증을 위한 누적 운영","textChars":22,"textLines":1,"bbox":[640,372,196,48]}
+{"kind":"shape","id":"sh/obm90zu5","slide":3,"name":"reports","bbox":[894,226,250,222]}
+{"kind":"shape","id":"sh/nadsrutk","slide":3,"bbox":[894,226,8,222]}
+{"kind":"textbox","id":"sh/294rypcz","slide":3,"name":"reports-value","text":"3 / 60","textPreview":"3 / 60","textChars":6,"textLines":1,"bbox":[922,254,194,68]}
+{"kind":"textbox","id":"sh/18vapkbe","slide":3,"name":"reports-label","text":"FINAL 리포트","textPreview":"FINAL 리포트","textChars":9,"textLines":1,"bbox":[922,328,194,30]}
+{"kind":"textbox","id":"sh/07m9wfut","slide":3,"name":"reports-sub","text":"일별 FINAL/READY 산출물 누적 필요","textPreview":"일별 FINAL/READY 산출물 누적 필요","textChars":24,"textLines":1,"bbox":[922,372,196,48]}
+{"kind":"textbox","id":"sh/f6tsnut8","slide":3,"name":"baseline-label","text":"해석","textPreview":"해석","textChars":2,"textLines":1,"bbox":[48,510,80,26]}
+{"kind":"textbox","id":"sh/e5krupcn","slide":3,"name":"baseline-takeaway","text":"현재 시스템은 실주문 확대보다 검증의 완결성을 우선합니다. 법률 에이전트도 동일하게 “미확인 → 제한” 원칙으로 설계합니다.","textPreview":"현재 시스템은 실주문 확대보다 검증의 완결성을 우선합니다. 법률 에이전트도 동일하게 “미확인 → 제한” 원칙으로 설계합니다.","textChars":69,"textLines":1,"bbox":[48,546,1120,58]}
+{"kind":"notes","id":"nt/f9f44i","slide":3,"text":"[Sources]\n- Local codebase: README.md; core/execution/trader.py; run_live_trader.py\n- Local operating evidence: reports/analysis/automated_trading_system_readiness.json (generated 2026-07-28)\n- This deck proposes product controls; it is not a legal opinion.\nMetrics are point-in-time local report values, not performance claims."}
+{"kind":"slide","id":"sl/4laev1","slide":4,"title":"QUANTPILOT · LEGAL AGENT DRAFT","textShapes":24}
+{"kind":"textbox","id":"sh/bmp83qhg","slide":4,"name":"kicker-4","text":"QUANTPILOT · LEGAL AGENT DRAFT","textPreview":"QUANTPILOT · LEGAL AGENT DRAFT","textChars":30,"textLines":1,"bbox":[48,30,600,24]}
+{"kind":"textbox","id":"sh/wny9wvi1","slide":4,"name":"title-4","text":"법률 에이전트는 “판단 자동화”가 아니라 “검토 가능성”을 높입니다.","textPreview":"법률 에이전트는 “판단 자동화”가 아니라 “검토 가능성”을 높입니다.","textChars":38,"textLines":1,"bbox":[48,64,1110,60]}
+{"kind":"textbox","id":"sh/xo7q50zm","slide":4,"name":"page-4","text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1180,34,52,24]}
+{"kind":"shape","id":"sh/ipgry507","slide":4,"bbox":[48,140,1184,1]}
+{"kind":"shape","id":"sh/jap87ahs","slide":4,"name":"mh-0","bbox":[48,182,262,44]}
+{"kind":"textbox","id":"sh/kbi90fix","slide":4,"name":"mht-0","text":"비교 항목","textPreview":"비교 항목","textChars":5,"textLines":1,"bbox":[60,194,238,24]}
+{"kind":"shape","id":"sh/5crq9kzi","slide":4,"name":"mh-1","bbox":[310,182,380,44]}
+{"kind":"textbox","id":"sh/etw7ml0n","slide":4,"name":"mht-1","text":"현재 운영","textPreview":"현재 운영","textChars":5,"textLines":1,"bbox":[322,194,356,24]}
+{"kind":"shape","id":"sh/ze58v618","slide":4,"name":"mh-2","bbox":[690,182,290,44]}
+{"kind":"textbox","id":"sh/jex4bex8","slide":4,"name":"mht-2","text":"법률 에이전트 도입 후","textPreview":"법률 에이전트 도입 후","textChars":12,"textLines":1,"bbox":[702,194,266,24]}
+{"kind":"shape","id":"sh/idon29g3","slide":4,"name":"mh-3","bbox":[980,182,252,44]}
+{"kind":"textbox","id":"sh/5gfmdofe","slide":4,"name":"mht-3","text":"의사결정","textPreview":"의사결정","textChars":4,"textLines":1,"bbox":[992,194,228,24]}
+{"kind":"shape","id":"sh/kf654jyt","slide":4,"name":"cell-0-0","bbox":[48,226,262,86]}
+{"kind":"shape","id":"sh/vax47exc","slide":4,"name":"cell-0-1","bbox":[310,226,380,86]}
+{"kind":"shape","id":"sh/a943y9gr","slide":4,"name":"cell-0-2","bbox":[690,226,290,86]}
+{"kind":"shape","id":"sh/xcfm94fi","slide":4,"name":"cell-0-3","bbox":[980,226,252,86]}
+{"kind":"textbox","id":"sh/wb6l0zyx","slide":4,"name":"ct-0-0","text":"데이터 사용권","textPreview":"데이터 사용권","textChars":7,"textLines":1,"bbox":[62,244,234,54]}
+{"kind":"textbox","id":"sh/n6d43ux0","slide":4,"name":"ct-0-1","text":"수집 안정성·스냅샷 중심","textPreview":"수집 안정성·스냅샷 중심","textChars":13,"textLines":1,"bbox":[324,244,352,54]}
+{"kind":"textbox","id":"sh/m543upgv","slide":4,"name":"ct-0-2","text":"출처·약관·재배포 조건\n검토 상태를 함께 기록","textPreview":"출처·약관·재배포 조건 | 검토 상태를 함께 기록","textChars":25,"textLines":2,"bbox":[704,244,262,54]}
+{"kind":"textbox","id":"sh/qhkn6p0n","slide":4,"name":"ct-0-3","text":"수집/노출 제한","textPreview":"수집/노출 제한","textChars":8,"textLines":1,"bbox":[994,244,224,54]}
+{"kind":"shape","id":"sh/bitofu18","slide":4,"name":"cell-1-0","bbox":[48,312,262,86]}
+{"kind":"shape","id":"sh/cjm58zit","slide":4,"name":"cell-1-1","bbox":[310,312,380,86]}
+{"kind":"shape","id":"sh/d4v6h4jy","slide":4,"name":"cell-1-2","bbox":[690,312,290,86]}
+{"kind":"shape","id":"sh/y54na90j","slide":4,"name":"cell-1-3","bbox":[980,312,252,86]}
+{"kind":"textbox","id":"sh/z6doju14","slide":4,"name":"ct-1-0","text":"공시·뉴스","textPreview":"공시·뉴스","textChars":5,"textLines":1,"bbox":[62,330,234,54]}
+{"kind":"textbox","id":"sh/07m5czip","slide":4,"name":"ct-1-1","text":"이벤트를 분석 입력으로 사용","textPreview":"이벤트를 분석 입력으로 사용","textChars":15,"textLines":1,"bbox":[324,330,352,54]}
+{"kind":"textbox","id":"sh/l8v6l4ja","slide":4,"name":"ct-1-2","text":"규제 쟁점·근거 링크·\n검토 필요 사유를 제시","textPreview":"규제 쟁점·근거 링크· | 검토 필요 사유를 제시","textChars":25,"textLines":2,"bbox":[704,330,262,54]}
+{"kind":"textbox","id":"sh/m94ne90v","slide":4,"name":"ct-1-3","text":"검토 큐 등록","textPreview":"검토 큐 등록","textChars":7,"textLines":1,"bbox":[994,330,224,54]}
+{"kind":"shape","id":"sh/naxone1g","slide":4,"name":"cell-2-0","bbox":[48,398,262,86]}
+{"kind":"shape","id":"sh/x4zqd83i","slide":4,"name":"cell-2-1","bbox":[310,398,380,86]}
+{"kind":"shape","id":"sh/w3qpk32x","slide":4,"name":"cell-2-2","bbox":[690,398,290,86]}
+{"kind":"shape","id":"sh/v2h8bylc","slide":4,"name":"cell-2-3","bbox":[980,398,252,86]}
+{"kind":"textbox","id":"sh/a1o7itkr","slide":4,"name":"ct-2-0","text":"사용자 문구","textPreview":"사용자 문구","textChars":6,"textLines":1,"bbox":[62,416,234,54]}
+{"kind":"textbox","id":"sh/58zqhs3e","slide":4,"name":"ct-2-1","text":"운영 설명·리포트 제공","textPreview":"운영 설명·리포트 제공","textChars":12,"textLines":1,"bbox":[324,416,352,54]}
+{"kind":"textbox","id":"sh/k7q9on2t","slide":4,"name":"ct-2-2","text":"투자자문·확정 표현 위험\n사전 탐지","textPreview":"투자자문·확정 표현 위험 | 사전 탐지","textChars":19,"textLines":2,"bbox":[704,416,262,54]}
+{"kind":"textbox","id":"sh/j6h8filo","slide":4,"name":"ct-2-3","text":"문구 수정/승인","textPreview":"문구 수정/승인","textChars":8,"textLines":1,"bbox":[994,416,224,54]}
+{"kind":"shape","id":"sh/i587mdk3","slide":4,"name":"cell-3-0","bbox":[48,484,262,86]}
+{"kind":"shape","id":"sh/twjqls3q","slide":4,"name":"cell-3-1","bbox":[310,484,380,86]}
+{"kind":"shape","id":"sh/sva9sn25","slide":4,"name":"cell-3-2","bbox":[690,484,290,86]}
+{"kind":"shape","id":"sh/orutkrmd","slide":4,"name":"cell-3-3","bbox":[980,484,252,86]}
+{"kind":"textbox","id":"sh/ps3adwny","slide":4,"name":"ct-3-0","text":"감사 추적","textPreview":"감사 추적","textChars":5,"textLines":1,"bbox":[62,502,234,54]}
+{"kind":"textbox","id":"sh/2pcbih47","slide":4,"name":"ct-3-1","text":"주문·체결·EOD 근거 보관","textPreview":"주문·체결·EOD 근거 보관","textChars":15,"textLines":1,"bbox":[324,502,352,54]}
+{"kind":"textbox","id":"sh/3qlsbm5s","slide":4,"name":"ct-3-2","text":"질문·근거·판단 한계·\n승인 이력을 추가","textPreview":"질문·근거·판단 한계· | 승인 이력을 추가","textChars":22,"textLines":2,"bbox":[704,502,262,54]}
+{"kind":"textbox","id":"sh/gnutgrm1","slide":4,"name":"ct-3-3","text":"승인 후 반영","textPreview":"승인 후 반영","textChars":7,"textLines":1,"bbox":[994,502,224,54]}
+{"kind":"textbox","id":"sh/1o3a9wnm","slide":4,"name":"matrix-principle","text":"원칙: 법률 에이전트는 추천·주문·승격을 직접 실행하지 않습니다.","textPreview":"원칙: 법률 에이전트는 추천·주문·승격을 직접 실행하지 않습니다.","textChars":36,"textLines":1,"bbox":[48,602,1130,30]}
+{"kind":"notes","id":"nt/4laev1","slide":4,"text":"[Sources]\n- Local codebase: README.md; core/execution/trader.py; run_live_trader.py\n- Local operating evidence: reports/analysis/automated_trading_system_readiness.json (generated 2026-07-28)\n- This deck proposes product controls; it is not a legal opinion."}
+{"kind":"slide","id":"sl/soolze","slide":5,"title":"QUANTPILOT · LEGAL AGENT DRAFT","textShapes":23}
+{"kind":"textbox","id":"sh/25sny1kf","slide":5,"name":"kicker-5","text":"QUANTPILOT · LEGAL AGENT DRAFT","textPreview":"QUANTPILOT · LEGAL AGENT DRAFT","textChars":30,"textLines":1,"bbox":[48,30,600,24]}
+{"kind":"textbox","id":"sh/p836tgj6","slide":5,"name":"title-5","text":"검토 흐름: 입력을 근거·위험·승인으로 변환","textPreview":"검토 흐름: 입력을 근거·위험·승인으로 변환","textChars":24,"textLines":1,"bbox":[48,64,1110,60]}
+{"kind":"textbox","id":"sh/o7u50b2l","slide":5,"name":"page-5","text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1180,34,52,24]}
+{"kind":"shape","id":"sh/f214n614","slide":5,"bbox":[48,140,1184,1]}
+{"kind":"shape","id":"sh/e1snu1kj","slide":5,"name":"arrowline-0","bbox":[245,340,36,2]}
+{"kind":"textbox","id":"sh/14jmpwju","slide":5,"name":"arrow-0","text":"›","textPreview":"›","textChars":1,"textLines":1,"bbox":[256,316,24,32]}
+{"kind":"shape","id":"sh/g3a5wr2p","slide":5,"name":"step-0","bbox":[48,246,198,216]}
+{"kind":"textbox","id":"sh/ry14jm1s","slide":5,"name":"step-num-0","text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[66,268,40,38]}
+{"kind":"textbox","id":"sh/6d8nqhk7","slide":5,"name":"step-title-0","text":"입력 수집","textPreview":"입력 수집","textChars":5,"textLines":1,"bbox":[66,326,160,30]}
+{"kind":"textbox","id":"sh/8zet8r2d","slide":5,"name":"step-body-0","text":"데이터 소스, 공시, 사용자 문구, 운영 변경","textPreview":"데이터 소스, 공시, 사용자 문구, 운영 변경","textChars":25,"textLines":1,"bbox":[66,374,160,64]}
+{"kind":"shape","id":"sh/90nahwji","slide":5,"name":"arrowline-1","bbox":[481,340,36,2]}
+{"kind":"textbox","id":"sh/mxwb6hk7","slide":5,"name":"arrow-1","text":"›","textPreview":"›","textChars":1,"textLines":1,"bbox":[492,316,24,32]}
+{"kind":"shape","id":"sh/7y5sfm1s","slide":5,"name":"step-1","bbox":[284,246,198,216]}
+{"kind":"textbox","id":"sh/kve94r21","slide":5,"name":"step-num-1","text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[302,268,40,38]}
+{"kind":"textbox","id":"sh/lwnadwjm","slide":5,"name":"step-title-1","text":"쟁점 분류","textPreview":"쟁점 분류","textChars":5,"textLines":1,"bbox":[302,326,160,30]}
+{"kind":"textbox","id":"sh/y9cr2hkv","slide":5,"name":"step-body-1","text":"사용권 · 공시 · 투자자문 오인 · 개인정보","textPreview":"사용권 · 공시 · 투자자문 오인 · 개인정보","textChars":25,"textLines":1,"bbox":[302,374,160,64]}
+{"kind":"shape","id":"sh/zalsbm1g","slide":5,"name":"arrowline-2","bbox":[717,340,36,2]}
+{"kind":"textbox","id":"sh/4rytgbi5","slide":5,"name":"arrow-2","text":"›","textPreview":"›","textChars":1,"textLines":1,"bbox":[728,316,24,32]}
+{"kind":"shape","id":"sh/5s7apgjq","slide":5,"name":"step-2","bbox":[520,246,198,216]}
+{"kind":"textbox","id":"sh/dona9gbu","slide":5,"name":"step-num-2","text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[538,268,40,38]}
+{"kind":"textbox","id":"sh/snut0bap","slide":5,"name":"step-title-2","text":"근거 연결","textPreview":"근거 연결","textChars":5,"textLines":1,"bbox":[538,326,160,30]}
+{"kind":"textbox","id":"sh/rmls76t4","slide":5,"name":"step-body-2","text":"원문, 수집 시각, 적용 범위, 신뢰도","textPreview":"원문, 수집 시각, 적용 범위, 신뢰도","textChars":21,"textLines":1,"bbox":[538,374,160,64]}
+{"kind":"shape","id":"sh/qlcry1sj","slide":5,"name":"arrowline-3","bbox":[953,340,36,2]}
+{"kind":"textbox","id":"sh/5k3a5wby","slide":5,"name":"arrow-3","text":"›","textPreview":"›","textChars":1,"textLines":1,"bbox":[964,316,24,32]}
+{"kind":"shape","id":"sh/4ju9wbad","slide":5,"name":"step-3","bbox":[756,246,198,216]}
+{"kind":"textbox","id":"sh/3ils36ts","slide":5,"name":"step-num-3","text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[774,268,40,38]}
+{"kind":"textbox","id":"sh/ihcru1s7","slide":5,"name":"step-title-3","text":"조치 제안","textPreview":"조치 제안","textChars":5,"textLines":1,"bbox":[774,326,160,30]}
+{"kind":"textbox","id":"sh/hgja1wbm","slide":5,"name":"step-body-3","text":"허용 · 제한 · 담당자 검토 · 차단","textPreview":"허용 · 제한 · 담당자 검토 · 차단","textChars":21,"textLines":1,"bbox":[774,374,160,64]}
+{"kind":"shape","id":"sh/gva9srah","slide":5,"name":"step-4","bbox":[992,246,198,216]}
+{"kind":"textbox","id":"sh/61872x8z","slide":5,"name":"step-num-4","text":"5","textPreview":"5","textChars":1,"textLines":1,"bbox":[1010,268,40,38]}
+{"kind":"textbox","id":"sh/7mh8v29k","slide":5,"name":"step-title-4","text":"승인 기록","textPreview":"승인 기록","textChars":5,"textLines":1,"bbox":[1010,326,160,30]}
+{"kind":"textbox","id":"sh/8nqp47q5","slide":5,"name":"step-body-4","text":"담당자 판단과 최종 반영 이력","textPreview":"담당자 판단과 최종 반영 이력","textChars":16,"textLines":1,"bbox":[1010,374,160,64]}
+{"kind":"textbox","id":"sh/tozqxsrq","slide":5,"name":"flow-principle","text":"자동화 범위는 “분류·근거 제시·기록”까지이며, 법률 해석의 확정과 서비스 정책 반영은 사람의 승인 단계에 남깁니다.","textPreview":"자동화 범위는 “분류·근거 제시·기록”까지이며, 법률 해석의 확정과 서비스 정책 반영은 사람의 승인 단계에 남깁니다.","textChars":65,"textLines":1,"bbox":[48,552,1140,54]}
+{"kind":"notes","id":"nt/soolze","slide":5,"text":"[Sources]\n- Local codebase: README.md; core/execution/trader.py; run_live_trader.py\n- Local operating evidence: reports/analysis/automated_trading_system_readiness.json (generated 2026-07-28)\n- This deck proposes product controls; it is not a legal opinion."}
+{"kind":"slide","id":"sl/sgs9xj","slide":6,"title":"QUANTPILOT · LEGAL AGENT DRAFT","textShapes":20}
+{"kind":"textbox","id":"sh/2h83qxkf","slide":6,"name":"kicker-6","text":"QUANTPILOT · LEGAL AGENT DRAFT","textPreview":"QUANTPILOT · LEGAL AGENT DRAFT","textChars":30,"textLines":1,"bbox":[48,30,600,24]}
+{"kind":"textbox","id":"sh/pkz21c36","slide":6,"name":"title-6","text":"법률 에이전트 KPI는 “정확도”보다 “검토 통제”부터 측정합니다.","textPreview":"법률 에이전트 KPI는 “정확도”보다 “검토 통제”부터 측정합니다.","textChars":37,"textLines":1,"bbox":[48,64,1110,60]}
+{"kind":"textbox","id":"sh/ojqls72l","slide":6,"name":"page-6","text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1180,34,52,24]}
+{"kind":"shape","id":"sh/bm143mlw","slide":6,"bbox":[48,140,1184,1]}
+{"kind":"shape","id":"sh/qls3uhkr","slide":6,"name":"kpi-0","bbox":[48,190,548,150]}
+{"kind":"textbox","id":"sh/d8jm5w32","slide":6,"name":"kpi-head-0","text":"출처 연결률","textPreview":"출처 연결률","textChars":6,"textLines":1,"bbox":[72,214,240,28]}
+{"kind":"shape","id":"sh/c7alwr2h","slide":6,"name":"cur-0","bbox":[72,264,126,30]}
+{"kind":"textbox","id":"sh/za147ml8","slide":6,"name":"cur-0-text","text":"현황: 미측정","textPreview":"현황: 미측정","textChars":7,"textLines":1,"bbox":[82,269,106,18]}
+{"kind":"shape","id":"sh/y9s3yhkn","slide":6,"name":"target-0","bbox":[216,264,132,30]}
+{"kind":"textbox","id":"sh/kn658fil","slide":6,"name":"target-0-text","text":"목표: 100%","textPreview":"목표: 100%","textChars":8,"textLines":1,"bbox":[226,269,112,18]}
+{"kind":"textbox","id":"sh/lofmhkz6","slide":6,"name":"kpi-body-0","text":"검토 결과에 근거 링크·수집시각 보관","textPreview":"검토 결과에 근거 링크·수집시각 보관","textChars":20,"textLines":1,"bbox":[368,262,198,50]}
+{"kind":"shape","id":"sh/ylon6p0f","slide":6,"name":"kpi-1","bbox":[638,190,548,150]}
+{"kind":"textbox","id":"sh/jmx4fu10","slide":6,"name":"kpi-head-1","text":"고위험 이관률","textPreview":"고위험 이관률","textChars":7,"textLines":1,"bbox":[662,214,240,28]}
+{"kind":"shape","id":"sh/srq5czih","slide":6,"name":"cur-1","bbox":[662,264,126,30]}
+{"kind":"textbox","id":"sh/tsz6l4z2","slide":6,"name":"cur-1-text","text":"현황: 미측정","textPreview":"현황: 미측정","textChars":7,"textLines":1,"bbox":[672,269,106,18]}
+{"kind":"shape","id":"sh/6ponap0r","slide":6,"name":"target-1","bbox":[806,264,132,30]}
+{"kind":"textbox","id":"sh/7qhojuhc","slide":6,"name":"target-1-text","text":"목표: 100%","textPreview":"목표: 100%","textChars":8,"textLines":1,"bbox":[816,269,112,18]}
+{"kind":"textbox","id":"sh/gfq5gzit","slide":6,"name":"kpi-body-1","text":"고위험 분류 건은 담당자 승인 없이 반영 금지","textPreview":"고위험 분류 건은 담당자 승인 없이 반영 금지","textChars":25,"textLines":1,"bbox":[958,262,198,50]}
+{"kind":"shape","id":"sh/hgz694ze","slide":6,"name":"kpi-2","bbox":[48,376,548,150]}
+{"kind":"textbox","id":"sh/p0vedkn6","slide":6,"name":"kpi-head-2","text":"승인 이력률","textPreview":"승인 이력률","textChars":6,"textLines":1,"bbox":[72,400,240,28]}
+{"kind":"shape","id":"sh/4zmd4f6l","slide":6,"name":"cur-2","bbox":[72,450,126,30]}
+{"kind":"textbox","id":"sh/3ytwba50","slide":6,"name":"cur-2-text","text":"현황: 미측정","textPreview":"현황: 미측정","textChars":7,"textLines":1,"bbox":[82,455,106,18]}
+{"kind":"shape","id":"sh/2xkv25ov","slide":6,"name":"target-2","bbox":[216,450,132,30]}
+{"kind":"textbox","id":"sh/dovehkni","slide":6,"name":"target-2-text","text":"목표: 100%","textPreview":"목표: 100%","textChars":8,"textLines":1,"bbox":[226,455,112,18]}
+{"kind":"textbox","id":"sh/cnmd8f6x","slide":6,"name":"kpi-body-2","text":"정책·문구 변경에 승인자·사유 보관","textPreview":"정책·문구 변경에 승인자·사유 보관","textChars":19,"textLines":1,"bbox":[368,448,198,50]}
+{"kind":"shape","id":"sh/rmdwfa5c","slide":6,"name":"kpi-3","bbox":[638,376,548,150]}
+{"kind":"textbox","id":"sh/q14v65or","slide":6,"name":"kpi-head-3","text":"평균 검토시간","textPreview":"평균 검토시간","textChars":7,"textLines":1,"bbox":[662,400,240,28]}
+{"kind":"shape","id":"sh/tsbe50ny","slide":6,"name":"cur-3","bbox":[662,450,126,30]}
+{"kind":"textbox","id":"sh/8r2dwv6d","slide":6,"name":"cur-3-text","text":"현황: 미측정","textPreview":"현황: 미측정","textChars":7,"textLines":1,"bbox":[672,455,106,18]}
+{"kind":"shape","id":"sh/yxgb614b","slide":6,"name":"target-3","bbox":[806,450,132,30]}
+{"kind":"textbox","id":"sh/jypsfmlw","slide":6,"name":"target-3-text","text":"목표: 별도 합의","textPreview":"목표: 별도 합의","textChars":9,"textLines":1,"bbox":[816,455,112,18]}
+{"kind":"textbox","id":"sh/kzyt8rmh","slide":6,"name":"kpi-body-3","text":"대기 큐가 운영 병목이 되는지 관찰","textPreview":"대기 큐가 운영 병목이 되는지 관찰","textChars":19,"textLines":1,"bbox":[958,448,198,50]}
+{"kind":"textbox","id":"sh/l0ruhw32","slide":6,"name":"kpi-warning","text":"“목표”는 제안값입니다. 법령 적용 범위, 담당 조직, 검토 SLA를 정한 뒤 확정해야 합니다.","textPreview":"“목표”는 제안값입니다. 법령 적용 범위, 담당 조직, 검토 SLA를 정한 뒤 확정해야 합니다.","textChars":53,"textLines":1,"bbox":[48,592,1120,30]}
+{"kind":"notes","id":"nt/sgs9xj","slide":6,"text":"[Sources]\n- Local codebase: README.md; core/execution/trader.py; run_live_trader.py\n- Local operating evidence: reports/analysis/automated_trading_system_readiness.json (generated 2026-07-28)\n- This deck proposes product controls; it is not a legal opinion."}
+{"kind":"slide","id":"sl/mb9o5u","slide":7,"title":"QUANTPILOT · LEGAL AGENT DRAFT","textShapes":31}
+{"kind":"textbox","id":"sh/5wbaxcne","slide":7,"name":"kicker-7","text":"QUANTPILOT · LEGAL AGENT DRAFT","textPreview":"QUANTPILOT · LEGAL AGENT DRAFT","textChars":30,"textLines":1,"bbox":[48,30,600,24]}
+{"kind":"textbox","id":"sh/it0r2hon","slide":7,"name":"title-7","text":"권한 경계: 에이전트는 판단을 보조하고, 시스템은 안전하게 제한합니다.","textPreview":"권한 경계: 에이전트는 판단을 보조하고, 시스템은 안전하게 제한합니다.","textChars":39,"textLines":1,"bbox":[48,64,1110,60]}
+{"kind":"textbox","id":"sh/ju98vm58","slide":7,"name":"page-7","text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1180,34,52,24]}
+{"kind":"shape","id":"sh/wri9076h","slide":7,"bbox":[48,140,1184,1]}
+{"kind":"shape","id":"sh/hsrqtc72","slide":7,"name":"auth-0","bbox":[48,202,354,330]}
+{"kind":"textbox","id":"sh/up0ryxor","slide":7,"name":"auth-title-0","text":"에이전트가 하는 일","textPreview":"에이전트가 하는 일","textChars":10,"textLines":1,"bbox":[72,232,300,30]}
+{"kind":"textbox","id":"sh/vq98r2pc","slide":7,"name":"authdot-0-0","text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[76,292,20,24]}
+{"kind":"textbox","id":"sh/83y9wn6l","slide":7,"name":"authline-0-0","text":"쟁점 분류","textPreview":"쟁점 분류","textChars":5,"textLines":1,"bbox":[100,292,270,28]}
+{"kind":"textbox","id":"sh/9orqps76","slide":7,"name":"authdot-0-1","text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[76,340,20,24]}
+{"kind":"textbox","id":"sh/9k72lcv6","slide":7,"name":"authline-0-1","text":"근거·인용 제시","textPreview":"근거·인용 제시","textChars":8,"textLines":1,"bbox":[100,340,270,28]}
+{"kind":"textbox","id":"sh/8jy1c7el","slide":7,"name":"authdot-0-2","text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[76,388,20,24]}
+{"kind":"textbox","id":"sh/ni50j2d0","slide":7,"name":"authline-0-2","text":"위험 등급 부여","textPreview":"위험 등급 부여","textChars":8,"textLines":1,"bbox":[100,388,270,28]}
+{"kind":"textbox","id":"sh/mhwjaxwf","slide":7,"name":"authdot-0-3","text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[76,436,20,24]}
+{"kind":"textbox","id":"sh/lgnihsvu","slide":7,"name":"authline-0-3","text":"검토 이력 생성","textPreview":"검토 이력 생성","textChars":8,"textLines":1,"bbox":[100,436,270,28]}
+{"kind":"shape","id":"sh/0fe18ne9","slide":7,"name":"auth-1","bbox":[442,202,354,330]}
+{"kind":"textbox","id":"sh/ze50fid4","slide":7,"name":"auth-title-1","text":"담당자가 하는 일","textPreview":"담당자가 하는 일","textChars":9,"textLines":1,"bbox":[466,232,300,30]}
+{"kind":"textbox","id":"sh/ydwj6xwj","slide":7,"name":"authdot-1-0","text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[470,292,20,24]}
+{"kind":"textbox","id":"sh/dsnidsvy","slide":7,"name":"authline-1-0","text":"법률 해석 확정","textPreview":"법률 해석 확정","textChars":8,"textLines":1,"bbox":[494,292,270,28]}
+{"kind":"textbox","id":"sh/cru14ned","slide":7,"name":"authdot-1-1","text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[470,340,20,24]}
+{"kind":"textbox","id":"sh/4vy10nm9","slide":7,"name":"authline-1-1","text":"정책 예외 승인","textPreview":"정책 예외 승인","textChars":8,"textLines":1,"bbox":[494,340,270,28]}
+{"kind":"textbox","id":"sh/pw72ts3u","slide":7,"name":"authdot-1-2","text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[470,388,20,24]}
+{"kind":"textbox","id":"sh/2tgjyd43","slide":7,"name":"authline-1-2","text":"대외 문구 승인","textPreview":"대외 문구 승인","textChars":8,"textLines":1,"bbox":[494,388,270,28]}
+{"kind":"textbox","id":"sh/3upkrilo","slide":7,"name":"authdot-1-3","text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[470,436,20,24]}
+{"kind":"textbox","id":"sh/g7y1w3mx","slide":7,"name":"authline-1-3","text":"배포·중단 결정","textPreview":"배포·중단 결정","textChars":8,"textLines":1,"bbox":[494,436,270,28]}
+{"kind":"shape","id":"sh/hs7ip83i","slide":7,"name":"auth-2","bbox":[836,202,354,330]}
+{"kind":"textbox","id":"sh/u5wjud47","slide":7,"name":"auth-title-2","text":"시스템이 하는 일","textPreview":"시스템이 하는 일","textChars":9,"textLines":1,"bbox":[860,232,300,30]}
+{"kind":"textbox","id":"sh/f6p0nils","slide":7,"name":"authdot-2-0","text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[864,292,20,24]}
+{"kind":"textbox","id":"sh/03i187mh","slide":7,"name":"authline-2-0","text":"고위험 건 제한","textPreview":"고위험 건 제한","textChars":8,"textLines":1,"bbox":[888,292,270,28]}
+{"kind":"textbox","id":"sh/1or21c32","slide":7,"name":"authdot-2-1","text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[864,340,20,24]}
+{"kind":"textbox","id":"sh/vuxwna9g","slide":7,"name":"authline-2-1","text":"승인 전 반영 금지","textPreview":"승인 전 반영 금지","textChars":10,"textLines":1,"bbox":[888,340,270,28]}
+{"kind":"textbox","id":"sh/ut4ve5sv","slide":7,"name":"authdot-2-2","text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[864,388,20,24]}
+{"kind":"textbox","id":"sh/hwfep0r6","slide":7,"name":"authline-2-2","text":"감사 로그 보관","textPreview":"감사 로그 보관","textChars":8,"textLines":1,"bbox":[888,388,270,28]}
+{"kind":"textbox","id":"sh/wv6dgva1","slide":7,"name":"authdot-2-3","text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[864,436,20,24]}
+{"kind":"textbox","id":"sh/jyxwra9c","slide":7,"name":"authline-2-3","text":"PAPER/REAL 게이트 유지","textPreview":"PAPER/REAL 게이트 유지","textChars":17,"textLines":1,"bbox":[888,436,270,28]}
+{"kind":"textbox","id":"sh/ixovi5sr","slide":7,"name":"auth-ban","text":"금지: 법률 에이전트가 주문을 내거나, REAL 전환을 허용하거나, 법률상 확정 결론을 단독으로 표기하는 방식.","textPreview":"금지: 법률 에이전트가 주문을 내거나, REAL 전환을 허용하거나, 법률상 확정 결론을 단독으로 표기하는 방식.","textChars":62,"textLines":1,"bbox":[48,582,1120,44]}
+{"kind":"notes","id":"nt/mb9o5u","slide":7,"text":"[Sources]\n- Local codebase: README.md; core/execution/trader.py; run_live_trader.py\n- Local operating evidence: reports/analysis/automated_trading_system_readiness.json (generated 2026-07-28)\n- This deck proposes product controls; it is not a legal opinion."}
+{"kind":"slide","id":"sl/zm614q","slide":8,"title":"QUANTPILOT · LEGAL AGENT DRAFT","textShapes":22}
+{"kind":"textbox","id":"sh/z2p4jmtk","slide":8,"name":"kicker-8","text":"QUANTPILOT · LEGAL AGENT DRAFT","textPreview":"QUANTPILOT · LEGAL AGENT DRAFT","textChars":30,"textLines":1,"bbox":[48,30,600,24]}
+{"kind":"textbox","id":"sh/03y5cru5","slide":8,"name":"title-8","text":"도입은 “측정 → 제한 → 승인” 순으로 작게 시작합니다.","textPreview":"도입은 “측정 → 제한 → 승인” 순으로 작게 시작합니다.","textChars":32,"textLines":1,"bbox":[48,64,1110,60]}
+{"kind":"textbox","id":"sh/l47mlcbq","slide":8,"name":"page-8","text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1180,34,52,24]}
+{"kind":"shape","id":"sh/qdwn6xc3","slide":8,"bbox":[48,140,1184,1]}
+{"kind":"shape","id":"sh/be54f2do","slide":8,"name":"phase-0","bbox":[48,238,254,196]}
+{"kind":"textbox","id":"sh/cfe587u9","slide":8,"name":"phase-num-0","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[68,260,60,28]}
+{"kind":"textbox","id":"sh/dgnmhcvu","slide":8,"name":"phase-head-0","text":"기준 정의","textPreview":"기준 정의","textChars":5,"textLines":1,"bbox":[68,312,210,30]}
+{"kind":"textbox","id":"sh/a9gni1c7","slide":8,"name":"phase-body-0","text":"적용 서비스·검토 유형·담당자·SLA 확정","textPreview":"적용 서비스·검토 유형·담당자·SLA 확정","textChars":23,"textLines":1,"bbox":[68,358,210,50]}
+{"kind":"shape","id":"sh/va9or6ts","slide":8,"name":"phase-line-0","bbox":[302,334,38,2]}
+{"kind":"shape","id":"sh/zq58n250","slide":8,"name":"phase-1","bbox":[340,238,254,196]}
+{"kind":"textbox","id":"sh/epwrexof","slide":8,"name":"phase-num-1","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[360,260,60,28]}
+{"kind":"textbox","id":"sh/1snqpsn6","slide":8,"name":"phase-head-1","text":"근거 수집","textPreview":"근거 수집","textChars":5,"textLines":1,"bbox":[360,312,210,30]}
+{"kind":"textbox","id":"sh/0re9g76l","slide":8,"name":"phase-body-1","text":"출처 메타데이터·문구·공시 이벤트를 검토 큐로 적재","textPreview":"출처 메타데이터·문구·공시 이벤트를 검토 큐로 적재","textChars":28,"textLines":1,"bbox":[360,358,210,50]}
+{"kind":"shape","id":"sh/nu5sr25w","slide":8,"name":"phase-line-1","bbox":[594,334,38,2]}
+{"kind":"shape","id":"sh/mtwrixob","slide":8,"name":"phase-2","bbox":[632,238,254,196]}
+{"kind":"textbox","id":"sh/9w7atcn2","slide":8,"name":"phase-num-2","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[652,260,60,28]}
+{"kind":"textbox","id":"sh/ove9k76h","slide":8,"name":"phase-head-2","text":"PAPER 운영","textPreview":"PAPER 운영","textChars":8,"textLines":1,"bbox":[652,312,210,30]}
+{"kind":"textbox","id":"sh/bipsvm58","slide":8,"name":"phase-body-2","text":"실제 서비스 반영 없이 분류·근거·이관률을 측정","textPreview":"실제 서비스 반영 없이 분류·근거·이관률을 측정","textChars":26,"textLines":1,"bbox":[652,358,210,50]}
+{"kind":"shape","id":"sh/axgrmhon","slide":8,"name":"phase-line-2","bbox":[886,334,38,2]}
+{"kind":"shape","id":"sh/6d0bul8v","slide":8,"name":"phase-3","bbox":[924,238,254,196]}
+{"kind":"textbox","id":"sh/7e9cnqpg","slide":8,"name":"phase-num-3","text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[944,260,60,28]}
+{"kind":"textbox","id":"sh/8f2twbq1","slide":8,"name":"phase-head-3","text":"통제 연결","textPreview":"통제 연결","textChars":5,"textLines":1,"bbox":[944,312,210,30]}
+{"kind":"textbox","id":"sh/tgbupg76","slide":8,"name":"phase-body-3","text":"고위험 항목만 정책·배포·운영 게이트와 연결","textPreview":"고위험 항목만 정책·배포·운영 게이트와 연결","textChars":24,"textLines":1,"bbox":[944,358,210,50]}
+{"kind":"textbox","id":"sh/yp0bq18j","slide":8,"name":"dec-head","text":"초기 의사결정 3가지","textPreview":"초기 의사결정 3가지","textChars":11,"textLines":1,"bbox":[48,510,260,28]}
+{"kind":"textbox","id":"sh/jq9cj6p4","slide":8,"name":"dec-n-0","text":"1.","textPreview":"1.","textChars":2,"textLines":1,"bbox":[48,558,24,24]}
+{"kind":"textbox","id":"sh/kritsbqp","slide":8,"name":"dec-0","text":"우선 검토 대상: 데이터 사용권 / 공시 / 사용자 문구","textPreview":"우선 검토 대상: 데이터 사용권 / 공시 / 사용자 문구","textChars":31,"textLines":1,"bbox":[78,558,900,24]}
+{"kind":"textbox","id":"sh/lcrulg7a","slide":8,"name":"dec-n-1","text":"2.","textPreview":"2.","textChars":2,"textLines":1,"bbox":[48,590,24,24]}
+{"kind":"textbox","id":"sh/ilkv2583","slide":8,"name":"dec-1","text":"승인 책임자와 검토 SLA","textPreview":"승인 책임자와 검토 SLA","textChars":14,"textLines":1,"bbox":[78,590,900,24]}
+{"kind":"textbox","id":"sh/3mtcvapo","slide":8,"name":"dec-n-2","text":"3.","textPreview":"3.","textChars":2,"textLines":1,"bbox":[48,622,24,24]}
+{"kind":"textbox","id":"sh/dgfel4rq","slide":8,"name":"dec-2","text":"차단 기준과 예외 승인 절차","textPreview":"차단 기준과 예외 승인 절차","textChars":15,"textLines":1,"bbox":[78,622,900,24]}
+{"kind":"notes","id":"nt/zm614q","slide":8,"text":"[Sources]\n- Local codebase: README.md; core/execution/trader.py; run_live_trader.py\n- Local operating evidence: reports/analysis/automated_trading_system_readiness.json (generated 2026-07-28)\n- This deck proposes product controls; it is not a legal opinion."}
+{"kind":"slide","id":"sl/bx3yn6","slide":9,"title":"NEXT DECISION","textShapes":4}
+{"kind":"textbox","id":"sh/ofm9kva1","slide":9,"name":"close-kicker","text":"NEXT DECISION","textPreview":"NEXT DECISION","textChars":13,"textLines":1,"bbox":[48,52,300,24]}
+{"kind":"textbox","id":"sh/ned8rqtg","slide":9,"name":"close-title","text":"법률 에이전트를\n“검토 통제 계층”으로\n설계할 것인가?","textPreview":"법률 에이전트를 | “검토 통제 계층”으로 | 설계할 것인가?","textChars":30,"textLines":3,"bbox":[48,172,930,232]}
+{"kind":"textbox","id":"sh/2d4rilsv","slide":9,"name":"close-sub","text":"첫 단계는 법률 판단 자동화가 아니라, 근거·위험·승인의 비교지표를 만드는 일입니다.","textPreview":"첫 단계는 법률 판단 자동화가 아니라, 근거·위험·승인의 비교지표를 만드는 일입니다.","textChars":47,"textLines":1,"bbox":[52,454,850,50]}
+{"kind":"textbox","id":"sh/1cvqp0ba","slide":9,"name":"close-foot","text":"검토용 초안","textPreview":"검토용 초안","textChars":6,"textLines":1,"bbox":[48,628,280,26]}
+{"kind":"notes","id":"nt/bx3yn6","slide":9,"text":"[Sources]\n- Local codebase: README.md; core/execution/trader.py; run_live_trader.py\n- Local operating evidence: reports/analysis/automated_trading_system_readiness.json (generated 2026-07-28)\n- This deck proposes product controls; it is not a legal opinion.\nClose with the three decisions on slide 8."}

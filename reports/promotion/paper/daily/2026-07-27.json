@@ -1,28 +1,28 @@
 {
   "schema_version": 2,
-  "report_date": "2026-07-24",
-  "generated_at": "2026-07-28T17:56:23+09:00",
+  "report_date": "2026-07-27",
+  "generated_at": "2026-07-28T17:56:39+09:00",
   "report_status": "FINAL",
   "mode": "PAPER",
   "executive_summary": "REAL 전환은 3개 조건 때문에 차단됐습니다.",
   "performance": {
     "baseline_date": "2026-07-20",
-    "through_date": "2026-07-24",
-    "performance_days": 5,
+    "through_date": "2026-07-27",
+    "performance_days": 6,
     "baseline_total_asset": 463025590.0,
-    "ending_total_asset": 464060814.0,
-    "net_return": 0.0022357813960132145,
-    "benchmark_return": 0.026756119242092424,
-    "excess_return": -0.02452033784607921,
-    "max_drawdown": -0.020561058475523808,
-    "annualized_volatility": 0.23866677127224306,
-    "total_costs": -4746880.4925,
-    "cost_drag": -0.010251875047554067,
+    "ending_total_asset": 460650234.0,
+    "net_return": -0.00513007499218332,
+    "benchmark_return": 0.036751083020033715,
+    "excess_return": -0.041881158012217035,
+    "max_drawdown": -0.027759371206114603,
+    "annualized_volatility": 0.21950281342158465,
+    "total_costs": -5425518.032500001,
+    "cost_drag": -0.01171753386783655,
     "benchmark_symbol": "^KS11",
     "starting_capital_reference": 500000000.0,
-    "pnl_vs_starting_capital": -35939186.0,
-    "return_vs_starting_capital": -0.07187837200000002,
-    "post_baseline_pnl": 1035224.0,
+    "pnl_vs_starting_capital": -39349766.0,
+    "return_vs_starting_capital": -0.07869953200000002,
+    "post_baseline_pnl": -2375356.0,
     "certified_benchmark_date": "2026-07-16",
     "effective_benchmark_date": "2026-07-20",
     "benchmark_anchor_adjusted": true,
@@ -73,28 +73,37 @@
       "cumulative_return": 0.0022357813960132145,
       "drawdown": -0.020561058475523808,
       "benchmark_return": 0.026756119242092424
+    },
+    {
+      "date": "2026-07-27",
+      "total_asset": 460650234.0,
+      "external_cash_flow": 0.0,
+      "daily_return": -0.007349424681222905,
+      "cumulative_return": -0.00513007499218332,
+      "drawdown": -0.027759371206114603,
+      "benchmark_return": 0.036751083020033715
     }
   ],
   "operations": {
-    "as_of": "2026-07-24",
-    "observed_trading_days": 4,
-    "scan_count": 1439,
-    "fresh_scan_count": 1437,
-    "risk_checks_total": 3876,
-    "risk_checks_completed": 3876,
-    "submitted_orders": 17,
-    "reconciled_orders": 17,
-    "critical_incidents": 22,
-    "net_return": 0.0022357813960132145,
-    "benchmark_return": 0.026756119242092424,
-    "max_drawdown": -0.020561058475523808,
-    "cost_drag": -0.010251875047554067,
+    "as_of": "2026-07-27",
+    "observed_trading_days": 5,
+    "scan_count": 1719,
+    "fresh_scan_count": 1716,
+    "risk_checks_total": 4983,
+    "risk_checks_completed": 4983,
+    "submitted_orders": 20,
+    "reconciled_orders": 20,
+    "critical_incidents": 23,
+    "net_return": -0.00513007499218332,
+    "benchmark_return": 0.036751083020033715,
+    "max_drawdown": -0.027759371206114603,
+    "cost_drag": -0.01171753386783655,
     "performance_validation_status": "READY",
-    "data_freshness_rate": 0.9986101459346769,
+    "data_freshness_rate": 0.9982547993019197,
     "risk_check_coverage": 1.0,
     "order_reconciliation_rate": 1.0,
-    "operational_integrity": 0.9986101459346769,
-    "excess_return": -0.02452033784607921,
+    "operational_integrity": 0.9982547993019197,
+    "excess_return": -0.041881158012217035,
     "critical_incidents_detail": [
       {
         "timestamp": "2026-07-21T09:14:51+09:00",
@@ -293,28 +302,37 @@
         "status_name": "주문 안전 차단",
         "summary": "차단사유 (AMBIGUOUS_RESULT_SAME_DAY: 2건)",
         "last_error": null
+      },
+      {
+        "timestamp": "2026-07-27T10:40:20+09:00",
+        "date": "2026-07-27",
+        "time": "10:40:20",
+        "status": "ORDER_RECONCILIATION",
+        "status_name": "주문 정산 대기",
+        "summary": "주문 정산 대기",
+        "last_error": null
       }
     ]
   },
   "daily_operations": {
-    "as_of": "2026-07-24",
+    "as_of": "2026-07-27",
     "observed_trading_days": 1,
-    "scan_count": 376,
-    "fresh_scan_count": 374,
-    "risk_checks_total": 382,
-    "risk_checks_completed": 382,
+    "scan_count": 280,
+    "fresh_scan_count": 279,
+    "risk_checks_total": 1107,
+    "risk_checks_completed": 1107,
     "submitted_orders": 3,
     "reconciled_orders": 3,
-    "critical_incidents": 3,
+    "critical_incidents": 1,
     "net_return": null,
     "benchmark_return": null,
     "max_drawdown": null,
     "cost_drag": null,
     "performance_validation_status": null,
-    "data_freshness_rate": 0.9946808510638298,
+    "data_freshness_rate": 0.9964285714285714,
     "risk_check_coverage": 1.0,
     "order_reconciliation_rate": 1.0,
-    "operational_integrity": 0.9946808510638298,
+    "operational_integrity": 0.9964285714285714,
     "excess_return": null
   },
   "critical_incidents_detail": [
@@ -515,31 +533,40 @@
       "status_name": "주문 안전 차단",
       "summary": "차단사유 (AMBIGUOUS_RESULT_SAME_DAY: 2건)",
       "last_error": null
+    },
+    {
+      "timestamp": "2026-07-27T10:40:20+09:00",
+      "date": "2026-07-27",
+      "time": "10:40:20",
+      "status": "ORDER_RECONCILIATION",
+      "status_name": "주문 정산 대기",
+      "summary": "주문 정산 대기",
+      "last_error": null
     }
   ],
   "trading": {
-    "order_count": 17,
-    "terminal_order_count": 17,
+    "order_count": 20,
+    "terminal_order_count": 20,
     "open_order_count": 0,
-    "execution_count": 36,
+    "execution_count": 45,
     "order_status_counts": {
-      "FILLED": 11,
+      "FILLED": 14,
       "REJECTED": 6
     },
-    "filled_order_count": 11,
-    "fill_rate": 0.6470588235294118,
-    "terminal_fill_rate": 0.6470588235294118,
-    "execution_linked_filled_order_count": 11,
+    "filled_order_count": 14,
+    "fill_rate": 0.7,
+    "terminal_fill_rate": 0.7,
+    "execution_linked_filled_order_count": 14,
     "execution_link_coverage": 1.0,
-    "fill_notional": 603581050.0,
-    "turnover_since_baseline": 1.3035587298749514,
-    "execution_days": 4,
-    "average_daily_turnover": 0.32588968246873784,
-    "commission": 90537.15749999997,
+    "fill_notional": 811997450.0,
+    "turnover_since_baseline": 1.75367726436027,
+    "execution_days": 5,
+    "average_daily_turnover": 0.350735452872054,
+    "commission": 121799.61749999998,
     "tax": 730432.3499999999,
-    "slippage": -5567850.0,
-    "total_costs": -4746880.4925,
-    "modeled_commission_execution_count": 36,
+    "slippage": -6277750.0,
+    "total_costs": -5425518.032500001,
+    "modeled_commission_execution_count": 45,
     "modeled_tax_execution_count": 22,
     "cost_method": "recorded when non-zero; otherwise configured KOSPI model"
   },
@@ -951,7 +978,7 @@
       {
         "name": "operational_log",
         "passed": true,
-        "detail": "1439 cumulative scans; 376 daily scans"
+        "detail": "1719 cumulative scans; 280 daily scans"
       },
       {
         "name": "certified_baseline",
@@ -961,7 +988,7 @@
       {
         "name": "account_snapshot_freshness",
         "passed": true,
-        "detail": "2026-07-24T15:20:30+09:00"
+        "detail": "2026-07-27T15:20:49+09:00"
       },
       {
         "name": "cash_flow_ledger",
@@ -971,7 +998,7 @@
       {
         "name": "benchmark_download",
         "passed": true,
-        "detail": "6 KOSPI closes"
+        "detail": "7 KOSPI closes"
       },
       {
         "name": "benchmark_anchor_alignment",
@@ -981,7 +1008,7 @@
       {
         "name": "scoped_order_execution_data",
         "passed": true,
-        "detail": "17 orders / 36 executions"
+        "detail": "20 orders / 45 executions"
       },
       {
         "name": "paper_ledger_reconstruction",
@@ -991,7 +1018,7 @@
       {
         "name": "performance_calculation",
         "passed": true,
-        "detail": "5 daily NAV observations"
+        "detail": "6 daily NAV observations"
       }
     ],
     "errors": []
@@ -1001,9 +1028,9 @@
     "ready": false,
     "manual_approval_required": true,
     "blockers": [
-      "observed_trading_days 4 < 60",
-      "critical_incidents 22 > 0",
-      "excess_return -0.0245 <= 0.0000"
+      "observed_trading_days 5 < 60",
+      "critical_incidents 23 > 0",
+      "excess_return -0.0419 <= 0.0000"
     ]
   },
   "sources": [

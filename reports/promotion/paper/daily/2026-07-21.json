@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "report_date": "2026-07-21",
-  "generated_at": "2026-07-22T11:33:15+09:00",
+  "generated_at": "2026-07-28T17:55:33+09:00",
   "report_status": "FINAL",
   "mode": "PAPER",
   "executive_summary": "REAL 전환은 4개 조건 때문에 차단됐습니다.",
@@ -67,8 +67,87 @@
     "risk_check_coverage": 1.0,
     "order_reconciliation_rate": 1.0,
     "operational_integrity": 1.0,
-    "excess_return": -0.01227870231598005
+    "excess_return": -0.01227870231598005,
+    "critical_incidents_detail": [
+      {
+        "timestamp": "2026-07-21T09:14:51+09:00",
+        "date": "2026-07-21",
+        "time": "09:14:51",
+        "status": "ORDER_RECONCILIATION",
+        "status_name": "주문 정산 대기",
+        "summary": "KOSPI 시장국면 오류: KOSPI 데이터가 오래됨(last=2026-07-16, expected=2026-07-20)",
+        "last_error": "KOSPI 시장국면 오류: KOSPI 데이터가 오래됨(last=2026-07-16, expected=2026-07-20)"
+      },
+      {
+        "timestamp": "2026-07-21T09:31:47+09:00",
+        "date": "2026-07-21",
+        "time": "09:31:47",
+        "status": "ENTRY_CIRCUIT_BREAKER",
+        "status_name": "시장지수 서킷브레이커",
+        "summary": "KOSPI 시장국면 오류: KOSPI 데이터가 오래됨(last=2026-07-16, expected=2026-07-20) | 서킷브레이커 (DEPENDENCY_ERROR_ENTRY_BLOCK)",
+        "last_error": "KOSPI 시장국면 오류: KOSPI 데이터가 오래됨(last=2026-07-16, expected=2026-07-20)"
+      },
+      {
+        "timestamp": "2026-07-21T10:36:55+09:00",
+        "date": "2026-07-21",
+        "time": "10:36:55",
+        "status": "ORDER_SUPPRESSION",
+        "status_name": "주문 안전 차단",
+        "summary": "차단사유 (AMBIGUOUS_RESULT_SAME_DAY: 1건)",
+        "last_error": null
+      }
+    ]
   },
+  "daily_operations": {
+    "as_of": "2026-07-21",
+    "observed_trading_days": 1,
+    "scan_count": 357,
+    "fresh_scan_count": 357,
+    "risk_checks_total": 1456,
+    "risk_checks_completed": 1456,
+    "submitted_orders": 7,
+    "reconciled_orders": 7,
+    "critical_incidents": 3,
+    "net_return": null,
+    "benchmark_return": null,
+    "max_drawdown": null,
+    "cost_drag": null,
+    "performance_validation_status": null,
+    "data_freshness_rate": 1.0,
+    "risk_check_coverage": 1.0,
+    "order_reconciliation_rate": 1.0,
+    "operational_integrity": 1.0,
+    "excess_return": null
+  },
+  "critical_incidents_detail": [
+    {
+      "timestamp": "2026-07-21T09:14:51+09:00",
+      "date": "2026-07-21",
+      "time": "09:14:51",
+      "status": "ORDER_RECONCILIATION",
+      "status_name": "주문 정산 대기",
+      "summary": "KOSPI 시장국면 오류: KOSPI 데이터가 오래됨(last=2026-07-16, expected=2026-07-20)",
+      "last_error": "KOSPI 시장국면 오류: KOSPI 데이터가 오래됨(last=2026-07-16, expected=2026-07-20)"
+    },
+    {
+      "timestamp": "2026-07-21T09:31:47+09:00",
+      "date": "2026-07-21",
+      "time": "09:31:47",
+      "status": "ENTRY_CIRCUIT_BREAKER",
+      "status_name": "시장지수 서킷브레이커",
+      "summary": "KOSPI 시장국면 오류: KOSPI 데이터가 오래됨(last=2026-07-16, expected=2026-07-20) | 서킷브레이커 (DEPENDENCY_ERROR_ENTRY_BLOCK)",
+      "last_error": "KOSPI 시장국면 오류: KOSPI 데이터가 오래됨(last=2026-07-16, expected=2026-07-20)"
+    },
+    {
+      "timestamp": "2026-07-21T10:36:55+09:00",
+      "date": "2026-07-21",
+      "time": "10:36:55",
+      "status": "ORDER_SUPPRESSION",
+      "status_name": "주문 안전 차단",
+      "summary": "차단사유 (AMBIGUOUS_RESULT_SAME_DAY: 1건)",
+      "last_error": null
+    }
+  ],
   "trading": {
     "order_count": 7,
     "terminal_order_count": 7,
@@ -98,7 +177,7 @@
   "ledger_quality": {},
   "shadow_reentry": {
     "schema_version": 1,
-    "generated_at": "2026-07-22T11:32:56+09:00",
+    "generated_at": "2026-07-28T15:20:53+09:00",
     "mode": "PAPER",
     "strategy": "aggressive",
     "account_scope": "***9904-01",
@@ -119,9 +198,13 @@
       "required_consecutive_sessions": 3
     },
     "observed_sessions": [
-      "2026-07-21"
+      "2026-07-21",
+      "2026-07-22",
+      "2026-07-23",
+      "2026-07-24",
+      "2026-07-27"
     ],
-    "completed_observation_sessions": 1,
+    "completed_observation_sessions": 5,
     "required_observation_sessions": 10,
     "observation_window_complete": false,
     "risk_exit_count": 5,
@@ -135,14 +218,14 @@
         "exit_price_source": "ORDER_EXPECTED_PRICE",
         "exit_reason": "TRAILING_STOP",
         "broker_order_id": "0000004843",
-        "signal_date": "2026-07-21",
+        "signal_date": "2026-07-27",
         "production_position_present": false,
         "observation": {
           "data_ready": true,
-          "close": 259000.0,
-          "ma20": 296250.0,
-          "previous_ma20": 300975.0,
-          "momentum20": -0.26732673267326734,
+          "close": 254000.0,
+          "ma20": 280525.0,
+          "previous_ma20": 284800.0,
+          "momentum20": -0.25184094256259204,
           "conditions": {
             "above_exit_price": true,
             "above_ma20": false,
@@ -151,7 +234,7 @@
           },
           "all_conditions_met": false
         },
-        "eligible_after_exit_session": false,
+        "eligible_after_exit_session": true,
         "qualifies_today": false,
         "confirmation_streak": 0,
         "required_confirmation_sessions": 3,
@@ -166,14 +249,14 @@
         "exit_price_source": "ORDER_EXPECTED_PRICE",
         "exit_reason": "HARD_STOP_LOSS",
         "broker_order_id": "0000038017",
-        "signal_date": "2026-07-21",
+        "signal_date": "2026-07-27",
         "production_position_present": false,
         "observation": {
           "data_ready": true,
-          "close": 629000.0,
-          "ma20": 809250.0,
-          "previous_ma20": 834300.0,
-          "momentum20": -0.4433628318584071,
+          "close": 614000.0,
+          "ma20": 745900.0,
+          "previous_ma20": 761750.0,
+          "momentum20": -0.3404940923737916,
           "conditions": {
             "above_exit_price": false,
             "above_ma20": false,
@@ -197,14 +280,14 @@
         "exit_price_source": "ORDER_EXPECTED_PRICE",
         "exit_reason": "TRAILING_STOP",
         "broker_order_id": "0000006063",
-        "signal_date": "2026-07-21",
+        "signal_date": "2026-07-27",
         "production_position_present": false,
         "observation": {
           "data_ready": true,
-          "close": 596000.0,
-          "ma20": 675500.0,
-          "previous_ma20": 682200.0,
-          "momentum20": -0.18356164383561646,
+          "close": 623000.0,
+          "ma20": 647600.0,
+          "previous_ma20": 657200.0,
+          "momentum20": -0.23558282208588954,
           "conditions": {
             "above_exit_price": true,
             "above_ma20": false,
@@ -213,7 +296,7 @@
           },
           "all_conditions_met": false
         },
-        "eligible_after_exit_session": false,
+        "eligible_after_exit_session": true,
         "qualifies_today": false,
         "confirmation_streak": 0,
         "required_confirmation_sessions": 3,
@@ -228,14 +311,14 @@
         "exit_price_source": "ORDER_EXPECTED_PRICE",
         "exit_reason": "HARD_STOP_LOSS",
         "broker_order_id": "0000037707",
-        "signal_date": "2026-07-21",
+        "signal_date": "2026-07-27",
         "production_position_present": false,
         "observation": {
           "data_ready": true,
-          "close": 102800.0,
-          "ma20": 121215.0,
-          "previous_ma20": 121765.0,
-          "momentum20": -0.09666080843585234,
+          "close": 110700.0,
+          "ma20": 119335.0,
+          "previous_ma20": 119560.0,
+          "momentum20": -0.0390625,
           "conditions": {
             "above_exit_price": false,
             "above_ma20": false,
@@ -259,16 +342,16 @@
         "exit_price_source": "ORDER_EXPECTED_PRICE",
         "exit_reason": "HARD_STOP_LOSS",
         "broker_order_id": "0000037871",
-        "signal_date": "2026-07-21",
+        "signal_date": "2026-07-27",
         "production_position_present": false,
         "observation": {
           "data_ready": true,
-          "close": 1253000.0,
-          "ma20": 1484500.0,
-          "previous_ma20": 1520350.0,
-          "momentum20": -0.36395939086294415,
+          "close": 1096000.0,
+          "ma20": 1354800.0,
+          "previous_ma20": 1386000.0,
+          "momentum20": -0.3627906976744186,
           "conditions": {
-            "above_exit_price": true,
+            "above_exit_price": false,
             "above_ma20": false,
             "ma20_rising": false,
             "momentum20_positive": false
@@ -306,9 +389,24 @@
         "detail": "current=45.83x, shadow=23.65x"
       },
       {
+        "name": "execution_stress_matches_current_ledger",
+        "passed": false,
+        "detail": "current=None, stress=559"
+      },
+      {
+        "name": "execution_model_sample_ready",
+        "passed": false,
+        "detail": "BUY=12/30, SELL=9/30"
+      },
+      {
+        "name": "execution_stress_all_scenarios_pass",
+        "passed": false,
+        "detail": "2/3 scenarios"
+      },
+      {
         "name": "live_shadow_observation_window",
         "passed": false,
-        "detail": "1/10 completed sessions"
+        "detail": "5/10 completed sessions"
       },
       {
         "name": "shadow_is_observe_only",
@@ -321,7 +419,17 @@
         "detail": "unavailable"
       },
       {
-        "name": "filled_order_execution_link_coverage",
+        "name": "filled_order_auditable_evidence_coverage",
+        "passed": false,
+        "detail": "unavailable"
+      },
+      {
+        "name": "order_result_replay_priced_fill_coverage",
+        "passed": false,
+        "detail": "unavailable"
+      },
+      {
+        "name": "order_result_replay_500m_reconciled",
         "passed": false,
         "detail": "unavailable"
       },
@@ -332,7 +440,12 @@
       }
     ],
     "blockers": [
-      "1/10 completed sessions",
+      "current=None, stress=559",
+      "BUY=12/30, SELL=9/30",
+      "2/3 scenarios",
+      "5/10 completed sessions",
+      "unavailable",
+      "unavailable",
       "unavailable",
       "unavailable"
     ],
@@ -404,6 +517,62 @@
         "trailing_stop_count": 16,
         "reentry_blocked_sessions": 492,
         "confirmed_reentries": 14
+      },
+      "execution_stress": {
+        "generated_at": "2026-07-28T15:55:42+09:00",
+        "calibration_status": "PROVISIONAL_SMALL_SAMPLE",
+        "scenario_checks": [
+          {
+            "scenario": "IDEAL_FULL_FILL",
+            "return_improves": true,
+            "drawdown_improves": true,
+            "turnover_improves": true,
+            "passed": true,
+            "candidate_return": -0.000305977118945866,
+            "baseline_return": -0.017502667640842073,
+            "candidate_mdd": -0.1716468902972471,
+            "baseline_mdd": -0.1906481376690169,
+            "candidate_turnover": 23.653884299835617,
+            "baseline_turnover": 45.83367107763751
+          },
+          {
+            "scenario": "STABILIZED_POSTERIOR_MEAN",
+            "return_improves": true,
+            "drawdown_improves": true,
+            "turnover_improves": true,
+            "passed": true,
+            "candidate_return": 0.04162543421155562,
+            "baseline_return": 0.014995342202965611,
+            "candidate_mdd": -0.15398745239419565,
+            "baseline_mdd": -0.19686129018322474,
+            "candidate_turnover": 21.323686760121895,
+            "baseline_turnover": 37.333299294168974
+          },
+          {
+            "scenario": "STABILIZED_WILSON_LOWER",
+            "return_improves": false,
+            "drawdown_improves": true,
+            "turnover_improves": true,
+            "passed": false,
+            "candidate_return": -0.019182651041851795,
+            "baseline_return": -0.013701366322538266,
+            "candidate_mdd": -0.1558256037100062,
+            "baseline_mdd": -0.19710009788513028,
+            "candidate_turnover": 19.233913378813483,
+            "baseline_turnover": 33.12934901866531
+          }
+        ],
+        "promotion_gate": {
+          "ready": false,
+          "minimum_side_sample": 30,
+          "sample_ready": false,
+          "all_execution_scenarios_pass": false,
+          "manual_review_required": true,
+          "blockers": [
+            "post-hardening BUY and SELL samples have not each reached 30 orders",
+            "trend-rearm does not improve return, drawdown, and turnover in every execution scenario"
+          ]
+        }
       }
     }
   },
@@ -413,7 +582,7 @@
       {
         "name": "operational_log",
         "passed": true,
-        "detail": "357 completed scans"
+        "detail": "357 cumulative scans; 357 daily scans"
       },
       {
         "name": "certified_baseline",
@@ -448,7 +617,7 @@
       {
         "name": "paper_ledger_reconstruction",
         "passed": true,
-        "detail": "not recomputed for historical report date; dashboard endpoint is 2026-07-22"
+        "detail": "not recomputed for historical report date; dashboard endpoint is 2026-07-28"
       },
       {
         "name": "performance_calculation",
@@ -477,7 +646,8 @@
     "Yahoo Finance ^KS11 via data loader",
     "PostgreSQL orders + executions (strategy/venue/account scoped)",
     "C:\\dev\\project\\Service_Stock_Analysis\\logs\\paper\\shadow_reentry_state.json",
-    "C:\\dev\\project\\Service_Stock_Analysis\\reports\\analysis\\paper_reentry_experiments\\pass_only\\metrics.json"
+    "C:\\dev\\project\\Service_Stock_Analysis\\reports\\analysis\\paper_reentry_experiments\\pass_only\\metrics.json",
+    "C:\\dev\\project\\Service_Stock_Analysis\\reports\\analysis\\paper_execution_stress\\latest\\summary.json"
   ],
   "reader_caveats": [
     "수익률은 인증 기준선 이후 계좌 NAV의 시간가중수익률입니다.",
