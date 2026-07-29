@@ -203,6 +203,7 @@ def test_ambiguous_broker_result_blocks_same_day_retry():
         "fetch_all": lambda *a, **k: [{
             "symbol": "005930", "order_side_code": "BUY",
             "order_status_code": "REJECTED", "had_unknown_result": True,
+            "unknown_result_message": "500 Server Error: Internal Server Error",
         }]
     })()
     trader._price_guard_blocked = lambda *args: False
@@ -219,7 +220,16 @@ def test_ambiguous_broker_result_blocks_same_day_retry():
         "ticker": "005930.KS",
         "side": "BUY",
         "reason": "AMBIGUOUS_RESULT_SAME_DAY",
+        "incident_code": "BROKER_HTTP_500",
     }]
+
+
+def test_broker_incident_codes_redact_transport_details():
+    assert LiveTrader._broker_incident_code(
+        "500 Server Error for url: https://broker.example/order?secret=hidden"
+    ) == "BROKER_HTTP_500"
+    assert LiveTrader._broker_incident_code("request timed out") == "BROKER_TIMEOUT"
+    assert LiveTrader._broker_incident_code("connection reset") == "BROKER_TRANSPORT_ERROR"
 
 
 def test_filled_order_is_not_reported_as_suppression_when_no_order_is_needed():
@@ -480,6 +490,18 @@ def test_decision_snapshot_explains_zero_and_selected_targets(tmp_path, monkeypa
     assert (trader.log_dir / "decision_history.jsonl").read_text(encoding="utf-8").count("\n") == 1
 
 
+def test_json_state_writer_replaces_dashboard_state_without_leaving_temp_file(tmp_path):
+    path = tmp_path / "nested" / "dashboard_state.json"
+
+    LiveTrader._write_json_state(path, {"operational_status": "SCANNING"})
+    LiveTrader._write_json_state(path, {"operational_status": "NORMAL"})
+
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "operational_status": "NORMAL"
+    }
+    assert not path.with_suffix(".json.tmp").exists()
+
+
 def test_snapshot_only_capture_is_scoped_and_places_no_order(tmp_path):
     class ReadOnlyBroker:
         masked_account = "1234****"
@@ -538,6 +560,25 @@ def test_dashboard_counts_execution_outcomes_not_order_candidates(tmp_path):
     assert payload["order_suppressions"]["by_reason"] == {
         "AMBIGUOUS_RESULT_SAME_DAY": 1,
     }
+    assert payload["data_health"]["order_suppressions"] == payload["order_suppressions"]
+    assert payload["operational_status"] == "ORDER_SUPPRESSION"
+
+
+def test_scan_preserves_prior_critical_suppression_status():
+    status = LiveTrader._derive_scan_operational_status(
+        {
+            "risk_checks_total": 1,
+            "risk_checks_completed": 1,
+            "order_suppressions": {
+                "total": 1,
+                "by_reason": {"AMBIGUOUS_RESULT_SAME_DAY": 1},
+            },
+        },
+        {"open": 0},
+    )
+
+    assert status == "ORDER_SUPPRESSION"
+    assert LiveTrader._derive_scan_operational_status({}, {"open": 0}) == "SCANNING"
 
 
 def test_broker_trailing_stop_does_not_require_daily_bars():

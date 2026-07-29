@@ -1,6 +1,9 @@
 import datetime as dt
 import json
+import sys
+from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 from fastapi import HTTPException
 
@@ -81,6 +84,47 @@ def test_overview_uses_mode_scoped_official_report(monkeypatch, tmp_path):
     assert body["system_readiness"]["progress"]["paper_sessions"]["completed"] == 1
 
 
+def test_service_healthz_requires_a_successful_database_round_trip(monkeypatch):
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, query):
+            assert query == "SELECT 1 AS ok"
+
+        def fetchone(self):
+            return {"ok": 1}
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def cursor(self):
+            return Cursor()
+
+    monkeypatch.setattr(dashboard_api, "_db_connect", lambda: Connection())
+
+    assert dashboard_api.get_service_health() == {
+        "status": "ok",
+        "database": "ready",
+    }
+
+
+def test_service_healthz_returns_503_when_database_is_unavailable(monkeypatch):
+    monkeypatch.setattr(dashboard_api, "_db_connect", lambda: None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        dashboard_api.get_service_health()
+
+    assert exc_info.value.status_code == 503
+
+
 def test_report_list_and_content_share_the_same_daily_artifact(monkeypatch, tmp_path):
     log_root, report_root, _ = _seed(tmp_path)
     monkeypatch.setattr(dashboard_api, "LOG_ROOT", log_root)
@@ -127,6 +171,29 @@ def test_report_freshness_surfaces_redacted_eod_failure():
 
     assert result["state"] == "FAILED"
     assert "benchmark download failed" in result["message"]
+
+
+def test_runtime_api_payload_redacts_broker_transport_details():
+    payload = {
+        "last_error": (
+            "500 Server Error for url: "
+            "https://openapivts.koreainvestment.com/order?"
+            "CANO=12345678&appkey=secret-value"
+        ),
+        "data_health": {
+            "dependency_errors": [
+                "request timed out at https://openapivts.koreainvestment.com/order"
+            ],
+        },
+    }
+
+    result = dashboard_api._sanitize_runtime_errors(payload)
+
+    assert result["last_error"] == "BROKER_HTTP_500"
+    assert result["data_health"]["dependency_errors"] == ["BROKER_TIMEOUT"]
+    assert "openapivts" not in json.dumps(result).lower()
+    assert "12345678" not in json.dumps(result)
+    assert "secret-value" not in json.dumps(result)
 
 
 def test_report_freshness_requires_final_and_ready_for_current():
@@ -212,3 +279,199 @@ def test_system_readiness_endpoint_is_read_only_and_mode_scoped(
     with pytest.raises(HTTPException) as exc_info:
         dashboard_api.get_system_readiness(mode="REAL")
     assert exc_info.value.status_code == 404
+
+
+def test_market_breadth_does_not_turn_missing_values_into_zeroes(monkeypatch, tmp_path):
+    log_root, _, _ = _seed(tmp_path)
+    monkeypatch.setattr(dashboard_api, "LOG_ROOT", log_root)
+
+    payload = dashboard_api.get_market_breadth()
+
+    assert payload["available"] is False
+    assert payload["total"] is None
+
+
+def test_market_breadth_uses_and_labels_the_actual_paper_universe(monkeypatch, tmp_path):
+    log_root, _, _ = _seed(tmp_path)
+    tickers = [f"{index:06d}.KS" for index in range(10)]
+    (log_root / "paper" / "decision_history.jsonl").write_text(
+        json.dumps(
+            {
+                "updated_at": "2026-07-28T15:20:00",
+                "market_regime": "UPTREND",
+                "decisions": [{"ticker": ticker} for ticker in tickers],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    index = pd.to_datetime(["2026-07-27", "2026-07-28"])
+    quotes = pd.DataFrame(
+        {
+            (ticker, "Close"): [100.0, 101.0 if position < 5 else 99.0]
+            for position, ticker in enumerate(tickers)
+        }
+        | {(ticker, "Volume"): [1000, 2000] for ticker in tickers},
+        index=index,
+    )
+    quotes.columns = pd.MultiIndex.from_tuples(quotes.columns)
+    monkeypatch.setattr(dashboard_api, "LOG_ROOT", log_root)
+    monkeypatch.setattr(
+        dashboard_api,
+        "_BREADTH_CACHE",
+        {"timestamp": 0, "payload": None},
+    )
+    download_kwargs = {}
+    monkeypatch.setitem(
+        sys.modules,
+        "yfinance",
+        SimpleNamespace(download=lambda **kwargs: download_kwargs.update(kwargs) or quotes),
+    )
+
+    payload = dashboard_api.get_market_breadth()
+
+    assert payload["available"] is True
+    assert payload["source"] == "YFINANCE_PAPER_UNIVERSE"
+    assert payload["advancing"] == 5
+    assert payload["declining"] == 5
+    assert payload["coverage"] == 10
+    assert payload["universe_size"] == 10
+    assert download_kwargs["threads"] is True
+    assert download_kwargs["timeout"] == dashboard_api._BREADTH_YFINANCE_TIMEOUT_SECONDS
+
+
+def test_sector_payload_reads_wics_names_from_the_current_codes_schema(monkeypatch):
+    latest = dt.date(2026, 7, 28)
+    previous = dt.date(2026, 7, 27)
+
+    class Cursor:
+        def __init__(self):
+            self.queries = []
+            self.step = 0
+
+        def execute(self, query, _params=None):
+            self.queries.append(query)
+            self.step += 1
+
+        def fetchall(self):
+            responses = {
+                1: [{"price_date": latest}, {"price_date": previous}],
+                2: [{"code": "G4530", "name": "반도체와반도체장비"}],
+                3: [
+                    {"industry_code": "G4530", "price_date": previous, "index_value": 1000.0},
+                    {"industry_code": "G4530", "price_date": latest, "index_value": 1025.0},
+                ],
+                5: [{"industry_code": "G4530", "volume": 100, "market_cap": 200, "stock_count": 3}],
+                6: [{"industry_code": "G4530", "company_name": "테스트", "stock_code": "005930"}],
+            }
+            return responses[self.step]
+
+        def fetchone(self):
+            assert self.step == 4
+            return {"base_date": latest}
+
+    monkeypatch.setattr(dashboard_api, "_expected_completed_krx_date", lambda: latest)
+    cursor = Cursor()
+
+    payload = dashboard_api._sector_payload_from_prices(
+        cursor,
+        source_code="DERIVED",
+        method_version="mcap-v1",
+        source_label="WICS_DERIVED_MCAP_V1",
+    )
+
+    assert "code_group = 'WICS_INDUSTRY_CODE'" in cursor.queries[1]
+    assert payload["source"] == "WICS_DERIVED_MCAP_V1"
+    assert payload["items"] == [{
+        "code": "G4530",
+        "name": "반도체와반도체장비",
+        "change_rate": 2.5,
+        "index_value": 1025.0,
+        "prev_value": 1000.0,
+        "volume": 100,
+        "market_cap": 200,
+        "stock_count": 3,
+        "top_stock": "테스트",
+    }]
+
+
+def test_finite_float_rejects_database_nan_values():
+    assert dashboard_api._finite_float(float("nan")) is None
+
+
+def test_index_history_contains_only_overlapping_observed_closes():
+    index = pd.to_datetime(["2026-07-24", "2026-07-25", "2026-07-28"])
+    kospi = pd.DataFrame({"Close": [3200.0, 3210.0, 3220.0]}, index=index)
+    kosdaq = pd.DataFrame({"Close": [800.0, 805.0]}, index=index[1:])
+
+    history = dashboard_api._index_history_points(kospi, kosdaq)
+
+    assert history == [
+        {"date": "2026-07-25", "KOSPI": 3210.0, "KOSDAQ": 800.0},
+        {"date": "2026-07-28", "KOSPI": 3220.0, "KOSDAQ": 805.0},
+    ]
+
+
+def test_market_regime_falls_back_to_latest_paper_decision_without_defaults(
+    monkeypatch, tmp_path
+):
+    log_root, _, analysis_root = _seed(tmp_path)
+    (log_root / "paper" / "decision_history.jsonl").write_text(
+        json.dumps(
+            {
+                "updated_at": "2026-07-28T15:20:00",
+                "market_regime": "DOWNTREND",
+                "decisions": [],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(dashboard_api, "LOG_ROOT", log_root)
+    monkeypatch.setattr(dashboard_api, "ANALYSIS_ROOT", analysis_root)
+
+    payload = dashboard_api.get_market_regime()
+
+    assert payload["available"] is True
+    assert payload["source"] == "PAPER_DECISION_HISTORY"
+    assert payload["current"] == "DOWNTREND"
+    assert payload["confidence"] is None
+    assert payload["signal"] is None
+
+
+def test_journal_reads_the_mode_scoped_certified_report(monkeypatch, tmp_path):
+    _, report_root, _ = _seed(tmp_path)
+    payload = {
+        "report_date": "2026-07-21",
+        "report_status": "FINAL",
+        "mode": "PAPER",
+        "performance": {
+            "starting_capital_reference": 500_000_000,
+            "ending_total_asset": 510_000_000,
+            "pnl_vs_starting_capital": 10_000_000,
+        },
+        "performance_trend": [
+            {
+                "date": "2026-07-20",
+                "total_asset": 500_000_000,
+                "cumulative_return": 0.0,
+                "benchmark_return": 0.0,
+            },
+            {
+                "date": "2026-07-21",
+                "total_asset": 510_000_000,
+                "cumulative_return": 0.02,
+                "benchmark_return": 0.01,
+            },
+        ],
+    }
+    _write_json(report_root / "paper" / "latest.json", payload)
+    monkeypatch.setattr(dashboard_api, "REPORT_ROOT", report_root)
+    monkeypatch.setattr(dashboard_api, "_db_connect", lambda: None)
+
+    journal = dashboard_api.get_journal(mode="PAPER")
+
+    assert journal["available"] is True
+    assert journal["source"] == "CERTIFIED_EOD_REPORT"
+    assert journal["summary"]["observed_sessions"] == 2
+    assert journal["benchmark_history"][-1]["benchmark_return"] == 1.0

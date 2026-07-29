@@ -211,6 +211,101 @@ def test_wics_constituent_job_uses_tqdm_for_progress(monkeypatch):
     assert tqdm_calls == [{"desc": "WICS 가격", "unit": "종목"}]
 
 
+def test_wics_constituent_job_rebuilds_derived_industry_prices_when_requested(
+    monkeypatch,
+):
+    monkeypatch.setattr(wics_industry_job, "fetch_kospi_wics_stock_codes", lambda db: [])
+    monkeypatch.setattr(wics_industry_job, "fetch_latest_constituent_price_dates", lambda db: {})
+    rebuild_calls = []
+    monkeypatch.setattr(
+        wics_industry_job,
+        "_refresh_derived_industry_prices",
+        lambda db, cutoff: rebuild_calls.append((db, cutoff)) or 42,
+    )
+
+    result = wics_industry_job.run(
+        "db", start="2026-06-19", end="2026-06-19", show_progress=False,
+        rebuild_industry_prices=True,
+    )
+
+    assert result == {"saved_rows": 0, "failed_stock_codes": []}
+    assert rebuild_calls == [("db", date(2026, 6, 19))]
+
+
+def test_wics_batch_close_records_keeps_each_symbol_separate(monkeypatch):
+    quotes = pd.DataFrame(
+        {
+            ("005930.KS", "Close"): [100.0, 101.0],
+            ("000660.KS", "Close"): [200.0, 202.0],
+        },
+        index=pd.to_datetime(["2026-06-18", "2026-06-19"]),
+    )
+    quotes.columns = pd.MultiIndex.from_tuples(quotes.columns)
+    request = {}
+    monkeypatch.setattr(
+        wics_industry_job,
+        "_yf_download_with_retry",
+        lambda **kwargs: request.update(kwargs) or quotes,
+    )
+
+    records, missing = wics_industry_job._batch_close_records(
+        ["005930", "000660"], date(2026, 6, 18), date(2026, 6, 19)
+    )
+
+    assert missing == []
+    assert [row["close"] for row in records["005930"]] == [100.0, 101.0]
+    assert [row["close"] for row in records["000660"]] == [200.0, 202.0]
+    assert all(row["source_code"] == "YAHOO" for rows in records.values() for row in rows)
+    assert request["timeout"] == 20
+    assert request["max_attempts"] == 1
+
+
+def test_wics_constituent_job_defers_later_batches_without_losing_progress(
+    monkeypatch,
+):
+    stock_codes = [f"{value:06d}" for value in range(6)]
+    monkeypatch.setattr(wics_industry_job, "_YAHOO_BATCH_SIZE", 2)
+    monkeypatch.setattr(wics_industry_job, "fetch_kospi_wics_stock_codes", lambda db: stock_codes)
+    monkeypatch.setattr(wics_industry_job, "fetch_latest_constituent_price_dates", lambda db: {})
+    monkeypatch.setattr(
+        wics_industry_job,
+        "_batch_close_records",
+        lambda codes, _start, _end: (
+            {
+                code: [
+                    {
+                        "stock_code": code,
+                        "price_date": date(2026, 6, 19),
+                        "close": 100.0,
+                        "source_code": "YAHOO",
+                    }
+                ]
+                for code in codes
+            },
+            [],
+        ),
+    )
+    saved = []
+    monkeypatch.setattr(
+        wics_industry_job,
+        "upsert_wics_constituent_prices",
+        lambda _db, rows: saved.extend(rows) or len(rows),
+    )
+
+    result = wics_industry_job.run(
+        object(),
+        start="2026-06-19",
+        end="2026-06-19",
+        show_progress=False,
+        max_batches=1,
+    )
+
+    assert result["saved_rows"] == 2
+    assert result["failed_stock_codes"] == []
+    assert result["deferred_stock_count"] == len(stock_codes[2:])
+    assert [row["stock_code"] for row in saved] == stock_codes[:2]
+
+
 def test_wics_job_passes_date_window_to_price_collection(monkeypatch):
     import data.loaders.wics_data as wics_data
 
@@ -219,8 +314,9 @@ def test_wics_job_passes_date_window_to_price_collection(monkeypatch):
     monkeypatch.setattr(
         wics_industry_job,
         "run",
-        lambda db, start=None, end=None, show_progress=True: calls.append(
-            (start, end, show_progress)
+        lambda db, start=None, end=None, show_progress=True,
+        rebuild_industry_prices=False: calls.append(
+            (start, end, show_progress, rebuild_industry_prices)
         ) or {},
     )
 
@@ -232,7 +328,7 @@ def test_wics_job_passes_date_window_to_price_collection(monkeypatch):
         price_end="2026-06-23",
     )
     assert result == 1
-    assert calls == [("2026-06-22", "2026-06-23", False)]
+    assert calls == [("2026-06-22", "2026-06-23", False, True)]
 
 
 def test_wics_job_does_not_fallback_to_today_for_empty_explicit_range(monkeypatch):
@@ -420,7 +516,12 @@ def test_collect_all_passes_previous_day_end_to_all_jobs(monkeypatch):
     assert calls[2][1]["dart_end_date"] == "20260622"
     assert calls[3] == (
         "wics_price",
-        {"start": "2026-06-22", "end": "2026-06-22", "show_progress": False},
+        {
+            "start": "2026-06-22",
+            "end": "2026-06-22",
+            "show_progress": False,
+            "rebuild_industry_prices": True,
+        },
     )
 
 

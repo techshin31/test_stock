@@ -105,7 +105,7 @@ def test_live_snapshot_and_emergency_liquidation_keep_separate_safety_paths(
 
 
 def test_live_scheduler_requires_full_system_gate_before_legacy_kpi_gate():
-    batch = Path("run_scheduler.bat").read_text(encoding="utf-8")
+    batch = Path("scripts/run_scheduler.bat").read_text(encoding="utf-8")
     completion = (
         "core.analytics.system_readiness --require-complete "
         "--for-real-activation"
@@ -406,6 +406,49 @@ def test_broker_acceptance_is_not_treated_as_fill(monkeypatch):
     assert broker.place_calls == 1
 
 
+def test_unknown_broker_outcome_persists_only_safe_incident_code(monkeypatch):
+    class UnknownBroker(SafeBroker):
+        is_mock = False
+
+        def place_market_buy(self, ticker, qty):
+            raise RuntimeError(
+                "500 Server Error for url: "
+                "https://openapivts.koreainvestment.com/order?"
+                "CANO=12345678&appkey=secret-value"
+            )
+
+    trader = _bare_trader(UnknownBroker())
+    updates = []
+    monkeypatch.setattr(
+        "storage.postgres.repositories.order_repo.create_order",
+        lambda *a, **k: "local-id",
+    )
+    monkeypatch.setattr(
+        "storage.postgres.repositories.order_repo.mark_order_submitted",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "storage.postgres.repositories.order_repo.update_order_status",
+        lambda db, order_id, status, **kwargs: updates.append(
+            {"order_id": order_id, "status": status, **kwargs}
+        ),
+    )
+
+    result = trader._execute_orders([{
+        "type": "BUY", "ticker": "005930.KS", "qty": 1,
+        "expected_price": 100, "reason": "test", "idempotency_key": "key",
+    }])
+
+    assert result[0]["status"] == "UNKNOWN"
+    assert result[0]["message"] == "BROKER_HTTP_500"
+    assert updates == [{
+        "order_id": "local-id",
+        "status": "SUBMITTED",
+        "note": "UNKNOWN_BROKER_RESULT: BROKER_HTTP_500",
+        "event_type": "UNKNOWN_RESULT",
+    }]
+
+
 def test_actual_fill_creates_signed_execution(monkeypatch):
     trader = _bare_trader(SafeBroker())
     captured = {}
@@ -635,6 +678,48 @@ def test_scheduler_backfills_oldest_missing_completed_paper_report(tmp_path):
     )
 
 
+def test_scheduler_does_not_block_later_reports_on_promotion_gate_failure(tmp_path):
+    operational = tmp_path / "logs/paper/operational_health.jsonl"
+    operational.parent.mkdir(parents=True, exist_ok=True)
+    operational.write_text(
+        "\n".join(
+            json.dumps(
+                {
+                    "timestamp": f"{day}T15:20:00+09:00",
+                    "operational_status": "NORMAL",
+                }
+            )
+            for day in ("2026-07-24", "2026-07-27")
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    daily = tmp_path / "reports/promotion/paper/daily"
+    daily.mkdir(parents=True, exist_ok=True)
+    (daily / "2026-07-24.json").write_text(
+        json.dumps(
+            {
+                "report_date": "2026-07-24",
+                "mode": "PAPER",
+                "report_status": "FINAL",
+                "validation": {"status": "READY"},
+                "operations": {
+                    "data_freshness_rate": 0.9986,
+                    "risk_check_coverage": 1.0,
+                    "order_reconciliation_rate": 1.0,
+                    "operational_integrity": 0.9986,
+                },
+                "trading": {"open_order_count": 0},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert scheduler.pending_paper_eod_report_date(
+        datetime.datetime(2026, 7, 28, 16, 0), tmp_path
+    ) == datetime.date(2026, 7, 27)
+
+
 def test_scheduler_retries_failed_eod_even_when_a_valid_report_exists(tmp_path):
     operational = tmp_path / "logs/paper/operational_health.jsonl"
     operational.parent.mkdir(parents=True, exist_ok=True)
@@ -690,10 +775,11 @@ def test_scheduler_retries_failed_eod_after_bounded_delay():
     first_attempt = datetime.datetime(2026, 7, 21, 15, 30)
 
     assert scheduler.should_attempt_daily_report(
-        None, report_date, None, first_attempt
+        None, report_date, None, None, first_attempt
     ) is True
     assert scheduler.should_attempt_daily_report(
         None,
+        report_date,
         report_date,
         first_attempt,
         first_attempt + datetime.timedelta(minutes=4, seconds=59),
@@ -701,15 +787,35 @@ def test_scheduler_retries_failed_eod_after_bounded_delay():
     assert scheduler.should_attempt_daily_report(
         None,
         report_date,
+        report_date,
         first_attempt,
         first_attempt + datetime.timedelta(minutes=5),
     ) is True
     assert scheduler.should_attempt_daily_report(
+        datetime.date(2026, 7, 21),
+        datetime.date(2026, 7, 22),
+        datetime.date(2026, 7, 21),
+        first_attempt,
+        first_attempt + datetime.timedelta(seconds=1),
+    ) is True
+    assert scheduler.should_attempt_daily_report(
+        report_date,
         report_date,
         report_date,
         first_attempt,
         first_attempt + datetime.timedelta(minutes=10),
     ) is False
+
+
+def test_clear_screen_skips_non_interactive_posix_runtime(monkeypatch):
+    calls = []
+    monkeypatch.setattr(scheduler.os, "name", "posix")
+    monkeypatch.delenv("TERM", raising=False)
+    monkeypatch.setattr(scheduler.os, "system", lambda command: calls.append(command))
+
+    scheduler.clear_screen()
+
+    assert calls == []
 
 
 def test_scheduler_instance_lock_rejects_concurrent_process(tmp_path):
@@ -749,6 +855,76 @@ def test_unknown_order_reconciliation_waits_for_grace_period():
     assert not trader._unknown_order_grace_elapsed(
         {"created_at": now - datetime.timedelta(seconds=299)}, now
     )
+
+
+def test_unknown_order_is_rejected_only_after_grace_and_empty_broker_ledger(
+    monkeypatch,
+):
+    updates = []
+    query_calls = []
+    created_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        seconds=301
+    )
+
+    class DB:
+        def fetch_all(self, query, params):
+            query_calls.append((query, params))
+            if "SELECT o.broker_order_id" in query:
+                return []
+            return [{
+                "id": "unknown-order",
+                "broker_order_id": None,
+                "symbol": "207940",
+                "order_side_code": "BUY",
+                "price": 1_546_000,
+                "qty": 42,
+                "created_at": created_at,
+            }]
+
+    class Broker:
+        is_mock = False
+        masked_account = "***1234-01"
+
+        def fetch_daily_orders(self):
+            return []
+
+        def get_order_status(self, _order_id):
+            pytest.fail("unmatched order must not be polled by a guessed broker id")
+
+    def fake_update(_db, order_id, status, **kwargs):
+        updates.append((order_id, status, kwargs))
+
+    monkeypatch.setattr(
+        "storage.postgres.repositories.order_repo.update_order_status",
+        fake_update,
+    )
+    trader = object.__new__(LiveTrader)
+    trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.unknown_order_grace_seconds = 300
+    trader.broker = Broker()
+    trader.db = DB()
+
+    trader._reconcile_open_orders()
+
+    assert updates == [
+        (
+            "unknown-order",
+            "REJECTED",
+            {
+                "note": (
+                    "AUTO_RECONCILED_NOT_FOUND: successful KIS daily-order "
+                    "query found no matching order after grace period"
+                ),
+                "event_type": "AUTO_RECONCILE_NOT_FOUND",
+                "raw_payload": {
+                    "source": "KIS_DAILY_ORDER_RECONCILIATION",
+                    "broker_order_count": 0,
+                },
+            },
+        )
+    ]
+    assert len(query_calls) == 2
 
 
 def test_unresolved_order_circuit_breaker_blocks_trading():

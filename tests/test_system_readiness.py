@@ -328,12 +328,13 @@ def test_runtime_data_risk_order_and_error_state_are_independent_safety_gates(
     )
 
     assert result["paper_runtime_safe"] is False
-    assert result["progress"]["safety_checks"] == {"passed": 8, "total": 12}
+    assert result["progress"]["safety_checks"] == {"passed": 8, "total": 13}
     for name in (
         "market_data_health",
         "held_position_risk_coverage",
         "no_unresolved_runtime_orders",
         "runtime_error_free",
+        "entry_circuit_breaker_clear",
     ):
         assert any(item.startswith(f"{name}:") for item in result["blockers"])
 
@@ -357,6 +358,31 @@ def test_daily_report_requires_operational_rates_and_zero_open_orders(tmp_path):
         item.startswith("latest_final_report:") for item in result["blockers"]
     )
     assert any(
+        item.startswith("daily_final_report_coverage:")
+        for item in result["blockers"]
+    )
+
+
+def test_daily_report_uses_per_session_operations_when_available(tmp_path):
+    _fixture(tmp_path, complete=True)
+    report_path = tmp_path / "reports/promotion/paper/daily/2026-07-21.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["operations"]["data_freshness_rate"] = 0.5
+    report["operations"]["operational_integrity"] = 0.5
+    report["daily_operations"] = {
+        **report["operations"],
+        "data_freshness_rate": 1.0,
+        "operational_integrity": 1.0,
+    }
+    _write(report_path, report)
+
+    result = audit_system_readiness(
+        tmp_path,
+        now=dt.datetime(2026, 7, 22, 10, 2, tzinfo=KST),
+        environ={},
+    )
+
+    assert not any(
         item.startswith("daily_final_report_coverage:")
         for item in result["blockers"]
     )

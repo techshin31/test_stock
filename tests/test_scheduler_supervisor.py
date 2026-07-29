@@ -1,10 +1,45 @@
+import datetime as dt
+import json
 from types import SimpleNamespace
 
+from scheduler import (
+    ColdStartRetryState,
+    cold_start_retry_delay_seconds,
+    write_cold_start_retry_state,
+)
 from core.utils.scheduler_supervisor import (
     run_recovery_self_test,
     run_supervised,
     supervise_existing,
 )
+
+
+def test_cold_start_retry_is_exponential_bounded_and_resets(tmp_path):
+    now = dt.datetime(2026, 7, 28, 8, 31)
+    state = ColdStartRetryState()
+
+    assert [cold_start_retry_delay_seconds(attempt) for attempt in range(1, 8)] == [
+        10, 20, 40, 80, 160, 300, 300,
+    ]
+    assert state.record_failure(now, "provider unavailable") == 10
+    assert not state.due(now + dt.timedelta(seconds=9))
+    assert state.due(now + dt.timedelta(seconds=10))
+    assert state.record_failure(now + dt.timedelta(seconds=10), "still unavailable") == 20
+
+    write_cold_start_retry_state(state, "PAPER", project_root=tmp_path)
+    payload = json.loads(
+        (tmp_path / "logs" / "paper" / "scheduler_recovery_state.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert payload["status"] == "DEGRADED"
+    assert payload["failed_attempts"] == 2
+    assert payload["last_error"] == "still unavailable"
+
+    state.reset()
+    assert state.due(now)
+    assert state.failed_attempts == 0
+    assert state.last_error is None
 
 
 def _runner(exit_codes, calls):

@@ -66,3 +66,69 @@ def test_market_index_uses_fdr_when_yahoo_fails(monkeypatch):
     )
 
     assert result.iloc[-1] == 6516.27
+
+
+def test_stock_ohlcv_uses_fdr_when_yahoo_fails(monkeypatch):
+    fdr = pd.DataFrame(
+        {
+            "Open": [100.0],
+            "High": [110.0],
+            "Low": [90.0],
+            "Close": [105.0],
+            "Volume": [1000],
+        },
+        index=pd.DatetimeIndex(["2026-07-20"]),
+    )
+    monkeypatch.setattr(
+        yfinance_collector,
+        "_yf_download_with_retry",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("yahoo unavailable")),
+    )
+    monkeypatch.setattr(yfinance_collector.fdr, "DataReader", lambda *args: fdr)
+
+    result = yfinance_collector.fetch_stock(
+        "005930",
+        Market.KOSPI,
+        start="2026-07-01",
+        end="2026-07-21",
+    )
+
+    assert result.index[-1] == pd.Timestamp("2026-07-20", tz="UTC")
+    assert result.loc[result.index[-1], "Close"] == 105.0
+    assert result.loc[result.index[-1], "Adj Close"] == 105.0
+
+
+def test_stock_ohlcv_extends_stale_yahoo_with_fdr(monkeypatch):
+    yahoo = pd.DataFrame(
+        {
+            "Open": [100.0],
+            "High": [110.0],
+            "Low": [90.0],
+            "Close": [101.0],
+            "Volume": [1000],
+        },
+        index=pd.DatetimeIndex(["2026-07-16"]),
+    )
+    fdr = pd.DataFrame(
+        {
+            "Open": [100.0, 103.0],
+            "High": [110.0, 115.0],
+            "Low": [90.0, 95.0],
+            "Close": [101.0, 108.0],
+            "Volume": [1000, 1100],
+        },
+        index=pd.DatetimeIndex(["2026-07-16", "2026-07-20"]),
+    )
+    monkeypatch.setattr(yfinance_collector, "_yf_download_with_retry", lambda **kwargs: yahoo)
+    monkeypatch.setattr(yfinance_collector.fdr, "DataReader", lambda *args: fdr)
+
+    result = yfinance_collector.fetch_stock(
+        "005930",
+        Market.KOSPI,
+        start="2026-07-01",
+        end="2026-07-21",
+    )
+
+    assert result.index[-1] == pd.Timestamp("2026-07-20", tz="UTC")
+    assert result.loc[pd.Timestamp("2026-07-16", tz="UTC"), "Close"] == 101.0
+    assert result.loc[result.index[-1], "Close"] == 108.0

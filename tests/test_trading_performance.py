@@ -7,6 +7,7 @@ import pytest
 from core.analytics.trading_performance import (
     BASELINE_CONFIRMATION,
     _benchmark_anchor_freshness,
+    _markdown_v2,
     _publish_latest_if_not_older,
     _refresh_canonical_paper_evidence,
     build_end_of_day_report,
@@ -14,6 +15,7 @@ from core.analytics.trading_performance import (
     check_baseline,
     initialize_baseline,
     load_account_snapshots,
+    refresh_daily_operations_fields,
     write_end_of_day_report,
 )
 
@@ -34,6 +36,53 @@ def test_historical_backfill_never_regresses_canonical_latest(tmp_path):
         latest, {"report_date": "2026-07-23", "marker": "new"}
     ) is True
     assert json.loads(latest.read_text(encoding="utf-8"))["marker"] == "new"
+
+
+def test_refresh_daily_operations_fields_updates_existing_daily_and_latest(tmp_path):
+    log_dir = tmp_path / "logs" / "paper"
+    _write_jsonl(
+        log_dir / "operational_health.jsonl",
+        [
+            {
+                **_operational_row("2026-07-21T09:00:00+09:00"),
+                "operational_status": "ORDER_RECONCILIATION",
+            },
+            _operational_row("2026-07-21T15:20:00+09:00"),
+        ],
+    )
+    output_dir = tmp_path / "reports" / "promotion" / "paper"
+    daily_dir = output_dir / "daily"
+    daily_dir.mkdir(parents=True)
+    report = {
+        "report_date": "2026-07-21",
+        "mode": "PAPER",
+        "report_status": "FINAL",
+        "performance": {"net_return": 0.0},
+        "operations": {"critical_incidents": 99},
+    }
+    (daily_dir / "2026-07-21.json").write_text(
+        json.dumps(report), encoding="utf-8"
+    )
+    (output_dir / "latest.json").write_text(json.dumps(report), encoding="utf-8")
+
+    result = refresh_daily_operations_fields(
+        mode="PAPER",
+        log_dir=log_dir,
+        promotion_dir=tmp_path / "reports" / "promotion",
+    )
+
+    refreshed_daily = json.loads(
+        (daily_dir / "2026-07-21.json").read_text(encoding="utf-8")
+    )
+    refreshed_latest = json.loads(
+        (output_dir / "latest.json").read_text(encoding="utf-8")
+    )
+    assert result["refreshed_report_dates"] == ["2026-07-21"]
+    assert result["skipped_report_dates"] == []
+    assert result["latest_refreshed"] is True
+    assert refreshed_daily["operations"]["critical_incidents"] == 99
+    assert refreshed_daily["daily_operations"]["critical_incidents"] == 1
+    assert refreshed_latest["daily_operations"] == refreshed_daily["daily_operations"]
 
 
 def test_refresh_canonical_paper_evidence_uses_latest_directories(
@@ -202,6 +251,69 @@ def test_dry_run_report_is_operational_only_and_ready_after_one_day(tmp_path):
     assert report["promotion"]["target_mode"] == "PAPER"
     assert report["promotion"]["ready"] is True
     assert report["operations"]["observed_trading_days"] == 1
+    assert report["daily_operations"]["observed_trading_days"] == 1
+
+
+def test_eod_markdown_includes_sanitized_broker_incident_code(tmp_path):
+    log_dir = tmp_path / "logs" / "dry_run"
+    _write_jsonl(
+        log_dir / "operational_health.jsonl",
+        [{
+            **_operational_row("2026-07-20T15:20:00+09:00"),
+            "operational_status": "ORDER_SUPPRESSION",
+            "data_health": {
+                **_operational_row("2026-07-20T15:20:00+09:00")["data_health"],
+                "order_suppressions": {
+                    "total": 1,
+                    "by_reason": {"AMBIGUOUS_RESULT_SAME_DAY": 1},
+                    "incident_codes": {"BROKER_HTTP_500": 1},
+                },
+            },
+        }],
+    )
+
+    report = build_end_of_day_report(
+        mode="DRY_RUN",
+        report_date=dt.date(2026, 7, 20),
+        log_dir=log_dir,
+        promotion_dir=tmp_path / "reports" / "promotion",
+    )
+
+    markdown = _markdown_v2(report)
+    assert "BROKER_HTTP_500" in markdown
+    assert "AMBIGUOUS_RESULT_SAME_DAY" in markdown
+    assert "://" not in markdown
+
+
+def test_eod_report_keeps_daily_operations_separate_from_cumulative_history(tmp_path):
+    log_dir = tmp_path / "logs" / "dry_run"
+    _write_jsonl(
+        log_dir / "operational_health.jsonl",
+        [
+            {
+                **_operational_row("2026-07-20T15:20:00+09:00"),
+                "data_health": {
+                    "expected_count": 2,
+                    "fresh_count": 1,
+                    "stale_count": 1,
+                    "missing_count": 0,
+                    "risk_checks_total": 1,
+                    "risk_checks_completed": 1,
+                },
+            },
+            _operational_row("2026-07-21T15:20:00+09:00"),
+        ],
+    )
+
+    report = build_end_of_day_report(
+        mode="DRY_RUN",
+        report_date=dt.date(2026, 7, 21),
+        log_dir=log_dir,
+        promotion_dir=tmp_path / "reports" / "promotion",
+    )
+
+    assert report["operations"]["data_freshness_rate"] == 0.5
+    assert report["daily_operations"]["data_freshness_rate"] == 1.0
 
 
 def test_paper_report_writes_flat_real_readiness_snapshot(tmp_path):
