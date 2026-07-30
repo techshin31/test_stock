@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-29T15:30:36+09:00",
+  "generated_at": "2026-07-30T16:35:57+09:00",
   "mode": "PAPER",
   "account_scope": "***9904-01",
   "start_date": "2026-07-03",
-  "end_date": "2026-07-29",
+  "end_date": "2026-07-30",
   "strategy_lineage": [
     "risk_neutral",
     "aggressive"
@@ -29,11 +29,12 @@
     "2026-07-24": 1,
     "2026-07-27": 3,
     "2026-07-28": 1,
-    "2026-07-29": 3
+    "2026-07-29": 3,
+    "2026-07-30": 2
   },
-  "db_order_rows": 217,
-  "broker_order_rows": 228,
-  "exact_matched_rows": 201,
+  "db_order_rows": 219,
+  "broker_order_rows": 230,
+  "exact_matched_rows": 203,
   "fill_overrides": [
     {
       "date": "2026-07-03",
@@ -4159,6 +4160,44 @@
       "db_original_status": "FILLED",
       "db_original_filled_qty": 758.0,
       "db_original_avg_fill_price": 89021.0
+    },
+    {
+      "date": "2026-07-30",
+      "broker_order_id": "0000030336",
+      "symbol": "114800",
+      "stock_name": "KODEX 인버스",
+      "side": "SELL",
+      "ordered_qty": 33196.0,
+      "filled_qty": 33196.0,
+      "remaining_qty": 0.0,
+      "total_fill_amount": 43905035.0,
+      "avg_fill_price": 1322.0,
+      "cancelled": false,
+      "order_time": "123357",
+      "db_order_id": "fd4adc56-f3e4-4839-a4c8-76e349f7f1ea",
+      "db_strategy_name": "aggressive",
+      "db_original_status": "FILLED",
+      "db_original_filled_qty": 33196.0,
+      "db_original_avg_fill_price": 1322.0
+    },
+    {
+      "date": "2026-07-30",
+      "broker_order_id": "0000001398",
+      "symbol": "114800",
+      "stock_name": "KODEX 인버스",
+      "side": "BUY",
+      "ordered_qty": 33196.0,
+      "filled_qty": 33196.0,
+      "remaining_qty": 0.0,
+      "total_fill_amount": 43544325.0,
+      "avg_fill_price": 1311.0,
+      "cancelled": false,
+      "order_time": "090105",
+      "db_order_id": "1c7c6173-8bf3-4102-991f-eb81b65ddcea",
+      "db_strategy_name": "aggressive",
+      "db_original_status": "FILLED",
+      "db_original_filled_qty": 33196.0,
+      "db_original_avg_fill_price": 1311.0
     }
   ],
   "broker_only_rows": [

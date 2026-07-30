@@ -1,47 +1,47 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-29T15:31:09+09:00",
+  "generated_at": "2026-07-30T16:37:12+09:00",
   "mode": "PAPER",
   "observe_only": true,
   "production_rule_changed": false,
   "ledger_evidence": {
-    "order_count": 564,
-    "latest_order_at": "2026-07-29T14:43:32.501698+09:00"
+    "order_count": 566,
+    "latest_order_at": "2026-07-30T12:33:56.016911+09:00"
   },
   "calibration_status": "PROVISIONAL_SMALL_SAMPLE",
   "execution_samples": {
     "BUY": {
       "side": "BUY",
-      "orders": 13,
-      "filled_orders": 7,
+      "orders": 14,
+      "filled_orders": 8,
       "rejected_orders": 6,
       "cancelled_orders": 0,
       "status_counts": {
-        "FILLED": 7,
+        "FILLED": 8,
         "REJECTED": 6
       },
-      "order_fill_rate": 0.5384615384615384,
-      "quantity_fill_rate": 0.618437900128041,
-      "beta_1_1_posterior_mean_fill_rate": 0.5333333333333333,
-      "wilson_95_lower_fill_rate": 0.2914343243183205,
-      "wilson_95_upper_fill_rate": 0.7679424569851186,
+      "order_fill_rate": 0.5714285714285714,
+      "quantity_fill_rate": 0.9395598823648718,
+      "beta_1_1_posterior_mean_fill_rate": 0.5625,
+      "wilson_95_lower_fill_rate": 0.3259026690286936,
+      "wilson_95_upper_fill_rate": 0.7861949006959948,
       "sample_sufficient": false
     },
     "SELL": {
       "side": "SELL",
-      "orders": 13,
-      "filled_orders": 11,
+      "orders": 14,
+      "filled_orders": 12,
       "rejected_orders": 2,
       "cancelled_orders": 0,
       "status_counts": {
-        "FILLED": 11,
+        "FILLED": 12,
         "REJECTED": 2
       },
-      "order_fill_rate": 0.8461538461538461,
-      "quantity_fill_rate": 0.7829181494661922,
-      "beta_1_1_posterior_mean_fill_rate": 0.8,
-      "wilson_95_lower_fill_rate": 0.5776482949136899,
-      "wilson_95_upper_fill_rate": 0.9567427368172621,
+      "order_fill_rate": 0.8571428571428571,
+      "quantity_fill_rate": 0.9596155260770419,
+      "beta_1_1_posterior_mean_fill_rate": 0.8125,
+      "wilson_95_lower_fill_rate": 0.600580922361363,
+      "wilson_95_upper_fill_rate": 0.9599069262620787,
       "sample_sufficient": false
     }
   },
@@ -90,85 +90,85 @@
     },
     "STABILIZED_POSTERIOR_MEAN": {
       "A_CURRENT": {
-        "total_return": -0.05423306554518503,
-        "max_drawdown": -0.18858839096930302,
-        "annualized_turnover": 36.720977661530625,
-        "total_cost_ratio": 0.034903752671100574,
-        "average_exposure": 0.6360543381784108,
+        "total_return": -0.029477798026025126,
+        "max_drawdown": -0.19686129018322474,
+        "annualized_turnover": 34.86076982577311,
+        "total_cost_ratio": 0.03433367356237691,
+        "average_exposure": 0.6030720244007051,
         "hard_stop_count": 26,
-        "trailing_stop_count": 38,
+        "trailing_stop_count": 34,
         "confirmed_reentries": 0
       },
       "R_TREND_REARM": {
-        "total_return": -0.05678750827014911,
-        "max_drawdown": -0.20660077293240364,
-        "annualized_turnover": 21.957742034104164,
-        "total_cost_ratio": 0.020704220708526268,
-        "average_exposure": 0.40486670783163714,
-        "hard_stop_count": 16,
-        "trailing_stop_count": 21,
+        "total_return": 0.024768664829049047,
+        "max_drawdown": -0.15225690815834192,
+        "annualized_turnover": 19.758948421943256,
+        "total_cost_ratio": 0.01945378935194047,
+        "average_exposure": 0.3711453679328354,
+        "hard_stop_count": 12,
+        "trailing_stop_count": 20,
         "confirmed_reentries": 12
       },
       "C_CAP10": {
-        "total_return": -0.03586650014150039,
-        "max_drawdown": -0.13773539887205855,
-        "annualized_turnover": 25.73370634338939,
-        "total_cost_ratio": 0.024669881696709015,
-        "average_exposure": 0.4931992549901063,
-        "hard_stop_count": 19,
-        "trailing_stop_count": 39,
+        "total_return": -0.002117605064771655,
+        "max_drawdown": -0.12165065078520876,
+        "annualized_turnover": 23.853624007552092,
+        "total_cost_ratio": 0.023509300258779897,
+        "average_exposure": 0.463071811016349,
+        "hard_stop_count": 17,
+        "trailing_stop_count": 37,
         "confirmed_reentries": 0
       },
       "C_CAP08": {
-        "total_return": -0.06294100481561704,
-        "max_drawdown": -0.1491786695999766,
-        "annualized_turnover": 20.30028057610007,
-        "total_cost_ratio": 0.019351418635872742,
-        "average_exposure": 0.3663796385043615,
-        "hard_stop_count": 20,
-        "trailing_stop_count": 37,
+        "total_return": -0.013271347321056615,
+        "max_drawdown": -0.13223286739144136,
+        "annualized_turnover": 18.71742672286851,
+        "total_cost_ratio": 0.0184342017968136,
+        "average_exposure": 0.34511584797947864,
+        "hard_stop_count": 17,
+        "trailing_stop_count": 36,
         "confirmed_reentries": 0
       }
     },
     "STABILIZED_WILSON_LOWER": {
       "A_CURRENT": {
-        "total_return": -0.07458651137550065,
-        "max_drawdown": -0.1971575488616859,
-        "annualized_turnover": 33.07532648699905,
-        "total_cost_ratio": 0.03150241185794975,
-        "average_exposure": 0.5578986021985106,
-        "hard_stop_count": 20,
-        "trailing_stop_count": 46,
+        "total_return": -0.043005587257073596,
+        "max_drawdown": -0.18156900998812264,
+        "annualized_turnover": 31.75228654448876,
+        "total_cost_ratio": 0.03127599069475979,
+        "average_exposure": 0.5241502894444362,
+        "hard_stop_count": 19,
+        "trailing_stop_count": 48,
         "confirmed_reentries": 0
       },
       "R_TREND_REARM": {
-        "total_return": -0.1323538346411639,
-        "max_drawdown": -0.2184832416321898,
-        "annualized_turnover": 20.010783000504098,
-        "total_cost_ratio": 0.018661943680597867,
-        "average_exposure": 0.3996865562101617,
-        "hard_stop_count": 17,
-        "trailing_stop_count": 37,
+        "total_return": -0.0237491507428903,
+        "max_drawdown": -0.14865054187615845,
+        "annualized_turnover": 18.212139761424773,
+        "total_cost_ratio": 0.0179327656333481,
+        "average_exposure": 0.3830384346579347,
+        "hard_stop_count": 12,
+        "trailing_stop_count": 36,
         "confirmed_reentries": 10
       },
       "C_CAP10": {
-        "total_return": -0.016040606889754838,
-        "max_drawdown": -0.14792487950330802,
-        "annualized_turnover": 20.966462448566325,
-        "total_cost_ratio": 0.02002744699432225,
-        "average_exposure": 0.42055376337800904,
-        "hard_stop_count": 23,
-        "trailing_stop_count": 47,
+        "total_return": -0.023418658844623907,
+        "max_drawdown": -0.15042029675365454,
+        "annualized_turnover": 21.21867599243057,
+        "total_cost_ratio": 0.020875580934516236,
+        "average_exposure": 0.4094326040648947,
+        "hard_stop_count": 24,
+        "trailing_stop_count": 43,
         "confirmed_reentries": 0
       },
       "C_CAP08": {
-        "total_return": -0.0709955269448529,
-        "max_drawdown": -0.13196303570044732,
-        "annualized_turnover": 17.07461415242174,
-        "total_cost_ratio": 0.016297886103998623,
-        "average_exposure": 0.31271744480174746,
-        "hard_stop_count": 29,
-        "trailing_stop_count": 40,
+        "total_return": -0.03678622409289678,
+        "max_drawdown": -0.12895301615319388,
+        "annualized_turnover": 16.318941551462324,
+        "total_cost_ratio": 0.016059262646009827,
+        "average_exposure": 0.31813484956076704,
+        "hard_stop_count": 26,
+        "trailing_stop_count": 37,
         "confirmed_reentries": 0
       }
     }
@@ -191,29 +191,29 @@
     },
     {
       "scenario": "STABILIZED_POSTERIOR_MEAN",
-      "return_improves": false,
-      "drawdown_improves": false,
+      "return_improves": true,
+      "drawdown_improves": true,
       "turnover_improves": true,
-      "passed": false,
-      "candidate_return": -0.05678750827014911,
-      "baseline_return": -0.05423306554518503,
-      "candidate_mdd": -0.20660077293240364,
-      "baseline_mdd": -0.18858839096930302,
-      "candidate_turnover": 21.957742034104164,
-      "baseline_turnover": 36.720977661530625
+      "passed": true,
+      "candidate_return": 0.024768664829049047,
+      "baseline_return": -0.029477798026025126,
+      "candidate_mdd": -0.15225690815834192,
+      "baseline_mdd": -0.19686129018322474,
+      "candidate_turnover": 19.758948421943256,
+      "baseline_turnover": 34.86076982577311
     },
     {
       "scenario": "STABILIZED_WILSON_LOWER",
-      "return_improves": false,
-      "drawdown_improves": false,
+      "return_improves": true,
+      "drawdown_improves": true,
       "turnover_improves": true,
-      "passed": false,
-      "candidate_return": -0.1323538346411639,
-      "baseline_return": -0.07458651137550065,
-      "candidate_mdd": -0.2184832416321898,
-      "baseline_mdd": -0.1971575488616859,
-      "candidate_turnover": 20.010783000504098,
-      "baseline_turnover": 33.07532648699905
+      "passed": true,
+      "candidate_return": -0.0237491507428903,
+      "baseline_return": -0.043005587257073596,
+      "candidate_mdd": -0.14865054187615845,
+      "baseline_mdd": -0.18156900998812264,
+      "candidate_turnover": 18.212139761424773,
+      "baseline_turnover": 31.75228654448876
     }
   ],
   "risk_control_gate": {
@@ -237,16 +237,16 @@
           {
             "scenario": "STABILIZED_POSTERIOR_MEAN",
             "passed": true,
-            "total_return": -0.03586650014150039,
-            "max_drawdown": -0.13773539887205855,
-            "annualized_turnover": 25.73370634338939
+            "total_return": -0.002117605064771655,
+            "max_drawdown": -0.12165065078520876,
+            "annualized_turnover": 23.853624007552092
           },
           {
             "scenario": "STABILIZED_WILSON_LOWER",
             "passed": true,
-            "total_return": -0.016040606889754838,
-            "max_drawdown": -0.14792487950330802,
-            "annualized_turnover": 20.966462448566325
+            "total_return": -0.023418658844623907,
+            "max_drawdown": -0.15042029675365454,
+            "annualized_turnover": 21.21867599243057
           }
         ]
       },
@@ -264,16 +264,16 @@
           {
             "scenario": "STABILIZED_POSTERIOR_MEAN",
             "passed": true,
-            "total_return": -0.06294100481561704,
-            "max_drawdown": -0.1491786695999766,
-            "annualized_turnover": 20.30028057610007
+            "total_return": -0.013271347321056615,
+            "max_drawdown": -0.13223286739144136,
+            "annualized_turnover": 18.71742672286851
           },
           {
             "scenario": "STABILIZED_WILSON_LOWER",
             "passed": true,
-            "total_return": -0.0709955269448529,
-            "max_drawdown": -0.13196303570044732,
-            "annualized_turnover": 17.07461415242174
+            "total_return": -0.03678622409289678,
+            "max_drawdown": -0.12895301615319388,
+            "annualized_turnover": 16.318941551462324
           }
         ]
       }
@@ -290,15 +290,14 @@
     "ready": false,
     "minimum_side_sample": 30,
     "sample_ready": false,
-    "all_execution_scenarios_pass": false,
+    "all_execution_scenarios_pass": true,
     "manual_review_required": true,
     "blockers": [
-      "post-hardening BUY and SELL samples have not each reached 30 orders",
-      "trend-rearm does not improve return, drawdown, and turnover in every execution scenario"
+      "post-hardening BUY and SELL samples have not each reached 30 orders"
     ]
   },
   "sources": [
-    "/app/reports/analysis/paper_ledger_latest/order_lifecycle.csv",
-    "/app/reports/analysis/paper_reentry_experiments/pass_only/metrics.json"
+    "C:\\dev\\project\\Service_Stock_Analysis\\reports\\analysis\\paper_ledger_latest\\order_lifecycle.csv",
+    "C:\\dev\\project\\Service_Stock_Analysis\\reports\\analysis\\paper_reentry_experiments\\pass_only\\metrics.json"
   ]
 }
