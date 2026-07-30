@@ -426,13 +426,36 @@ def extract_critical_incidents(
         "DEGRADED_RISK_UNCHECKED": "위험점검 미완료",
     }
 
-    incidents = []
+    EVENT_CLASS_NAMES = {
+        "SAFETY_CONTROL": "보호 장치",
+        "EXTERNAL_DEPENDENCY": "외부 통신",
+        "DATA_DEPENDENCY": "데이터 의존성",
+        "INFRASTRUCTURE": "내부 인프라",
+        "SYSTEM_ERROR": "시스템 오류",
+    }
+
+    incidents: list[dict] = []
     active_status = None
+    active_incident: dict | None = None
+
+    def close_active(resolved_at: datetime) -> None:
+        nonlocal active_incident
+        if active_incident is None:
+            return
+        started_at = datetime.fromisoformat(active_incident["timestamp"])
+        active_incident["resolution_status"] = "RESOLVED"
+        active_incident["resolved_at"] = resolved_at.isoformat(timespec="seconds")
+        active_incident["duration_seconds"] = max(
+            int((resolved_at - started_at).total_seconds()),
+            0,
+        )
+        active_incident = None
 
     for timestamp, row in sorted(records, key=lambda item: item[0]):
         status = row.get("operational_status")
         if status in critical_statuses:
             if status != active_status:
+                close_active(timestamp)
                 health = row.get("data_health") or {}
                 last_err = sanitize_incident_error(row.get("last_error"))
                 suppressions = health.get("order_suppressions") or row.get("order_suppressions") or {}
@@ -458,18 +481,52 @@ def extract_critical_incidents(
                     detail_parts.append(f"서킷브레이커 ({breaker})")
 
                 summary = " | ".join(detail_parts) if detail_parts else STATUS_NAMES.get(status, status)
+                classification_source = " ".join(
+                    str(value)
+                    for value in (last_err, summary, breaker)
+                    if value
+                ).upper()
+                if status in {"ORDER_SUPPRESSION", "ORDER_RECONCILIATION"}:
+                    event_class = "SAFETY_CONTROL"
+                elif status == "ENTRY_CIRCUIT_BREAKER":
+                    event_class = (
+                        "SAFETY_CONTROL"
+                        if any(
+                            token in classification_source
+                            for token in ("DAILY_LOSS_LIMIT", "MANUAL")
+                        )
+                        else "DATA_DEPENDENCY"
+                    )
+                elif status == "DEGRADED_RISK_UNCHECKED":
+                    event_class = "SAFETY_CONTROL"
+                elif "BROKER_" in classification_source:
+                    event_class = "EXTERNAL_DEPENDENCY"
+                elif any(
+                    token in classification_source
+                    for token in ("DATABASE", "DB_", "CONNECTION")
+                ):
+                    event_class = "INFRASTRUCTURE"
+                else:
+                    event_class = "SYSTEM_ERROR"
 
-                incidents.append({
+                active_incident = {
                     "timestamp": timestamp.isoformat(timespec="seconds"),
                     "date": timestamp.date().isoformat(),
                     "time": timestamp.strftime("%H:%M:%S"),
                     "status": status,
                     "status_name": STATUS_NAMES.get(status, status),
+                    "event_class": event_class,
+                    "event_class_name": EVENT_CLASS_NAMES[event_class],
+                    "resolution_status": "ACTIVE",
+                    "resolved_at": None,
+                    "duration_seconds": None,
                     "summary": summary,
                     "last_error": last_err,
-                })
+                }
+                incidents.append(active_incident)
             active_status = status
         else:
+            close_active(timestamp)
             active_status = None
 
     return incidents

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import { Layers, TrendingUp, Flame, Snowflake } from 'lucide-react'
+import { AlertTriangle, Layers, TrendingUp, Flame, Snowflake } from 'lucide-react'
 import {
   ResponsiveContainer,
   BarChart,
@@ -105,6 +105,8 @@ export default function SectorAnalysis({ sectors, loading }) {
     () => items.map((s) => ({ name: s.name, change_rate: s.change_rate })),
     [items],
   )
+  const refreshQuality = sectors?.refresh_status
+  const partialInput = refreshQuality?.input_quality_status === 'PARTIAL'
 
   return (
     <div className="sector-container">
@@ -174,6 +176,22 @@ export default function SectorAnalysis({ sectors, loading }) {
         .sector-summary strong { font-weight: 650; }
         .sector-summary__up strong { color: var(--green); }
         .sector-summary__down strong { color: var(--red); }
+        .sector-quality-notice {
+          margin: -8px 0 20px;
+          padding: 10px 12px;
+          border: 1px solid rgba(251, 191, 36, 0.34);
+          border-radius: 8px;
+          background: var(--amber-dim);
+          color: var(--amber);
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+          font-size: 12px;
+          line-height: 1.45;
+        }
+        .sector-quality-notice svg { flex: 0 0 auto; margin-top: 1px; }
+        .sector-quality-notice strong { color: var(--gray-100); }
+        .sector-quality-notice span { color: var(--gray-300); }
 
         /* Heatmap Grid */
         .sector-heatmap-grid {
@@ -339,6 +357,19 @@ export default function SectorAnalysis({ sectors, loading }) {
             )}
           </div>
         </div>
+        {!loading && partialInput && (
+          <div className="sector-quality-notice" role="status">
+            <AlertTriangle size={16} aria-hidden="true" />
+            <div>
+              <strong>일부 구성종목 현재가 제외</strong>
+              <span>
+                {' · '}{refreshQuality.failed_stock_count}개 종목 수집 실패
+                {' · '}업종별 {Math.round((refreshQuality.minimum_industry_coverage || 0.8) * 100)}%
+                커버리지 기준을 통과한 {refreshQuality.industry_count ?? summary.total_count}개 업종만 표시
+              </span>
+            </div>
+          </div>
+        )}
         {!loading && items.length > 0 && (
           <div className="sector-summary" style={mono}>
             <span className="sector-summary__up">상승 <strong>{summary.positive_count}</strong></span>

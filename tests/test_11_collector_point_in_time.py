@@ -228,7 +228,51 @@ def test_wics_constituent_job_rebuilds_derived_industry_prices_when_requested(
         rebuild_industry_prices=True,
     )
 
-    assert result == {"saved_rows": 0, "failed_stock_codes": []}
+    assert result == {
+        "saved_rows": 0,
+        "failed_stock_codes": [],
+        "derived_rows": 42,
+        "derived_rebuild_status": "COMPLETE",
+    }
+    assert rebuild_calls == [("db", date(2026, 6, 19))]
+
+
+def test_wics_constituent_job_rebuilds_with_partial_input_when_coverage_allows(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        wics_industry_job,
+        "fetch_kospi_wics_stock_codes",
+        lambda db: ["005930"],
+    )
+    monkeypatch.setattr(
+        wics_industry_job,
+        "fetch_latest_constituent_price_dates",
+        lambda db: {},
+    )
+    monkeypatch.setattr(
+        wics_industry_job,
+        "download_stock_ohlcv",
+        lambda *args: None,
+    )
+    rebuild_calls = []
+    monkeypatch.setattr(
+        wics_industry_job,
+        "_refresh_derived_industry_prices",
+        lambda db, cutoff: rebuild_calls.append((db, cutoff)) or 25,
+    )
+
+    result = wics_industry_job.run(
+        "db",
+        start="2026-06-19",
+        end="2026-06-19",
+        show_progress=False,
+        rebuild_industry_prices=True,
+    )
+
+    assert result["failed_stock_codes"] == ["005930"]
+    assert result["derived_rows"] == 25
+    assert result["derived_rebuild_status"] == "PARTIAL_INPUT"
     assert rebuild_calls == [("db", date(2026, 6, 19))]
 
 

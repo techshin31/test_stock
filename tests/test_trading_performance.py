@@ -282,6 +282,9 @@ def test_eod_markdown_includes_sanitized_broker_incident_code(tmp_path):
     markdown = _markdown_v2(report)
     assert "BROKER_HTTP_500" in markdown
     assert "AMBIGUOUS_RESULT_SAME_DAY" in markdown
+    assert "운영 이력 및 안전차단" in markdown
+    assert "진행 중" in markdown
+    assert "보호 장치" in markdown
     assert "://" not in markdown
 
 

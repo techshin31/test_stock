@@ -72,8 +72,31 @@ def _status_payload(
     refresh_result: dict[str, Any] | None = None,
     error: object | None = None,
 ) -> dict[str, Any]:
+    refresh = refresh_result or {}
+    price_refresh = refresh.get("price_refresh") or {}
+    failed_codes = [
+        str(code)
+        for code in (price_refresh.get("failed_stock_codes") or [])
+    ]
+    derived_status = price_refresh.get("derived_rebuild_status")
+    input_quality = {
+        "status": (
+            "PARTIAL"
+            if derived_status == "PARTIAL_INPUT"
+            else "DEFERRED"
+            if derived_status == "DEFERRED"
+            else "COMPLETE"
+            if derived_status == "COMPLETE"
+            else "UNKNOWN"
+        ),
+        "failed_stock_count": len(failed_codes),
+        "failed_stock_codes": failed_codes[:50],
+        "derived_rows": int(price_refresh.get("derived_rows") or 0),
+        "coverage_guard": "PER_INDUSTRY_MINIMUM",
+        "minimum_industry_coverage": 0.80,
+    }
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "updated_at": datetime.now(KST).isoformat(timespec="seconds"),
         "mode": "PAPER",
         "status": status,
@@ -85,9 +108,32 @@ def _status_payload(
             else None
         ),
         "industry_count": sector_state.get("industry_count") if sector_state else 0,
-        "refresh_result": refresh_result or {},
+        "refresh_result": refresh,
+        "input_quality": input_quality,
         "error": str(error)[:1000] if error else None,
     }
+
+
+def _reusable_refresh_result(
+    status_path: Path,
+    target_date: date,
+) -> dict[str, Any] | None:
+    """Keep same-session input quality visible after the data becomes current."""
+    try:
+        raw = json.loads(status_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(raw, dict) or raw.get("target_date") != target_date.isoformat():
+        return None
+    quality = raw.get("input_quality")
+    refresh_result = raw.get("refresh_result")
+    if (
+        not isinstance(quality, dict)
+        or quality.get("status") not in {"COMPLETE", "PARTIAL"}
+        or not isinstance(refresh_result, dict)
+    ):
+        return None
+    return refresh_result
 
 
 def refresh_once(*, now: datetime | None = None, project_root: Path = PROJECT_ROOT) -> dict[str, Any]:
@@ -102,9 +148,13 @@ def refresh_once(*, now: datetime | None = None, project_root: Path = PROJECT_RO
     db = PostgreDB(build_db_config())
     try:
         before = _derived_sector_state(db, target_date)
-        if before["current"]:
+        reusable_result = _reusable_refresh_result(status_path, target_date)
+        if before["current"] and reusable_result is not None:
             payload = _status_payload(
-                status="READY", target_date=target_date, sector_state=before
+                status="READY",
+                target_date=target_date,
+                sector_state=before,
+                refresh_result=reusable_result,
             )
             write_json(status_path, payload)
             return payload
@@ -117,6 +167,7 @@ def refresh_once(*, now: datetime | None = None, project_root: Path = PROJECT_RO
             price_start=target_date.isoformat(),
             price_end=target_date.isoformat(),
             collect_prices=True,
+            return_details=True,
         )
         after = _derived_sector_state(db, target_date)
         status = "READY" if after["current"] else "DEGRADED"
@@ -124,7 +175,7 @@ def refresh_once(*, now: datetime | None = None, project_root: Path = PROJECT_RO
             status=status,
             target_date=target_date,
             sector_state=after,
-            refresh_result={"wics_snapshot_dates_saved": int(result)},
+            refresh_result=result,
         )
         write_json(status_path, payload)
         return payload

@@ -272,6 +272,35 @@ def test_report_summary_separates_inception_and_certified_baseline_returns():
     assert performance["baseline_date"] == "2026-07-20"
 
 
+def test_report_summary_separates_active_resolved_and_protective_incidents():
+    result = dashboard_api._report_summary(
+        {
+            "report_date": "2026-07-22",
+            "critical_incidents_detail": [
+                {
+                    "resolution_status": "RESOLVED",
+                    "event_class": "SAFETY_CONTROL",
+                },
+                {
+                    "resolution_status": "ACTIVE",
+                    "event_class": "EXTERNAL_DEPENDENCY",
+                },
+                {
+                    "status": "ERROR",
+                },
+            ],
+        }
+    )
+
+    assert result["incident_summary"] == {
+        "total": 3,
+        "active": 1,
+        "resolved": 1,
+        "protective": 1,
+        "historical_unclassified": 1,
+    }
+
+
 def test_report_freshness_surfaces_blocked_latest_as_failed():
     now = dt.datetime(2026, 7, 22, 16, 0, tzinfo=dashboard_api.SEOUL)
     latest_blocked = {
@@ -445,6 +474,13 @@ def test_sector_refresh_monitor_checks_the_post_1540_date_contract(
             "target_date": snapshot_date,
             "latest_date": snapshot_date,
             "industry_count": 25,
+            "input_quality": {
+                "status": "PARTIAL",
+                "failed_stock_count": 2,
+                "failed_stock_codes": ["074610", "000300"],
+                "coverage_guard": "PER_INDUSTRY_MINIMUM",
+                "minimum_industry_coverage": 0.8,
+            },
         },
     )
     monkeypatch.setattr(dashboard_api, "LOG_ROOT", log_root)
@@ -456,6 +492,10 @@ def test_sector_refresh_monitor_checks_the_post_1540_date_contract(
     assert result["status"] == expected_status
     assert result["expected_as_of_date"] == "2026-07-30"
     assert result["latest_date"] == snapshot_date
+    assert result["input_quality_status"] == "PARTIAL"
+    assert result["failed_stock_count"] == 2
+    assert result["failed_stock_codes"] == ["074610", "000300"]
+    assert result["minimum_industry_coverage"] == 0.8
 
 
 def test_unavailable_sector_payload_exposes_refresh_pending_state(monkeypatch):

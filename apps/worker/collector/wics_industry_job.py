@@ -194,18 +194,27 @@ def run(
             saved += upsert_wics_constituent_prices(db, records)
 
     derived_rows = 0
-    if rebuild_industry_prices and not failed and not deferred:
+    derived_rebuild_status = "NOT_REQUESTED"
+    if rebuild_industry_prices and not deferred:
         derived_rows = _refresh_derived_industry_prices(db, effective_end)
+        derived_rebuild_status = "PARTIAL_INPUT" if failed else "COMPLETE"
+    elif rebuild_industry_prices:
+        derived_rebuild_status = "DEFERRED"
 
     print(
         f"[WICS-PRICE] 완료: {saved}건 저장, "
         f"실패 {len(failed)}종목"
     )
     if rebuild_industry_prices:
-        if failed or deferred:
+        if deferred:
             print(
                 "[WICS-PRICE] 파생 업종 지수 재구성 보류: "
                 f"조회실패 {len(failed)}종목, 다음 배치 {len(deferred)}종목"
+            )
+        elif failed:
+            print(
+                "[WICS-PRICE] 일부 구성종목을 제외하고 업종별 커버리지 기준으로 "
+                f"파생 지수 재구성: 조회실패 {len(failed)}종목, 저장 {derived_rows}건"
             )
         else:
             print(f"[WICS-PRICE] 파생 업종 지수: {derived_rows}건 저장")
@@ -218,4 +227,7 @@ def run(
         # up by the next incremental collection, so returning hundreds of
         # codes is log noise rather than actionable operational information.
         result["deferred_stock_count"] = len(deferred)
+    if rebuild_industry_prices:
+        result["derived_rows"] = derived_rows
+        result["derived_rebuild_status"] = derived_rebuild_status
     return result

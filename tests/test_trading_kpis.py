@@ -220,6 +220,63 @@ def test_repeated_critical_status_counts_incident_episodes(tmp_path):
     assert snapshot.risk_check_coverage == 1.0
 
 
+def test_incident_lifecycle_marks_resolved_safety_control(tmp_path):
+    log_path = tmp_path / "health.jsonl"
+    rows = [
+        {
+            "timestamp": "2026-07-20T10:00:00+09:00",
+            "operational_status": "ORDER_SUPPRESSION",
+            "data_health": {
+                "order_suppressions": {
+                    "total": 1,
+                    "by_reason": {"AMBIGUOUS_RESULT_SAME_DAY": 1},
+                },
+            },
+        },
+        {
+            "timestamp": "2026-07-20T10:01:00+09:00",
+            "operational_status": "ORDER_SUPPRESSION",
+        },
+        {
+            "timestamp": "2026-07-20T10:02:00+09:00",
+            "operational_status": "NORMAL",
+        },
+    ]
+    log_path.write_text(
+        "\n".join(json.dumps(row) for row in rows),
+        encoding="utf-8",
+    )
+
+    incident = extract_critical_incidents(log_path)[0]
+
+    assert incident["event_class"] == "SAFETY_CONTROL"
+    assert incident["event_class_name"] == "보호 장치"
+    assert incident["resolution_status"] == "RESOLVED"
+    assert incident["resolved_at"] == "2026-07-20T10:02:00+09:00"
+    assert incident["duration_seconds"] == 120
+
+
+def test_unrecovered_broker_incident_remains_active(tmp_path):
+    log_path = tmp_path / "health.jsonl"
+    log_path.write_text(
+        json.dumps(
+            {
+                "timestamp": "2026-07-20T10:00:00+09:00",
+                "operational_status": "ERROR",
+                "last_error": "BROKER_TIMEOUT",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    incident = extract_critical_incidents(log_path)[0]
+
+    assert incident["event_class"] == "EXTERNAL_DEPENDENCY"
+    assert incident["resolution_status"] == "ACTIVE"
+    assert incident["resolved_at"] is None
+    assert incident["duration_seconds"] is None
+
+
 def test_snapshot_can_be_limited_to_one_operational_day(tmp_path):
     log_path = tmp_path / "health.jsonl"
     rows = [

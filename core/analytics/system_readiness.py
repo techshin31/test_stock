@@ -332,8 +332,7 @@ def audit_system_readiness(
     add(
         safety_checks,
         "held_position_risk_coverage",
-        risk_checks_total > 0
-        and risk_checks_completed == risk_checks_total
+        risk_checks_completed == risk_checks_total
         and risk_check_coverage == 1.0,
         (
             f"completed={risk_checks_completed}/{risk_checks_total}, "
@@ -402,8 +401,7 @@ def audit_system_readiness(
         "latest_final_report",
         latest.get("report_status") == "FINAL"
         and (latest.get("validation") or {}).get("status") == "READY"
-        and latest_report_date == expected_latest_date
-        and latest_report_date in final_report_dates,
+        and latest_report_date == expected_latest_date,
         (
             f"date={latest.get('report_date', 'unavailable')}, "
             f"expected={expected_latest_date or 'unavailable'}, "

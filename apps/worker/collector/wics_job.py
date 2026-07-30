@@ -23,7 +23,8 @@ def run(
     price_start: str | None = None,
     price_end: str | None = None,
     collect_prices: bool = True,
-) -> int:
+    return_details: bool = False,
+) -> int | dict[str, object]:
     """WICS 구성종목을 수집해 DB에 저장한다.
 
     Parameters
@@ -58,6 +59,11 @@ def run(
     if not effective_dates:
         if show_progress:
             print("[WICS] 수집 대상 날짜 없음")
+        if return_details:
+            return {
+                "snapshot_dates_saved": 0,
+                "price_refresh": {},
+            }
         return 0
 
     if show_progress:
@@ -71,16 +77,22 @@ def run(
     )
     print(f"[WICS] 완료: {count}개 날짜 신규 저장 (기수집 날짜는 건너뜀)")
 
+    price_result: dict[str, object] = {}
     if collect_prices:
         from apps.worker.collector import wics_industry_job
 
-        wics_industry_job.run(
+        price_result = wics_industry_job.run(
             db,
             start=price_start,
             end=price_end,
             show_progress=show_progress,
             rebuild_industry_prices=True,
         )
+    if return_details:
+        return {
+            "snapshot_dates_saved": count,
+            "price_refresh": price_result,
+        }
     return count
 
 

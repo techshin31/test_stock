@@ -354,13 +354,39 @@ def test_daily_report_requires_operational_rates_and_zero_open_orders(tmp_path):
     )
 
     assert result["full_system_complete"] is False
-    assert any(
+    assert not any(
         item.startswith("latest_final_report:") for item in result["blockers"]
     )
     assert any(
         item.startswith("daily_final_report_coverage:")
         for item in result["blockers"]
     )
+
+
+def test_no_held_positions_is_complete_risk_coverage(tmp_path):
+    _fixture(tmp_path, complete=True)
+    path = tmp_path / "logs/paper/dashboard_state.json"
+    dashboard = json.loads(path.read_text(encoding="utf-8"))
+    dashboard["data_health"].update(
+        {
+            "risk_checks_total": 0,
+            "risk_checks_completed": 0,
+            "risk_check_coverage": 1.0,
+        }
+    )
+    _write(path, dashboard)
+
+    result = audit_system_readiness(
+        tmp_path,
+        now=dt.datetime(2026, 7, 22, 10, 2, tzinfo=KST),
+        environ={},
+    )
+
+    assert not any(
+        item.startswith("held_position_risk_coverage:")
+        for item in result["blockers"]
+    )
+    assert result["paper_runtime_safe"] is True
 
 
 def test_daily_report_uses_per_session_operations_when_available(tmp_path):

@@ -548,6 +548,29 @@ function Reports({ overview, reports, selectedDate, reportDetail, loading, error
                 <StatusChip state={reportDetail.report?.validation_status}>검증 {reportDetail.report?.validation_status}</StatusChip>
                 <span>생성 {reportDetail.report?.generated_at || '—'}</span>
               </div>
+              <div
+                className={`report-incident-summary ${
+                  reportDetail.report?.incident_summary?.active ? 'has-active' : ''
+                }`}
+                role="status"
+              >
+                {reportDetail.report?.incident_summary?.active
+                  ? <AlertTriangle size={18} aria-hidden="true" />
+                  : <ShieldCheck size={18} aria-hidden="true" />}
+                <div>
+                  <strong>
+                    {reportDetail.report?.incident_summary?.active
+                      ? `현재 진행 장애 ${reportDetail.report.incident_summary.active}건`
+                      : '현재 진행 장애 없음'}
+                  </strong>
+                  <span>
+                    감사 이력 {reportDetail.report?.incident_summary?.total ?? 0}건
+                    {' · '}해소 {reportDetail.report?.incident_summary?.resolved ?? 0}건
+                    {' · '}보호 장치 {reportDetail.report?.incident_summary?.protective ?? 0}건
+                  </span>
+                  <small>아래 기록은 발생 당시의 감사 이력이며 현재 상태와 구분됩니다.</small>
+                </div>
+              </div>
               <Suspense fallback={<LoadingState label="보고서를 표시하는 중입니다." />}>
                 <MarkdownReport content={reportDetail.content} />
               </Suspense>

@@ -1311,23 +1311,47 @@ def _markdown_v2(report: dict) -> str:
         lines.append("| - | - | - | - | - | - |")
 
     incidents = report.get("critical_incidents_detail") or ops.get("critical_incidents_detail") or []
+    active_incidents = sum(
+        incident.get("resolution_status") == "ACTIVE"
+        for incident in incidents
+    )
+    resolved_incidents = sum(
+        incident.get("resolution_status") == "RESOLVED"
+        for incident in incidents
+    )
+    protective_incidents = sum(
+        incident.get("event_class") == "SAFETY_CONTROL"
+        for incident in incidents
+    )
     lines.extend([
         "",
-        "## 치명 사고 세부 내역",
+        "## 운영 이력 및 안전차단",
         "",
-        f"- 누적 **{ops.get('critical_incidents', len(incidents))}건**의 운영 차단·통신 정산 이벤트가 감지되었습니다. (자산 손실 0건, 안전 차단 프로토콜 작동)",
+        f"- 감사 이력 **{ops.get('critical_incidents', len(incidents))}건** 중 "
+        f"현재 진행 **{active_incidents}건**, 해소 **{resolved_incidents}건**, "
+        f"보호 장치 작동 **{protective_incidents}건**입니다.",
+        "- 아래 항목은 발생 당시의 감사 이력이며, `해소됨` 항목은 현재 장애가 아닙니다.",
         "",
     ])
     if incidents:
         lines.extend([
-            "| 일시 | 구분 | 세부 내용 및 원인 |",
-            "|---|---|---|",
+            "| 일시 | 현재 상태 | 성격 | 구분 | 세부 내용 및 원인 |",
+            "|---|---|---|---|---|",
         ])
         for inc in incidents[-20:]:
             dt_str = f"{inc.get('date')} {inc.get('time')}"
             status_name = inc.get("status_name", inc.get("status", "-"))
+            resolution = (
+                "진행 중"
+                if inc.get("resolution_status") == "ACTIVE"
+                else "해소됨"
+            )
+            event_class = inc.get("event_class_name", "운영 이력")
             summary = str(inc.get("summary", "-")).replace("\n", " ")
-            lines.append(f"| {dt_str} | {status_name} (`{inc.get('status')}`) | {summary} |")
+            lines.append(
+                f"| {dt_str} | {resolution} | {event_class} | "
+                f"{status_name} (`{inc.get('status')}`) | {summary} |"
+            )
     else:
         lines.append("- 기록된 운영 사고 이벤트가 없습니다.")
 

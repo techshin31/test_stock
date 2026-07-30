@@ -200,6 +200,34 @@ def _report_summary(payload: dict, *, filename: str | None = None) -> dict:
     promotion = payload.get("promotion") or {}
     performance = payload.get("performance") or {}
     operations = payload.get("operations") or {}
+    incidents = (
+        payload.get("critical_incidents_detail")
+        or operations.get("critical_incidents_detail")
+        or []
+    )
+    incident_summary = {
+        "total": len(incidents),
+        "active": sum(
+            incident.get("resolution_status") == "ACTIVE"
+            for incident in incidents
+            if isinstance(incident, dict)
+        ),
+        "resolved": sum(
+            incident.get("resolution_status") == "RESOLVED"
+            for incident in incidents
+            if isinstance(incident, dict)
+        ),
+        "protective": sum(
+            incident.get("event_class") == "SAFETY_CONTROL"
+            for incident in incidents
+            if isinstance(incident, dict)
+        ),
+        "historical_unclassified": sum(
+            not incident.get("resolution_status")
+            for incident in incidents
+            if isinstance(incident, dict)
+        ),
+    }
     report_date = str(payload.get("report_date", ""))
     return {
         "filename": filename or f"{report_date}.md",
@@ -214,6 +242,7 @@ def _report_summary(payload: dict, *, filename: str | None = None) -> dict:
         "promotion_target": promotion.get("target_mode"),
         "promotion_ready": bool(promotion.get("ready", False)),
         "blocker_count": len(promotion.get("blockers") or []),
+        "incident_summary": incident_summary,
         "performance": {
             "ending_total_asset": performance.get("ending_total_asset"),
             "starting_capital_reference": performance.get(
@@ -1018,6 +1047,13 @@ def _sector_refresh_monitor(now: dt.datetime | None = None) -> dict:
         and target_date == expected_date.isoformat()
         and industry_count >= REQUIRED_INDUSTRY_COUNT
     )
+    input_quality = status.get("input_quality")
+    if not isinstance(input_quality, dict):
+        input_quality = {}
+    failed_codes = [
+        str(code)
+        for code in (input_quality.get("failed_stock_codes") or [])
+    ][:50]
     return {
         "status": "READY" if ready else "REFRESH_PENDING",
         "expected_as_of_date": expected_date.isoformat(),
@@ -1026,6 +1062,13 @@ def _sector_refresh_monitor(now: dt.datetime | None = None) -> dict:
         "industry_count": industry_count,
         "worker_status": status.get("status") or "MISSING",
         "worker_updated_at": status.get("updated_at"),
+        "input_quality_status": input_quality.get("status") or "UNKNOWN",
+        "failed_stock_count": int(input_quality.get("failed_stock_count") or 0),
+        "failed_stock_codes": failed_codes,
+        "coverage_guard": input_quality.get("coverage_guard"),
+        "minimum_industry_coverage": input_quality.get(
+            "minimum_industry_coverage"
+        ),
     }
 
 

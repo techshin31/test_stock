@@ -851,6 +851,41 @@ td strong {
   color: var(--gray-500);
   font-family: var(--font-mono);
 }
+.report-incident-summary {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--green) 35%, var(--gray-800));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--green) 7%, var(--gray-900));
+  color: var(--green);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.report-incident-summary.has-active {
+  border-color: color-mix(in srgb, var(--red) 40%, var(--gray-800));
+  background: color-mix(in srgb, var(--red) 8%, var(--gray-900));
+  color: var(--red);
+}
+.report-incident-summary > svg { flex: 0 0 auto; margin-top: 1px; }
+.report-incident-summary > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  min-width: 0;
+}
+.report-incident-summary strong { font-size: 13px; }
+.report-incident-summary span {
+  color: var(--gray-300);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+.report-incident-summary small {
+  flex-basis: 100%;
+  color: var(--gray-500);
+  font-size: 11px;
+}
 
 /* ── State Blocks ──────────────────────────────────── */
 .state-block {
