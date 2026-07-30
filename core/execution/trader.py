@@ -112,6 +112,7 @@ class LiveTrader:
         self.risk_state_path = self.log_dir / "risk_state.json"
         self.price_guard_path = self.log_dir / "price_guard_state.json"
         self.inverse_hedge_state_path = self.log_dir / "inverse_hedge_state.json"
+        self.market_regime_cache_path = self.log_dir / "market_regime_close_cache.json"
         self.last_data_health = {}
         self.last_order_candidates = []
         self.last_order_suppressions = []
@@ -487,9 +488,19 @@ class LiveTrader:
         market_regime = None
         regime_frame = None
         kospi_close = pd.Series(dtype=float)
+        market_regime_data = {
+            "status": "UNAVAILABLE",
+            "source": "NONE",
+            "signal_date": signal_date.isoformat(),
+            "last_observation_date": None,
+        }
         try:
             start_date_kospi = (signal_date - datetime.timedelta(days=320)).isoformat()
-            kospi_close = download_kospi_index(start_date_kospi, end_date)
+            kospi_close, regime_source = self._load_completed_kospi_close(
+                signal_date=signal_date,
+                start_date=start_date_kospi,
+                end_date=end_date,
+            )
             if len(kospi_close) < 200:
                 raise ValueError("KOSPI 200일 이동평균 계산 데이터 부족")
             kospi_last_date = pd.Timestamp(kospi_close.index[-1]).date()
@@ -500,6 +511,12 @@ class LiveTrader:
             from core.analytics.regime import calc_close_regime
             regime_frame = calc_close_regime(kospi_close)
             market_regime = str(regime_frame["REGIME"].iloc[-1])
+            market_regime_data = {
+                "status": "READY",
+                "source": regime_source,
+                "signal_date": signal_date.isoformat(),
+                "last_observation_date": kospi_last_date.isoformat(),
+            }
         except Exception as exc:
             message = f"KOSPI 시장국면 오류: {exc}"
             logging.error(f"{message}; 신규 매수를 차단합니다")
@@ -626,6 +643,7 @@ class LiveTrader:
             risk_checked / len(positions) if positions else 1.0
         )
         data_health["dependency_errors"] = dependency_errors
+        data_health["market_regime_data"] = market_regime_data
         data_health["daily_return_decimal"] = daily_return_decimal
         data_health["execution_ledger"] = execution_ledger_health
         dependency_entry_blocker = (
@@ -1080,6 +1098,66 @@ class LiveTrader:
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         temp_path.replace(path)
+
+    @staticmethod
+    def _validate_completed_kospi_close(close, signal_date):
+        if not isinstance(close, pd.Series):
+            raise ValueError("KOSPI close data must be a pandas Series")
+        normalized = close.dropna().sort_index().astype(float)
+        if len(normalized) < 200:
+            raise ValueError("KOSPI close history has fewer than 200 observations")
+        last_date = pd.Timestamp(normalized.index[-1]).date()
+        if last_date != signal_date:
+            raise ValueError(
+                f"KOSPI close history is stale: last={last_date}, expected={signal_date}"
+            )
+        return normalized
+
+    def _read_cached_kospi_close(self, signal_date):
+        payload = self._read_json_state(self.market_regime_cache_path)
+        if payload.get("signal_date") != signal_date.isoformat():
+            return None
+        rows = payload.get("closes")
+        if not isinstance(rows, list) or not rows:
+            return None
+        try:
+            close = pd.Series(
+                [float(row["close"]) for row in rows],
+                index=pd.to_datetime([row["date"] for row in rows]),
+                dtype=float,
+            )
+            return self._validate_completed_kospi_close(close, signal_date)
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    def _load_completed_kospi_close(self, *, signal_date, start_date, end_date):
+        """Load one immutable completed-session KOSPI series per signal date."""
+        cached = self._read_cached_kospi_close(signal_date)
+        if cached is not None:
+            return cached, "DAILY_VALIDATED_CACHE"
+
+        close = self._validate_completed_kospi_close(
+            download_kospi_index(start_date, end_date),
+            signal_date,
+        )
+        self._write_json_state(
+            self.market_regime_cache_path,
+            {
+                "schema_version": 1,
+                "signal_date": signal_date.isoformat(),
+                "cached_at": datetime.datetime.now(
+                    ZoneInfo("Asia/Seoul")
+                ).isoformat(timespec="seconds"),
+                "closes": [
+                    {
+                        "date": pd.Timestamp(index).date().isoformat(),
+                        "close": float(value),
+                    }
+                    for index, value in close.items()
+                ],
+            },
+        )
+        return close, "PROVIDER_REFRESH"
 
     def _update_risk_peaks(self, positions):
         """Persist the highest observed broker price while a position is held."""

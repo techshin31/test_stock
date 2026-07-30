@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from core.constant.types import Tickers
+from core.execution import trader as trader_module
 from core.execution.inverse_hedge import InverseHedgeConfig, evaluate_inverse_hedge
 from core.execution.trader import LiveTrader
 
@@ -119,6 +120,65 @@ def test_inverse_hedge_holds_current_weight_when_regime_data_is_unavailable():
     assert held["target_weight"] == held["current_weight"]
     assert state["cooldown_sessions_remaining"] == 0
     assert state["last_exit_reason"] is None
+
+
+def test_completed_kospi_series_is_reused_from_the_daily_validated_cache(
+    monkeypatch, tmp_path
+):
+    trader = object.__new__(LiveTrader)
+    trader.market_regime_cache_path = tmp_path / "market_regime_close_cache.json"
+    signal_date = dt.date(2026, 7, 29)
+    dates = pd.bdate_range(end=signal_date.isoformat(), periods=220)
+    provider_close = pd.Series(range(220), index=dates, dtype=float) + 1000.0
+    provider_calls = []
+
+    def fetch_provider(start, end):
+        provider_calls.append((start, end))
+        return provider_close
+
+    monkeypatch.setattr(trader_module, "download_kospi_index", fetch_provider)
+    first, first_source = trader._load_completed_kospi_close(
+        signal_date=signal_date,
+        start_date="2025-09-01",
+        end_date="2026-07-30",
+    )
+
+    assert first_source == "PROVIDER_REFRESH"
+    assert len(provider_calls) == 1
+    assert trader.market_regime_cache_path.exists()
+
+    monkeypatch.setattr(
+        trader_module,
+        "download_kospi_index",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("provider must not be called for the same signal date")
+        ),
+    )
+    cached, cached_source = trader._load_completed_kospi_close(
+        signal_date=signal_date,
+        start_date="2025-09-01",
+        end_date="2026-07-30",
+    )
+
+    assert cached_source == "DAILY_VALIDATED_CACHE"
+    pd.testing.assert_series_equal(cached, first, check_freq=False)
+
+    next_signal_date = dt.date(2026, 7, 30)
+    next_dates = pd.bdate_range(end=next_signal_date.isoformat(), periods=220)
+    next_close = pd.Series(range(220), index=next_dates, dtype=float) + 1100.0
+    monkeypatch.setattr(
+        trader_module,
+        "download_kospi_index",
+        lambda *_args, **_kwargs: next_close,
+    )
+    refreshed, refreshed_source = trader._load_completed_kospi_close(
+        signal_date=next_signal_date,
+        start_date="2025-09-02",
+        end_date="2026-07-31",
+    )
+
+    assert refreshed_source == "PROVIDER_REFRESH"
+    assert pd.Timestamp(refreshed.index[-1]).date() == next_signal_date
 
 
 def test_inverse_hedge_stop_and_holding_window_start_a_reentry_cooldown():
