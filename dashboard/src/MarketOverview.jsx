@@ -79,7 +79,26 @@ function EmptyData({ message }) {
 }
 
 function fmtVolatility(value) {
-  return value == null ? '—' : `${Number(value).toFixed(1)}%`
+  return value == null ? '-' : `${Number(value).toFixed(1)}%`
+}
+
+function formatDataDate(value) {
+  const date = String(value || '')
+  return date.length >= 10 ? date.slice(5, 10) : '-'
+}
+
+function indexObservationLabel(index) {
+  if (index?.observation_status === 'INTRADAY') return '장중 관측'
+  if (index?.observation_status === 'COMPLETED') return '확정 종가'
+  if (index?.observation_status === 'STALE') return '이전 관측값'
+  return '관측 기준 확인 중'
+}
+
+function sectorObservationLabel(sectors) {
+  if (sectors?.observation_status === 'CURRENT_COMPLETED') return '당일 확정'
+  if (sectors?.observation_status === 'PREVIOUS_COMPLETED') return '전일 확정'
+  if (sectors?.observation_status === 'REFRESH_PENDING') return '당일 갱신 대기'
+  return '확정 기준 확인 중'
 }
 
 function MarketTrend({ label, history, color, volatility, value }) {
@@ -172,6 +191,28 @@ const styles = `
   color: var(--gray-400);
   font-size: 12px;
 }
+.market-data-timing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--gray-800);
+  border-radius: 8px;
+  background: var(--gray-900);
+  color: var(--gray-300);
+  font-size: 12px;
+}
+.market-data-timing__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.market-data-timing__label { color: var(--gray-500); }
+.market-data-timing__value { color: var(--gray-100); font-weight: 650; }
+.market-data-timing__separator { color: var(--gray-700); }
+.market-data-timing__notice { color: var(--amber); }
 .market-empty {
   min-height: 84px;
   display: grid;
@@ -482,6 +523,12 @@ const styles = `
   margin: 0;
   color: var(--gray-100);
 }
+.market-sector-header__meta {
+  margin: 6px 0 0;
+  color: var(--gray-400);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
 
 .market-sector-chart {
   margin-top: 8px;
@@ -510,6 +557,34 @@ export default function MarketOverview({ indices, breadth, sectors, exchangeRate
     .filter((value, index, values) => values.indexOf(value) === index)
     .join(' · ')
 
+  const sectorItems = useMemo(() => (Array.isArray(sectors?.items) ? sectors.items : []), [sectors])
+  const topPositiveSectors = useMemo(() => {
+    if (Array.isArray(sectors?.top_positive)) return sectors.top_positive
+    return sectorItems
+      .filter((item) => Number(item?.change_rate) > 0)
+      .sort((left, right) => Number(right.change_rate) - Number(left.change_rate))
+      .slice(0, 5)
+  }, [sectorItems, sectors])
+  const bottomNegativeSectors = useMemo(() => {
+    if (Array.isArray(sectors?.bottom_negative)) return sectors.bottom_negative
+    return sectorItems
+      .filter((item) => Number(item?.change_rate) < 0)
+      .sort((left, right) => Number(left.change_rate) - Number(right.change_rate))
+      .slice(0, 5)
+  }, [sectorItems, sectors])
+  const sectorSummary = sectors?.summary || {
+    positive_count: sectorItems.filter((item) => Number(item?.change_rate) > 0).length,
+    negative_count: sectorItems.filter((item) => Number(item?.change_rate) < 0).length,
+    unchanged_count: sectorItems.filter((item) => Number(item?.change_rate) === 0).length,
+  }
+  const indexAsOfDate = indices?.kospi?.as_of_date
+  const sectorAsOfDate = sectors?.as_of_date || sectors?.updated_at
+  const usesMixedMarketDates = Boolean(
+    indices?.kospi?.observation_status === 'INTRADAY'
+    && sectorAsOfDate
+    && sectorAsOfDate !== indexAsOfDate,
+  )
+
   const indexComparison = useMemo(() => {
     const points = Array.isArray(indices?.history) ? indices.history : []
     const baseline = points[0]
@@ -535,6 +610,31 @@ export default function MarketOverview({ indices, breadth, sectors, exchangeRate
       <style>{styles}</style>
       <div className="market-overview">
         {!loading && sourceNote && <p className="market-source-note">데이터 출처: {sourceNote}</p>}
+        {!loading && (indices?.kospi || sectorAsOfDate) && (
+          <section className="market-data-timing" aria-label="시장 데이터 기준 시점">
+            {indices?.kospi && (
+              <span className="market-data-timing__item">
+                <span className="market-data-timing__label">지수</span>
+                <span className="market-data-timing__value">
+                  {indexObservationLabel(indices.kospi)} · {formatDataDate(indexAsOfDate)} {indices?.updated_at?.slice(11, 16) || ''}
+                </span>
+              </span>
+            )}
+            {indices?.kospi && sectorAsOfDate && <span className="market-data-timing__separator">/</span>}
+            {sectorAsOfDate && (
+              <span className="market-data-timing__item">
+                <span className="market-data-timing__label">섹터</span>
+                <span className="market-data-timing__value">
+                  {sectorObservationLabel(sectors)} · {formatDataDate(sectorAsOfDate)}
+                </span>
+              </span>
+            )}
+            {usesMixedMarketDates && (
+              <span className="market-data-timing__notice">장중 지수와 전일 확정 섹터는 직접 비교하지 마세요.</span>
+            )}
+          </section>
+        )}
+
         {/* 1. Market Regime Banner */}
         <div className={`market-panel market-regime market-regime--${regimeInfo.tone}`}>
           <div className="market-regime__left">
@@ -756,15 +856,18 @@ export default function MarketOverview({ indices, breadth, sectors, exchangeRate
             <div className="market-sector-header">
               <p className="eyebrow market-text-positive">강세</p>
               <h2>상위 섹터 (Top 5)</h2>
+              <p className="market-sector-header__meta">상승 {sectorSummary.positive_count} / 전체 {sectorItems.length}</p>
             </div>
-            {loading || !sectors?.top?.length ? (
+            {loading ? (
               <div className="market-sector-chart" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {[1,2,3,4,5].map(i => <Shimmer key={i} height={24} />)}
               </div>
+            ) : !topPositiveSectors.length ? (
+              <EmptyData message="이 확정 기준일에 상승 업종이 없습니다." />
             ) : (
               <div className="market-sector-chart">
                 <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={sectors.top} layout="vertical" margin={{ top: 0, right: 30, left: 0, bottom: 0 }}>
+                  <BarChart data={topPositiveSectors} layout="vertical" margin={{ top: 0, right: 30, left: 0, bottom: 0 }}>
                     <XAxis type="number" tick={chartAxisTick} axisLine={chartAxisLine} tickLine={false} tickFormatter={(value) => `${value}%`} />
                     <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ ...chartAxisTick, fontFamily: 'var(--font-sans)' }} width={112} />
                     <Tooltip cursor={chartCursor} contentStyle={chartTooltipStyle} formatter={(val) => [`+${Number(val).toFixed(2)}%`, '등락률']} />
@@ -781,15 +884,18 @@ export default function MarketOverview({ indices, breadth, sectors, exchangeRate
             <div className="market-sector-header">
               <p className="eyebrow market-text-negative">약세</p>
               <h2>하위 섹터 (Bottom 5)</h2>
+              <p className="market-sector-header__meta">하락 {sectorSummary.negative_count} / 전체 {sectorItems.length}</p>
             </div>
-            {loading || !sectors?.bottom?.length ? (
+            {loading ? (
               <div className="market-sector-chart" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {[1,2,3,4,5].map(i => <Shimmer key={i} height={24} />)}
               </div>
+            ) : !bottomNegativeSectors.length ? (
+              <EmptyData message="이 확정 기준일에 하락 업종이 없습니다." />
             ) : (
               <div className="market-sector-chart">
                 <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={sectors.bottom.map(s => ({ ...s, abs_rate: Math.abs(s.change_rate) }))} layout="vertical" margin={{ top: 0, right: 30, left: 0, bottom: 0 }}>
+                  <BarChart data={bottomNegativeSectors.map(s => ({ ...s, abs_rate: Math.abs(s.change_rate) }))} layout="vertical" margin={{ top: 0, right: 30, left: 0, bottom: 0 }}>
                     <XAxis type="number" tick={chartAxisTick} axisLine={chartAxisLine} tickLine={false} tickFormatter={(value) => `${value}%`} />
                     <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ ...chartAxisTick, fontFamily: 'var(--font-sans)' }} width={112} />
                     <Tooltip cursor={chartCursor} contentStyle={chartTooltipStyle} formatter={(val, _name, props) => [`${Number(props.payload.change_rate).toFixed(2)}%`, '등락률']} />

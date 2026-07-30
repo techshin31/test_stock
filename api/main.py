@@ -19,6 +19,10 @@ from core.utils.trading_calendar import (
     is_krx_trading_day,
     previous_krx_trading_day,
 )
+from core.utils.wics_sector_refresh import (
+    REQUIRED_INDUSTRY_COUNT,
+    required_wics_session_date,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -548,6 +552,52 @@ def _close_history_points(frame: object, limit: int = 60) -> list[dict]:
     return history
 
 
+def _frame_observation_date(frame: object) -> dt.date | None:
+    """Return the date of the last observed daily bar without inventing one."""
+    try:
+        value = frame.index[-1]
+    except (AttributeError, IndexError, TypeError):
+        return None
+    if isinstance(value, dt.datetime):
+        return value.date()
+    if isinstance(value, dt.date):
+        return value
+    try:
+        return dt.date.fromisoformat(str(value)[:10])
+    except (TypeError, ValueError):
+        return None
+
+
+def _market_observation_status(
+    observation_date: dt.date | None,
+    now: dt.datetime,
+) -> str:
+    """Classify a live quote without calling an in-progress day a final close."""
+    if observation_date is None:
+        return "UNAVAILABLE"
+    current = now.astimezone(SEOUL)
+    if (
+        observation_date == current.date()
+        and is_krx_trading_day(current.date().isoformat())
+        and current.time() < dt.time(15, 30)
+    ):
+        return "INTRADAY"
+    if observation_date == _expected_completed_krx_date(current):
+        return "COMPLETED"
+    return "STALE"
+
+
+def _completed_market_frame(frame: object, now: dt.datetime) -> object:
+    """Exclude the still-open KRX session from close-based charts and volatility."""
+    observation_date = _frame_observation_date(frame)
+    if _market_observation_status(observation_date, now) != "INTRADAY":
+        return frame
+    try:
+        return frame.iloc[:-1]
+    except (AttributeError, IndexError, TypeError):
+        return frame
+
+
 def _annualized_realized_volatility(
     frame: object, window: int = 20
 ) -> float | None:
@@ -727,7 +777,8 @@ def _fetch_live_yfinance():
 
     try:
         import yfinance as yf
-        now_str = dt.datetime.now(SEOUL).strftime("%Y-%m-%d %H:%M")
+        observed_at = dt.datetime.now(SEOUL)
+        now_str = observed_at.strftime("%Y-%m-%d %H:%M")
         
         # KOSPI & KOSDAQ
         # Three months supplies 60 completed sessions for the dashboard trend
@@ -738,6 +789,10 @@ def _fetch_live_yfinance():
 
         indices = None
         if not kospi_t.empty and not kosdaq_t.empty:
+            kospi_date = _frame_observation_date(kospi_t)
+            kosdaq_date = _frame_observation_date(kosdaq_t)
+            completed_kospi = _completed_market_frame(kospi_t, observed_at)
+            completed_kosdaq = _completed_market_frame(kosdaq_t, observed_at)
             k_price = float(kospi_t["Close"].iloc[-1])
             k_prev = float(kospi_t["Close"].iloc[-2]) if len(kospi_t) > 1 else k_price
             k_change = k_price - k_prev
@@ -754,27 +809,36 @@ def _fetch_live_yfinance():
                     "change": round(k_change, 2),
                     "change_rate": round(k_rate, 2),
                     "volume": _latest_volume(kospi_t),
+                    "as_of_date": kospi_date.isoformat() if kospi_date else None,
+                    "observation_status": _market_observation_status(
+                        kospi_date, observed_at
+                    ),
                 },
                 "kosdaq": {
                     "price": round(kq_price, 2),
                     "change": round(kq_change, 2),
                     "change_rate": round(kq_rate, 2),
                     "volume": _latest_volume(kosdaq_t),
+                    "as_of_date": kosdaq_date.isoformat() if kosdaq_date else None,
+                    "observation_status": _market_observation_status(
+                        kosdaq_date, observed_at
+                    ),
                 },
-                "history": _index_history_points(kospi_t, kosdaq_t),
+                "history": _index_history_points(completed_kospi, completed_kosdaq),
                 "series": {
-                    "kospi": _close_history_points(kospi_t),
-                    "kosdaq": _close_history_points(kosdaq_t),
+                    "kospi": _close_history_points(completed_kospi),
+                    "kosdaq": _close_history_points(completed_kosdaq),
                 },
                 "volatility": {
-                    "kospi_20d": _annualized_realized_volatility(kospi_t),
-                    "kosdaq_20d": _annualized_realized_volatility(kosdaq_t),
+                    "kospi_20d": _annualized_realized_volatility(completed_kospi),
+                    "kosdaq_20d": _annualized_realized_volatility(completed_kosdaq),
                 },
                 "updated_at": now_str,
             }
 
         exchange = None
         if not usd_t.empty:
+            usd_date = _frame_observation_date(usd_t)
             u_price = float(usd_t["Close"].iloc[-1])
             u_prev = float(usd_t["Close"].iloc[-2]) if len(usd_t) > 1 else u_price
             u_change = u_price - u_prev
@@ -783,6 +847,7 @@ def _fetch_live_yfinance():
                 "usd_krw": round(u_price, 2),
                 "change": round(u_change, 2),
                 "change_rate": round(u_rate, 2),
+                "as_of_date": usd_date.isoformat() if usd_date else None,
                 "history": _close_history_points(usd_t),
                 "volatility_20d": _annualized_realized_volatility(usd_t),
                 "updated_at": now_str,
@@ -929,6 +994,41 @@ def _expected_completed_krx_date(now: dt.datetime | None = None) -> dt.date:
     return previous_krx_trading_day(today)
 
 
+def _expected_completed_sector_date(now: dt.datetime | None = None) -> dt.date:
+    """Return the latest sector snapshot eligible after its 15:40 KST refresh window."""
+    return required_wics_session_date(now)
+
+
+def _sector_refresh_monitor(now: dt.datetime | None = None) -> dict:
+    """Describe whether the background sector refresh has met its date contract."""
+    expected_date = _expected_completed_sector_date(now)
+    status_path = LOG_ROOT / "paper" / "wics_sector_refresh_status.json"
+    try:
+        raw = json.loads(status_path.read_text(encoding="utf-8"))
+        status = raw if isinstance(raw, dict) else {}
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        status = {}
+
+    latest_date = str(status.get("latest_date") or "")[:10] or None
+    target_date = str(status.get("target_date") or "")[:10] or None
+    industry_count = int(status.get("industry_count") or 0)
+    ready = (
+        status.get("status") == "READY"
+        and latest_date == expected_date.isoformat()
+        and target_date == expected_date.isoformat()
+        and industry_count >= REQUIRED_INDUSTRY_COUNT
+    )
+    return {
+        "status": "READY" if ready else "REFRESH_PENDING",
+        "expected_as_of_date": expected_date.isoformat(),
+        "target_date": target_date,
+        "latest_date": latest_date,
+        "industry_count": industry_count,
+        "worker_status": status.get("status") or "MISSING",
+        "worker_updated_at": status.get("updated_at"),
+    }
+
+
 def _sector_payload_from_prices(
     cur: object,
     *,
@@ -947,7 +1047,8 @@ def _sector_payload_from_prices(
     if len(dates) < 2:
         return None
     latest_date, previous_date = dates[0], dates[1]
-    if latest_date != _expected_completed_krx_date():
+    expected_date = _expected_completed_sector_date()
+    if latest_date != expected_date:
         return None
 
     cur.execute(
@@ -990,6 +1091,9 @@ def _sector_payload_from_prices(
     if not items:
         return None
     items.sort(key=lambda item: item["change_rate"], reverse=True)
+    positive = [item for item in items if item["change_rate"] > 0]
+    negative = [item for item in items if item["change_rate"] < 0]
+    unchanged = [item for item in items if item["change_rate"] == 0]
 
     cur.execute(
         "SELECT MAX(base_date) AS base_date FROM wics_companies "
@@ -1036,9 +1140,26 @@ def _sector_payload_from_prices(
         {
             "items": items,
             "updated_at": latest_date.isoformat(),
+            "as_of_date": latest_date.isoformat(),
+            "expected_as_of_date": expected_date.isoformat(),
+            "observation_status": (
+                "CURRENT_COMPLETED"
+                if latest_date == dt.datetime.now(SEOUL).date()
+                else "PREVIOUS_COMPLETED"
+            ),
             "constituent_snapshot_date": (
                 snapshot_date.isoformat() if snapshot_date else None
             ),
+            "summary": {
+                "positive_count": len(positive),
+                "negative_count": len(negative),
+                "unchanged_count": len(unchanged),
+                "total_count": len(items),
+            },
+            "top_positive": positive[:5],
+            "bottom_negative": sorted(
+                negative, key=lambda item: item["change_rate"]
+            )[:5],
             "top": items[:5],
             "bottom": list(reversed(items[-5:])) if len(items) >= 5 else list(reversed(items)),
         },
@@ -1065,14 +1186,20 @@ def get_sectors():
                             source_label=source_label,
                         )
                         if payload:
+                            payload["refresh_status"] = _sector_refresh_monitor()
                             return payload
         except (OSError, psycopg.Error):
             pass
+    refresh = _sector_refresh_monitor()
     return _unavailable_market_payload(
         "Current official or derived WICS sector data is not available.",
         items=[],
         top=[],
         bottom=[],
+        as_of_date=refresh["latest_date"],
+        expected_as_of_date=refresh["expected_as_of_date"],
+        observation_status=refresh["status"],
+        refresh_status=refresh,
     )
 
 
@@ -1278,6 +1405,7 @@ def get_market_regime():
         adx: object = None,
         trend_strength: object = None,
         updated_at: object = None,
+        as_of_date: object = None,
     ) -> dict | None:
         normalized = str(current or "").upper()
         if normalized not in valid_regimes:
@@ -1290,6 +1418,7 @@ def get_market_regime():
                 "adx": _finite_float(adx),
                 "trend_strength": str(trend_strength) if trend_strength else None,
                 "updated_at": updated_at,
+                "as_of_date": str(as_of_date)[:10] if as_of_date else None,
             },
             source,
         )
@@ -1307,6 +1436,7 @@ def get_market_regime():
                 adx=data.get("adx"),
                 trend_strength=data.get("trend_strength"),
                 updated_at=data.get("updated_at") or data.get("analysis_date"),
+                as_of_date=data.get("analysis_date"),
             )
             if payload:
                 return payload
@@ -1326,6 +1456,7 @@ def get_market_regime():
                             regime,
                             "DASHBOARD_STATE",
                             updated_at=data.get("updated_at"),
+                            as_of_date=(data.get("data_health") or {}).get("expected_date"),
                         )
                     elif isinstance(regime, dict):
                         payload = payload_for(
@@ -1336,6 +1467,11 @@ def get_market_regime():
                             adx=regime.get("adx"),
                             trend_strength=regime.get("trend_strength"),
                             updated_at=regime.get("updated_at") or data.get("updated_at"),
+                            as_of_date=(
+                                regime.get("as_of_date")
+                                or regime.get("signal_date")
+                                or (data.get("data_health") or {}).get("expected_date")
+                            ),
                         )
                     else:
                         payload = None
@@ -1350,6 +1486,7 @@ def get_market_regime():
             decision.get("market_regime"),
             "PAPER_DECISION_HISTORY",
             updated_at=decision.get("updated_at"),
+            as_of_date=decision.get("signal_date"),
         )
         if payload:
             return payload

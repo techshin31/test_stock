@@ -73,8 +73,21 @@ function SectorEmpty({ message }) {
 
 export default function SectorAnalysis({ sectors, loading }) {
   const items = useMemo(() => sectors?.items || [], [sectors])
-  const top5 = useMemo(() => items.slice(0, 5), [items])
-  const bottom5 = useMemo(() => [...items].reverse().slice(0, 5), [items])
+  const top5 = useMemo(
+    () => sectors?.top_positive || items.filter((item) => item.change_rate > 0).slice(0, 5),
+    [items, sectors],
+  )
+  const bottom5 = useMemo(
+    () => sectors?.bottom_negative || [...items].filter((item) => item.change_rate < 0)
+      .sort((left, right) => left.change_rate - right.change_rate).slice(0, 5),
+    [items, sectors],
+  )
+  const summary = sectors?.summary || {
+    positive_count: items.filter((item) => item.change_rate > 0).length,
+    negative_count: items.filter((item) => item.change_rate < 0).length,
+    unchanged_count: items.filter((item) => item.change_rate === 0).length,
+    total_count: items.length,
+  }
   const sourceLabel = ['WICS_DERIVED_MCAP_V1', 'WICS_DERIVED_MCAP_V1_1'].includes(sectors?.source)
     ? '구성종목 시가총액 가중 재구성'
     : sectors?.source === 'WICS_OFFICIAL'
@@ -150,6 +163,17 @@ export default function SectorAnalysis({ sectors, loading }) {
           padding: 4px 8px;
           border-radius: 4px;
         }
+        .sector-summary {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin: -8px 0 20px;
+          color: var(--gray-300);
+          font-size: 12px;
+        }
+        .sector-summary strong { font-weight: 650; }
+        .sector-summary__up strong { color: var(--green); }
+        .sector-summary__down strong { color: var(--red); }
 
         /* Heatmap Grid */
         .sector-heatmap-grid {
@@ -235,7 +259,7 @@ export default function SectorAnalysis({ sectors, loading }) {
           font-size: 13px;
           color: var(--gray-200);
           background: rgba(255,255,255,0.02);
-          transition: background-color 0.2s, transform 0.2s;
+          transition: background-color 0.16s ease-out;
         }
         .sector-table td:first-child {
           border-top-left-radius: 6px;
@@ -245,14 +269,8 @@ export default function SectorAnalysis({ sectors, loading }) {
           border-top-right-radius: 6px;
           border-bottom-right-radius: 6px;
         }
-        .sector-table tbody tr {
-          transition: transform 0.2s ease;
-        }
         .sector-table tbody tr:nth-child(even) td {
-          background: linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.03));
-        }
-        .sector-table tbody tr:hover {
-          transform: scale(1.01);
+          background: rgba(255,255,255,0.035);
         }
         .sector-table tbody tr:hover td {
           background: rgba(255,255,255,0.06);
@@ -310,6 +328,10 @@ export default function SectorAnalysis({ sectors, loading }) {
             <h2 className="sector-title">섹터 히트맵</h2>
           </div>
           <div className="sector-provenance" style={mono}>
+            {sectors?.observation_status === 'REFRESH_PENDING' && (
+              <span className="sector-updated">당일 갱신 대기 · 기대 {sectors.expected_as_of_date}</span>
+            )}
+            {sectors?.as_of_date && <span className="sector-updated">기준일 {sectors.as_of_date}</span>}
             {sectors?.updated_at && <span className="sector-updated">갱신 {sectors.updated_at}</span>}
             {sourceBadge && <span className="sector-updated">{sourceBadge}</span>}
             {sectors?.constituent_snapshot_date && sectors.constituent_snapshot_date !== sectors.updated_at && (
@@ -317,7 +339,15 @@ export default function SectorAnalysis({ sectors, loading }) {
             )}
           </div>
         </div>
-        
+        {!loading && items.length > 0 && (
+          <div className="sector-summary" style={mono}>
+            <span className="sector-summary__up">상승 <strong>{summary.positive_count}</strong></span>
+            <span className="sector-summary__down">하락 <strong>{summary.negative_count}</strong></span>
+            <span>보합 <strong>{summary.unchanged_count}</strong></span>
+            <span>전체 <strong>{summary.total_count}</strong></span>
+          </div>
+        )}
+
         {loading ? (
           <div className="sector-shimmer-grid">
             {Array.from({ length: 12 }, (_, i) => <SectorShimmer key={i} height={100} />)}
@@ -360,7 +390,7 @@ export default function SectorAnalysis({ sectors, loading }) {
               {[1,2,3,4,5].map(i => <SectorShimmer key={i} height={46} />)}
             </div>
           ) : !top5.length ? (
-            <SectorEmpty message={emptyMessage} />
+            <SectorEmpty message="이 확정 기준일에 상승 업종이 없습니다." />
           ) : (
             <div className="sector-table-wrap">
               <table className="sector-table">
@@ -396,7 +426,7 @@ export default function SectorAnalysis({ sectors, loading }) {
               {[1,2,3,4,5].map(i => <SectorShimmer key={i} height={46} />)}
             </div>
           ) : !bottom5.length ? (
-            <SectorEmpty message={emptyMessage} />
+            <SectorEmpty message="이 확정 기준일에 하락 업종이 없습니다." />
           ) : (
             <div className="sector-table-wrap">
               <table className="sector-table">

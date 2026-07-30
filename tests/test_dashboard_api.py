@@ -391,7 +391,7 @@ def test_sector_payload_reads_wics_names_from_the_current_codes_schema(monkeypat
             assert self.step == 4
             return {"base_date": latest}
 
-    monkeypatch.setattr(dashboard_api, "_expected_completed_krx_date", lambda: latest)
+    monkeypatch.setattr(dashboard_api, "_expected_completed_sector_date", lambda: latest)
     cursor = Cursor()
 
     payload = dashboard_api._sector_payload_from_prices(
@@ -403,6 +403,16 @@ def test_sector_payload_reads_wics_names_from_the_current_codes_schema(monkeypat
 
     assert "code_group = 'WICS_INDUSTRY_CODE'" in cursor.queries[1]
     assert payload["source"] == "WICS_DERIVED_MCAP_V1"
+    assert payload["as_of_date"] == latest.isoformat()
+    assert payload["expected_as_of_date"] == latest.isoformat()
+    assert payload["summary"] == {
+        "positive_count": 1,
+        "negative_count": 0,
+        "unchanged_count": 0,
+        "total_count": 1,
+    }
+    assert payload["top_positive"] == payload["items"]
+    assert payload["bottom_negative"] == []
     assert payload["items"] == [{
         "code": "G4530",
         "name": "반도체와반도체장비",
@@ -414,6 +424,62 @@ def test_sector_payload_reads_wics_names_from_the_current_codes_schema(monkeypat
         "stock_count": 3,
         "top_stock": "테스트",
     }]
+
+
+@pytest.mark.parametrize(
+    ("snapshot_date", "expected_status"),
+    [
+        ("2026-07-29", "REFRESH_PENDING"),
+        ("2026-07-30", "READY"),
+    ],
+)
+def test_sector_refresh_monitor_checks_the_post_1540_date_contract(
+    monkeypatch, tmp_path, snapshot_date, expected_status
+):
+    log_root = tmp_path / "logs"
+    _write_json(
+        log_root / "paper" / "wics_sector_refresh_status.json",
+        {
+            "updated_at": "2026-07-30T15:45:00+09:00",
+            "status": "READY",
+            "target_date": snapshot_date,
+            "latest_date": snapshot_date,
+            "industry_count": 25,
+        },
+    )
+    monkeypatch.setattr(dashboard_api, "LOG_ROOT", log_root)
+
+    result = dashboard_api._sector_refresh_monitor(
+        dt.datetime(2026, 7, 30, 15, 45, tzinfo=dashboard_api.SEOUL)
+    )
+
+    assert result["status"] == expected_status
+    assert result["expected_as_of_date"] == "2026-07-30"
+    assert result["latest_date"] == snapshot_date
+
+
+def test_unavailable_sector_payload_exposes_refresh_pending_state(monkeypatch):
+    monkeypatch.setattr(dashboard_api, "_db_connect", lambda: None)
+    monkeypatch.setattr(
+        dashboard_api,
+        "_sector_refresh_monitor",
+        lambda: {
+            "status": "REFRESH_PENDING",
+            "expected_as_of_date": "2026-07-30",
+            "target_date": "2026-07-29",
+            "latest_date": "2026-07-29",
+            "industry_count": 25,
+            "worker_status": "READY",
+            "worker_updated_at": "2026-07-30T15:39:00+09:00",
+        },
+    )
+
+    payload = dashboard_api.get_sectors()
+
+    assert payload["available"] is False
+    assert payload["observation_status"] == "REFRESH_PENDING"
+    assert payload["as_of_date"] == "2026-07-29"
+    assert payload["expected_as_of_date"] == "2026-07-30"
 
 
 def test_finite_float_rejects_database_nan_values():
@@ -447,6 +513,26 @@ def test_market_trend_helpers_preserve_observed_closes_and_require_full_window()
     ]
     assert dashboard_api._annualized_realized_volatility(frame) > 0
     assert dashboard_api._annualized_realized_volatility(frame.iloc[:20]) is None
+
+
+def test_intraday_market_bar_is_excluded_from_close_based_series(monkeypatch):
+    now = dt.datetime(2026, 7, 30, 11, 0, tzinfo=dashboard_api.SEOUL)
+    dates = pd.to_datetime(["2026-07-28", "2026-07-29", "2026-07-30"])
+    frame = pd.DataFrame({"Close": [100.0, 101.0, 106.0]}, index=dates)
+
+    monkeypatch.setattr(dashboard_api, "is_krx_trading_day", lambda _date: True)
+    monkeypatch.setattr(
+        dashboard_api,
+        "_expected_completed_krx_date",
+        lambda _now=None: dt.date(2026, 7, 29),
+    )
+
+    assert dashboard_api._market_observation_status(dt.date(2026, 7, 30), now) == "INTRADAY"
+    completed = dashboard_api._completed_market_frame(frame, now)
+    assert dashboard_api._close_history_points(completed) == [
+        {"date": "2026-07-28", "close": 100.0},
+        {"date": "2026-07-29", "close": 101.0},
+    ]
 
 
 def test_market_regime_falls_back_to_latest_paper_decision_without_defaults(

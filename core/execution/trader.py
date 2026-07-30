@@ -754,6 +754,7 @@ class LiveTrader:
             target_positions,
             target_details,
             market_regime or "UNAVAILABLE",
+            signal_date=signal_date,
             inverse_hedge=inverse_hedge,
         )
 
@@ -1136,6 +1137,7 @@ class LiveTrader:
         target_positions,
         target_details,
         market_regime,
+        signal_date=None,
         inverse_hedge=None,
     ):
         rows = []
@@ -1160,6 +1162,9 @@ class LiveTrader:
             "mode": self.execution_venue,
             "strategy": self.strategy_name,
             "market_regime": market_regime,
+            "signal_date": (
+                signal_date.isoformat() if hasattr(signal_date, "isoformat") else None
+            ),
             "target_count": sum(row["selected"] for row in rows),
             "decisions": rows,
         }
