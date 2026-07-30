@@ -137,8 +137,9 @@ def evaluate_inverse_hedge(
 
     An entry needs two completed DOWNTREND observations. The target then steps
     from 10% to 20% and finally 30% only when daily moving averages confirm the
-    regime. A held hedge exits immediately outside DOWNTREND, on a dedicated
-    loss limit, or after the bounded holding window.
+    regime. A held hedge exits immediately on an observed non-DOWNTREND regime,
+    on a dedicated loss limit, or after the bounded holding window. Missing
+    regime data preserves the current exposure until a valid observation returns.
     """
     today = _as_date_text(signal_date)
     next_state = _new_state(state)
@@ -190,7 +191,17 @@ def evaluate_inverse_hedge(
             exit_with("INVERSE_HEDGE_MAX_HOLD", "EXIT_MAX_HOLD")
 
     if status not in {"EXIT_STOP_LOSS", "EXIT_MAX_HOLD"}:
-        if market_regime != "DOWNTREND":
+        normalized_regime = str(market_regime or "").upper()
+        observed_regimes = {"DOWNTREND", "UPTREND", "SIDEWAYS", "TRANSITION"}
+        if normalized_regime not in observed_regimes:
+            if has_position:
+                reason = "INVERSE_HEDGE_DATA_UNAVAILABLE_HOLD"
+                status = "HOLD_DATA_UNAVAILABLE"
+                target_weight = current_weight
+            else:
+                reason = "INVERSE_HEDGE_WAIT_DATA"
+                status = "WAIT_DATA"
+        elif normalized_regime != "DOWNTREND":
             reason = "DOWNTREND_EXIT" if has_position else "INVERSE_HEDGE_INACTIVE"
             status = "EXIT_REGIME" if has_position else "INACTIVE"
         elif cooldown_active:

@@ -95,6 +95,32 @@ def test_inverse_hedge_waits_for_confirmation_and_exits_on_transition():
     assert exiting["reason"] == "DOWNTREND_EXIT"
 
 
+def test_inverse_hedge_holds_current_weight_when_regime_data_is_unavailable():
+    held, state = evaluate_inverse_hedge(
+        signal_date=dt.date(2026, 7, 29),
+        regime_frame=pd.DataFrame(),
+        close=pd.Series(dtype=float),
+        market_regime=None,
+        position={"qty": 100, "avg_price": 100, "current_price": 101},
+        total_eval=1_000_000,
+        state={
+            "active": True,
+            "entry_date": "2026-07-28",
+            "held_sessions": 1,
+            "last_held_signal_date": "2026-07-28",
+        },
+        config=InverseHedgeConfig(),
+    )
+
+    assert held["market_regime"] == "UNAVAILABLE"
+    assert held["status"] == "HOLD_DATA_UNAVAILABLE"
+    assert held["reason"] == "INVERSE_HEDGE_DATA_UNAVAILABLE_HOLD"
+    assert held["target_weight"] == pytest.approx(0.0101)
+    assert held["target_weight"] == held["current_weight"]
+    assert state["cooldown_sessions_remaining"] == 0
+    assert state["last_exit_reason"] is None
+
+
 def test_inverse_hedge_stop_and_holding_window_start_a_reentry_cooldown():
     frame = _regime_frame(["DOWNTREND"] * 4)
     stopped, stop_state = evaluate_inverse_hedge(
