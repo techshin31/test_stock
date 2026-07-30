@@ -164,7 +164,7 @@ class Tickers(enum.Enum):
 
     KOSPI_INDEX = ("^KS11", "코스피 지수")
     BOND_ETF = ("153130.KS", "KODEX 단기채권 ETF")
-    INVERSE_ETF = ("153131.KS", "KODEX 인버스 ETF")
+    INVERSE_ETF = ("114800.KS", "KODEX 인버스 ETF")
 
     @property
     def description(self) -> str:

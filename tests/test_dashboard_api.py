@@ -84,6 +84,27 @@ def test_overview_uses_mode_scoped_official_report(monkeypatch, tmp_path):
     assert body["system_readiness"]["progress"]["paper_sessions"]["completed"] == 1
 
 
+def test_overview_exposes_the_paper_inverse_hedge_snapshot(monkeypatch, tmp_path):
+    log_root, report_root, analysis_root = _seed(tmp_path)
+    dashboard_path = log_root / "paper" / "dashboard_state.json"
+    dashboard = json.loads(dashboard_path.read_text(encoding="utf-8"))
+    dashboard["inverse_hedge"] = {
+        "ticker": "114800.KS",
+        "status": "WAIT_CONFIRMATION",
+        "target_weight": 0.0,
+        "confirmed_downtrend_sessions": 1,
+        "required_confirmations": 2,
+    }
+    _write_json(dashboard_path, dashboard)
+    monkeypatch.setattr(dashboard_api, "LOG_ROOT", log_root)
+    monkeypatch.setattr(dashboard_api, "REPORT_ROOT", report_root)
+    monkeypatch.setattr(dashboard_api, "ANALYSIS_ROOT", analysis_root)
+
+    body = dashboard_api.get_overview(mode="PAPER")
+
+    assert body["dashboard"]["inverse_hedge"] == dashboard["inverse_hedge"]
+
+
 def test_service_healthz_requires_a_successful_database_round_trip(monkeypatch):
     class Cursor:
         def __enter__(self):
@@ -410,6 +431,22 @@ def test_index_history_contains_only_overlapping_observed_closes():
         {"date": "2026-07-25", "KOSPI": 3210.0, "KOSDAQ": 800.0},
         {"date": "2026-07-28", "KOSPI": 3220.0, "KOSDAQ": 805.0},
     ]
+
+
+def test_market_trend_helpers_preserve_observed_closes_and_require_full_window():
+    dates = pd.date_range("2026-06-01", periods=21, freq="B")
+    closes = [100.0 + (3.0 if index % 2 else 0.0) for index in range(21)]
+    frame = pd.DataFrame({"Close": closes}, index=dates)
+
+    history = dashboard_api._close_history_points(frame, limit=3)
+
+    assert history == [
+        {"date": dates[-3].strftime("%Y-%m-%d"), "close": closes[-3]},
+        {"date": dates[-2].strftime("%Y-%m-%d"), "close": closes[-2]},
+        {"date": dates[-1].strftime("%Y-%m-%d"), "close": closes[-1]},
+    ]
+    assert dashboard_api._annualized_realized_volatility(frame) > 0
+    assert dashboard_api._annualized_realized_volatility(frame.iloc[:20]) is None
 
 
 def test_market_regime_falls_back_to_latest_paper_decision_without_defaults(

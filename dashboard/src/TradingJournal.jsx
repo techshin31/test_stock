@@ -24,6 +24,16 @@ import {
   Pie,
   Legend,
 } from 'recharts'
+import {
+  CHART_COLORS,
+  chartAxisLine,
+  chartAxisTick,
+  chartCursor,
+  chartGrid,
+  chartLegendStyle,
+  chartTooltipStyle,
+  formatShortDate,
+} from './chartTheme'
 
 const mono = { fontFamily: 'var(--font-mono)' }
 
@@ -44,17 +54,6 @@ function fmtNum(val) {
 
 function Shimmer({ height = 24, width = '100%' }) {
   return <div className="journal-shimmer" style={{ height, width }} />
-}
-
-const chartTooltipStyle = {
-  backgroundColor: 'var(--gray-900)',
-  border: '1px solid var(--gray-800)',
-  borderRadius: '8px',
-  color: 'var(--gray-200)',
-  fontSize: '13px',
-  fontFamily: 'var(--font-mono)',
-  boxShadow: '0 8px 16px rgba(0, 0, 0, 0.4)',
-  padding: '12px'
 }
 
 export default function TradingJournal({ journal, loading }) {
@@ -201,9 +200,8 @@ export default function TradingJournal({ journal, loading }) {
         .journal-panel {
           background: var(--gray-900);
           border: 1px solid var(--gray-800);
-          border-radius: 16px;
+          border-radius: 12px;
           padding: 24px;
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
         }
 
         .journal-panel__header {
@@ -222,7 +220,7 @@ export default function TradingJournal({ journal, loading }) {
         }
 
         .journal-panel__title {
-          font-size: 18px;
+          font-size: 17px;
           font-weight: 600;
           color: var(--white);
           margin: 0;
@@ -476,26 +474,16 @@ export default function TradingJournal({ journal, loading }) {
           <div style={{ height: 280, width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartData} margin={{ top: 16, right: 20, left: 8, bottom: 4 }}>
-                <defs>
-                  <linearGradient id="journalGreenBar" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--green)" stopOpacity={1} />
-                    <stop offset="100%" stopColor="var(--green)" stopOpacity={0.2} />
-                  </linearGradient>
-                  <linearGradient id="journalRedBar" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--red)" stopOpacity={1} />
-                    <stop offset="100%" stopColor="var(--red)" stopOpacity={0.2} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--gray-800)" vertical={false} />
-                <XAxis dataKey="date" tick={{ fill: '#8b8b97', fontSize: 12, fontFamily: 'var(--font-mono)' }} axisLine={{ stroke: 'var(--gray-800)' }} tickLine={false} dy={10} />
-                <YAxis tick={{ fill: '#8b8b97', fontSize: 12, fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${Math.round(v / 10000)}만`} dx={-10} />
-                <Tooltip cursor={{ fill: 'var(--gray-800)', opacity: 0.4 }} contentStyle={chartTooltipStyle} formatter={(v, name) => [fmtMoney(v), name === 'pnl' ? '일별 자산 변동' : '누적 자산 변동']} />
-                <Bar dataKey="pnl" barSize={16} radius={[4, 4, 0, 0]}>
+                <CartesianGrid {...chartGrid} />
+                <XAxis dataKey="date" tick={chartAxisTick} axisLine={chartAxisLine} tickLine={false} dy={8} />
+                <YAxis tick={chartAxisTick} axisLine={chartAxisLine} tickLine={false} tickFormatter={(value) => `${Math.round(value / 10000)}만`} width={50} />
+                <Tooltip cursor={chartCursor} contentStyle={chartTooltipStyle} formatter={(value, name) => [fmtMoney(value), name === 'pnl' ? '일별 자산 변동' : '누적 자산 변동']} />
+                <Bar dataKey="pnl" barSize={14} radius={[3, 3, 0, 0]} isAnimationActive={false}>
                   {chartData.map((d, i) => (
-                    <Cell key={i} fill={d.pnl >= 0 ? 'url(#journalGreenBar)' : 'url(#journalRedBar)'} />
+                    <Cell key={i} fill={d.pnl >= 0 ? CHART_COLORS.positive : CHART_COLORS.negative} />
                   ))}
                 </Bar>
-                <Line type="monotone" dataKey="cumulative" stroke="var(--blue)" strokeWidth={3} dot={{ r: 0 }} activeDot={{ r: 6, fill: 'var(--blue)', stroke: 'var(--gray-900)', strokeWidth: 2 }} />
+                <Line type="monotone" dataKey="cumulative" stroke={CHART_COLORS.accent} strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: CHART_COLORS.accent, stroke: 'var(--gray-900)', strokeWidth: 2 }} isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -521,13 +509,13 @@ export default function TradingJournal({ journal, loading }) {
                   data={benchmarkHistory}
                   margin={{ top: 12, right: 20, left: 0, bottom: 4 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--gray-800)" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fill: '#8b8b97', fontSize: 12, fontFamily: 'var(--font-mono)' }} axisLine={{ stroke: 'var(--gray-800)' }} tickLine={false} />
-                  <YAxis tick={{ fill: '#8b8b97', fontSize: 12, fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
-                  <Tooltip cursor={{ fill: 'var(--gray-800)', opacity: 0.4 }} contentStyle={chartTooltipStyle} formatter={(v) => [`${v}%`, '']} />
-                  <Legend wrapperStyle={{ paddingTop: '8px', fontSize: '12px' }} />
-                  <Line type="monotone" name="포트폴리오" dataKey="portfolio_return" stroke="var(--red)" strokeWidth={3} dot={{ r: 4 }} />
-                  <Line type="monotone" name="KOSPI 벤치마크" dataKey="benchmark_return" stroke="var(--blue)" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3 }} />
+                  <CartesianGrid {...chartGrid} />
+                  <XAxis dataKey="date" tick={chartAxisTick} axisLine={chartAxisLine} tickLine={false} tickFormatter={formatShortDate} minTickGap={28} />
+                  <YAxis tick={chartAxisTick} axisLine={chartAxisLine} tickLine={false} tickFormatter={(value) => `${value}%`} width={46} />
+                  <Tooltip cursor={chartCursor} contentStyle={chartTooltipStyle} formatter={(value) => [`${Number(value).toFixed(2)}%`, '']} />
+                  <Legend wrapperStyle={chartLegendStyle} />
+                  <Line type="monotone" name="포트폴리오" dataKey="portfolio_return" stroke={CHART_COLORS.negative} strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: CHART_COLORS.negative, stroke: 'var(--gray-900)', strokeWidth: 2 }} isAnimationActive={false} />
+                  <Line type="monotone" name="KOSPI 벤치마크" dataKey="benchmark_return" stroke={CHART_COLORS.accent} strokeWidth={2} strokeDasharray="5 4" dot={false} activeDot={{ r: 4, fill: CHART_COLORS.accent, stroke: 'var(--gray-900)', strokeWidth: 2 }} isAnimationActive={false} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -557,11 +545,12 @@ export default function TradingJournal({ journal, loading }) {
                     outerRadius={65}
                     paddingAngle={4}
                     dataKey="value"
+                    isAnimationActive={false}
                   >
                     <Cell fill="var(--green)" />
                     <Cell fill="var(--red)" />
                   </Pie>
-                  <Tooltip contentStyle={chartTooltipStyle} formatter={(val, name) => [`${val}회`, name]} />
+                  <Tooltip cursor={chartCursor} contentStyle={chartTooltipStyle} formatter={(val, name) => [`${val}회`, name]} />
                 </PieChart>
               </ResponsiveContainer>
               <div style={{ display: 'flex', gap: '16px', fontSize: '12px', fontFamily: 'var(--font-mono)' }}>

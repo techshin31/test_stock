@@ -6,7 +6,11 @@ import pytest
 
 from core.execution.trader import LiveTrader
 from core.strategy.fa_ta_momentum import FaTaMomentumStrategy
-from data.loaders.fa_ta_loader import enrich_ohlcv_with_fa
+from data.loaders.fa_ta_loader import FA_MODEL_VERSION, enrich_ohlcv_with_fa
+from apps.worker.fa_contract import (
+    PAPER_TRADING_MODEL_VERSION,
+    REAL_TRADING_MODEL_VERSION,
+)
 
 
 class FaDB:
@@ -114,13 +118,16 @@ def test_portfolio_limit_keeps_all_eligible_positions_without_upscaling():
 class PublishedDB:
     def __init__(self):
         self.queries = []
+        self.params = []
 
     def fetch_one(self, query, params=None):
         self.queries.append(query)
+        self.params.append(params)
         return {"id": 9}
 
     def fetch_all(self, query, params=None):
         self.queries.append(query)
+        self.params.append(params)
         return [{
             "fa_company_result_id": 1, "stock_code": "005930",
             "fa_score": 80.0, "score_confidence": 0.9,
@@ -135,11 +142,21 @@ def test_live_candidates_require_published_pass_run():
     trader.db = PublishedDB()
     trader.strategy_name = "aggressive"
     trader.allow_warning_fa_run = False
+    trader.fa_model_version = PAPER_TRADING_MODEL_VERSION
     run, rows = trader._load_published_fa_candidates(date(2026, 7, 1))
     assert run["id"] == 9 and rows[0]["stock_code"] == "005930"
     assert "validation_summary->>'status'" in trader.db.queries[0]
     assert "s.name = %s" in trader.db.queries[0]
+    assert "r.model_version = %s" in trader.db.queries[0]
+    assert trader.db.params[0][1] == PAPER_TRADING_MODEL_VERSION
     assert "c.is_selected = TRUE" in trader.db.queries[1]
+
+
+def test_v11_fa_model_is_restricted_to_paper_venue():
+    assert LiveTrader._fa_model_for_venue("PAPER") == PAPER_TRADING_MODEL_VERSION
+    assert LiveTrader._fa_model_for_venue("REAL") == REAL_TRADING_MODEL_VERSION
+    assert LiveTrader._fa_model_for_venue("DRY_RUN") == REAL_TRADING_MODEL_VERSION
+    assert FA_MODEL_VERSION == REAL_TRADING_MODEL_VERSION
 
 
 def test_universe_sync_fails_before_db_write_when_broker_is_unavailable():

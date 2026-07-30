@@ -9,7 +9,11 @@ from zoneinfo import ZoneInfo
 from pathlib import Path
 from data.loaders.kospi_data import download_multiple_stocks, download_kospi_index
 from data.loaders.fa_ta_loader import enrich_ohlcv_with_fa
-from apps.worker.fa_contract import DEFAULT_CONFIG as FA_CONTRACT
+from apps.worker.fa_contract import (
+    DEFAULT_CONFIG as FA_CONTRACT,
+    PAPER_TRADING_MODEL_VERSION,
+    REAL_TRADING_MODEL_VERSION,
+)
 from storage.postgres.connection import PostgreDB
 from core.strategy.fa_ta_momentum import FaTaMomentumStrategy
 from core.analytics.paper_portfolio_cap_shadow import (
@@ -19,6 +23,7 @@ from core.analytics.paper_shadow_reentry import evaluate_paper_shadow_reentry
 from core.broker.kis_api import BrokerResponseError, KisBroker, normalize_symbol
 from core.broker.simulation import LocalSimulationBroker
 from core.constant.types import Tickers
+from core.execution.inverse_hedge import InverseHedgeConfig, evaluate_inverse_hedge
 from core.utils.trading_calendar import previous_krx_trading_day
 
 class LiveTrader:
@@ -60,6 +65,34 @@ class LiveTrader:
         if not 0 < self.max_daily_loss_rate <= 0.20:
             raise ValueError("MAX_DAILY_LOSS_RATE must be in (0, 0.20]")
 
+        self.execution_venue = (
+            "DRY_RUN" if dry_run else "SIMULATE" if simulate else "PAPER" if mock else "REAL"
+        )
+        self.fa_model_version = self._fa_model_for_venue(self.execution_venue)
+        # The hedge policy is deliberately unavailable outside PAPER. It must
+        # earn its own evidence before any future REAL-mode approval.
+        self.inverse_hedge_enabled = (
+            self.execution_venue == "PAPER"
+            and os.getenv("PAPER_INVERSE_HEDGE_ENABLED", "true").lower() == "true"
+        )
+        # Do not even parse hedge environment overrides outside its permitted
+        # PAPER policy. This keeps the documented PAPER-only boundary strict.
+        if self.inverse_hedge_enabled:
+            self.inverse_hedge_config = InverseHedgeConfig(
+                min_confirmations=int(os.getenv("HEDGE_MIN_CONFIRMATIONS", "2")),
+                min_confidence=float(os.getenv("HEDGE_MIN_CONFIDENCE", str(2 / 3))),
+                stop_loss_pct=float(os.getenv("HEDGE_STOP_LOSS_PCT", "0.05")),
+                max_holding_sessions=int(os.getenv("HEDGE_MAX_HOLDING_SESSIONS", "5")),
+                cooldown_sessions=int(os.getenv("HEDGE_REENTRY_COOLDOWN_SESSIONS", "3")),
+                stage_weights=(
+                    float(os.getenv("HEDGE_STAGE_ONE_WEIGHT", "0.10")),
+                    float(os.getenv("HEDGE_STAGE_TWO_WEIGHT", "0.20")),
+                    float(os.getenv("HEDGE_STAGE_THREE_WEIGHT", "0.30")),
+                ),
+            )
+        else:
+            self.inverse_hedge_config = InverseHedgeConfig()
+
         # 최적화된 파라미터 적용
         strategy_params = {
             "entry_size": 0.18,     # 5종목 분산 (5 * 18% = 90% 비중, 10% 현금 유지)
@@ -74,17 +107,24 @@ class LiveTrader:
         }
         self.strategy = FaTaMomentumStrategy(strategy_params)
         self.strategy_name = self.strategy.INVESTMENT_TYPE.name.lower()
-        self.execution_venue = (
-            "DRY_RUN" if dry_run else "SIMULATE" if simulate else "PAPER" if mock else "REAL"
-        )
         self.log_dir = Path("logs") / self.execution_venue.lower()
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.risk_state_path = self.log_dir / "risk_state.json"
         self.price_guard_path = self.log_dir / "price_guard_state.json"
+        self.inverse_hedge_state_path = self.log_dir / "inverse_hedge_state.json"
         self.last_data_health = {}
         self.last_order_candidates = []
         self.last_order_suppressions = []
         self.last_global_order_pause = None
+
+    @staticmethod
+    def _fa_model_for_venue(execution_venue: str) -> str:
+        """Permit the candidate FA model only in the explicitly PAPER venue."""
+        return (
+            PAPER_TRADING_MODEL_VERSION
+            if execution_venue == "PAPER"
+            else REAL_TRADING_MODEL_VERSION
+        )
 
     def run_premarket_batch(self):
         logging.info(f"[{datetime.datetime.now()}] 프리마켓 FA 필터링 시작")
@@ -97,6 +137,7 @@ class LiveTrader:
         ohlcv_store = download_multiple_stocks(tickers, start=start_date, end=end_date, show_progress=False)
         ohlcv_store = enrich_ohlcv_with_fa(
             self.db, ohlcv_store, signal_date.isoformat(),
+            model_version=self.fa_model_version,
             min_score_confidence=FA_CONTRACT.minimum_score_confidence,
         )
         ohlcv_store, data_health = self._filter_stale_data(
@@ -151,7 +192,7 @@ class LiveTrader:
                 "tickers": fa_candidates,
                 "minimum_fa_score": self.strategy.FA_SCORE_MIN,
                 "minimum_score_confidence": self.strategy.MIN_SCORE_CONFIDENCE,
-                "score_model_code": FA_CONTRACT.model_version,
+                "score_model_code": self.fa_model_version,
             },
         )
         logging.info(f"프리마켓 FA 필터링 완료. 관심 종목 {len(fa_candidates)}개 저장.")
@@ -377,7 +418,11 @@ class LiveTrader:
             dependency_errors.append(message)
             fa_candidates = []
 
-        tickers = sorted(set(fa_candidates) | set(positions) | {Tickers.INVERSE_ETF.ticker})
+        inverse_ticker = Tickers.INVERSE_ETF.ticker
+        hedge_universe = {inverse_ticker} if (
+            self.inverse_hedge_enabled or inverse_ticker in positions
+        ) else set()
+        tickers = sorted(set(fa_candidates) | set(positions) | hedge_universe)
         logging.info(f"[데이터 로드] 관심 종목 + 보유 종목 ({len(tickers)}개) 병합 중...")
         try:
             downloaded = download_multiple_stocks(
@@ -387,6 +432,7 @@ class LiveTrader:
                 self.db,
                 downloaded,
                 signal_date.isoformat(),
+                model_version=self.fa_model_version,
                 min_score_confidence=FA_CONTRACT.minimum_score_confidence,
             )
             ohlcv_store, data_health = self._filter_stale_data(
@@ -439,6 +485,8 @@ class LiveTrader:
 
         # 시장국면 실패 시에도 가격/FA/TA 청산은 계속 평가하되 신규 진입은 차단한다.
         market_regime = None
+        regime_frame = None
+        kospi_close = pd.Series(dtype=float)
         try:
             start_date_kospi = (signal_date - datetime.timedelta(days=320)).isoformat()
             kospi_close = download_kospi_index(start_date_kospi, end_date)
@@ -450,8 +498,8 @@ class LiveTrader:
                     f"KOSPI 데이터가 오래됨(last={kospi_last_date}, expected={signal_date})"
                 )
             from core.analytics.regime import calc_close_regime
-            regime_df = calc_close_regime(kospi_close)
-            market_regime = str(regime_df["REGIME"].iloc[-1])
+            regime_frame = calc_close_regime(kospi_close)
+            market_regime = str(regime_frame["REGIME"].iloc[-1])
         except Exception as exc:
             message = f"KOSPI 시장국면 오류: {exc}"
             logging.error(f"{message}; 신규 매수를 차단합니다")
@@ -520,31 +568,55 @@ class LiveTrader:
                 "signal_reason": "DATA_UNAVAILABLE_HOLD",
             }
 
-        # ── 하락장(DOWNTREND) 인버스 ETF 헤지 (KODEX 인버스 153131.KS) ───────
-        inverse_ticker = Tickers.INVERSE_ETF.ticker
-        if market_regime == "DOWNTREND":
-            for t in list(target_positions.keys()):
-                if t != inverse_ticker:
-                    target_positions[t] = 0.0
-                    if t in target_details:
-                        target_details[t]["signal_reason"] = "DOWNTREND"
+        inverse_hedge = {
+            "schema_version": 1,
+            "instrument": "KODEX_INVERSE_1X",
+            "ticker": inverse_ticker,
+            "status": "DISABLED",
+            "reason": "PAPER_ONLY",
+            "target_weight": 0.0,
+            "current_weight": 0.0,
+        }
+        if self.inverse_hedge_enabled:
+            hedge_decision, hedge_state = evaluate_inverse_hedge(
+                signal_date=signal_date,
+                regime_frame=regime_frame if regime_frame is not None else pd.DataFrame(),
+                close=kospi_close,
+                market_regime=market_regime,
+                position=positions.get(inverse_ticker),
+                total_eval=float(total_eval),
+                state=self._read_json_state(self.inverse_hedge_state_path),
+                config=self.inverse_hedge_config,
+            )
+            self._write_json_state(self.inverse_hedge_state_path, hedge_state)
+            inverse_hedge = {**hedge_decision, "ticker": inverse_ticker}
 
-            target_positions[inverse_ticker] = 0.50
-            target_details[inverse_ticker] = {
-                "signal_reason": "INVERSE_HEDGE_ENTRY",
-                "fa_score": None,
-                "momentum": None,
-            }
-        else:
-            if inverse_ticker in positions:
-                target_positions[inverse_ticker] = 0.0
+            # A first confirmed downtrend immediately moves ordinary long
+            # holdings to cash. The separate inverse entry still waits for its
+            # confirmation, confidence, cooldown, and dedicated risk gates.
+            if market_regime == "DOWNTREND":
+                for ticker in list(target_positions.keys()):
+                    if ticker != inverse_ticker:
+                        target_positions[ticker] = 0.0
+                        if ticker in target_details:
+                            target_details[ticker]["signal_reason"] = "DOWNTREND"
+
+            if inverse_ticker in positions or inverse_hedge["target_weight"] > 0:
+                target_positions[inverse_ticker] = inverse_hedge["target_weight"]
                 target_details[inverse_ticker] = {
-                    "signal_reason": "DOWNTREND_EXIT",
+                    "signal_reason": inverse_hedge["reason"],
                     "fa_score": None,
                     "momentum": None,
                 }
-            elif inverse_ticker in target_positions:
-                target_positions[inverse_ticker] = 0.0
+        elif inverse_ticker in positions:
+            # Do not leave an inverse position unmanaged when the PAPER-only
+            # policy is disabled or the trader is instantiated in another mode.
+            target_positions[inverse_ticker] = 0.0
+            target_details[inverse_ticker] = {
+                "signal_reason": "DOWNTREND_EXIT",
+                "fa_score": None,
+                "momentum": None,
+            }
 
         data_health["insufficient_history_tickers"] = sorted(insufficient_history)
         data_health["held_stale_tickers"] = sorted(set(positions) - usable_signal_tickers)
@@ -628,6 +700,25 @@ class LiveTrader:
                 total_eval,
                 entry_circuit_breaker,
             )
+        inverse_hedge["effective_target_weight"] = round(
+            float(target_positions.get(inverse_ticker, 0.0)), 4
+        )
+        if (
+            inverse_hedge.get("target_weight", 0.0) > 0
+            and inverse_hedge["effective_target_weight"] <= 0
+        ):
+            inverse_hedge["entry_blocked_by"] = target_details.get(
+                inverse_ticker, {}
+            ).get("signal_reason", "ENTRY_CIRCUIT_BREAKER")
+        inverse_hedge = self._inverse_hedge_dashboard_payload(
+            inverse_hedge,
+            positions,
+            total_eval,
+            kospi_close,
+            ohlcv_store,
+        )
+        data_health["inverse_hedge"] = inverse_hedge
+        self.last_data_health = data_health
         if self.execution_venue == "PAPER":
             try:
                 portfolio_cap_shadow = evaluate_paper_portfolio_cap_shadow(
@@ -663,6 +754,7 @@ class LiveTrader:
             target_positions,
             target_details,
             market_regime or "UNAVAILABLE",
+            inverse_hedge=inverse_hedge,
         )
 
         print(f"[타겟 산출 완료] 타겟 포지션 수: {len([t for t, w in target_positions.items() if w > 0.0])}개")
@@ -678,6 +770,7 @@ class LiveTrader:
         )
         data_health["order_suppressions"] = suppression_summary
         dashboard_state["data_health"] = data_health
+        dashboard_state["inverse_hedge"] = inverse_hedge
         if shadow_reentry is not None:
             dashboard_state["shadow_reentry"] = shadow_reentry
         if portfolio_cap_shadow is not None:
@@ -1037,7 +1130,13 @@ class LiveTrader:
         self._write_json_state(path, state)
 
     def _write_decision_snapshot(
-        self, total_eval, positions, target_positions, target_details, market_regime
+        self,
+        total_eval,
+        positions,
+        target_positions,
+        target_details,
+        market_regime,
+        inverse_hedge=None,
     ):
         rows = []
         for ticker in sorted(set(positions) | set(target_positions)):
@@ -1064,6 +1163,8 @@ class LiveTrader:
             "target_count": sum(row["selected"] for row in rows),
             "decisions": rows,
         }
+        if isinstance(inverse_hedge, dict):
+            payload["inverse_hedge"] = inverse_hedge
         state_path = self.log_dir / "decision_state.json"
         temp_path = self.log_dir / "decision_state.json.tmp"
         with temp_path.open("w", encoding="utf-8") as handle:
@@ -1071,6 +1172,58 @@ class LiveTrader:
         os.replace(temp_path, state_path)
         with (self.log_dir / "decision_history.jsonl").open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
+
+    @staticmethod
+    def _inverse_hedge_dashboard_payload(
+        decision, positions, total_eval, kospi_close, ohlcv_store
+    ):
+        """Attach observed exposure, PnL, and a clearly-labelled proxy gap."""
+        payload = dict(decision or {})
+        inverse_ticker = Tickers.INVERSE_ETF.ticker
+        inverse_position = (positions or {}).get(inverse_ticker, {})
+
+        def position_value(position):
+            return float(position.get("qty") or 0.0) * float(
+                position.get("current_price") or position.get("avg_price") or 0.0
+            )
+
+        inverse_value = position_value(inverse_position)
+        long_value = sum(
+            position_value(position)
+            for ticker, position in (positions or {}).items()
+            if ticker != inverse_ticker
+        )
+        total = float(total_eval or 0.0)
+        actual_weight = inverse_value / total if total > 0 else 0.0
+        long_weight = long_value / total if total > 0 else 0.0
+        average = float(inverse_position.get("avg_price") or 0.0)
+        current = float(inverse_position.get("current_price") or 0.0)
+        quantity = float(inverse_position.get("qty") or 0.0)
+        pnl = quantity * (current - average) if average > 0 and current > 0 else 0.0
+
+        payload.update({
+            "actual_weight": round(actual_weight, 6),
+            "long_market_weight": round(long_weight, 6),
+            "net_market_exposure": round(long_weight - actual_weight, 6),
+            "unrealized_pnl": round(pnl, 2),
+            "profit_rate": (
+                round((current / average - 1.0) * 100, 4)
+                if average > 0 and current > 0 else None
+            ),
+            "position_open": quantity > 0,
+            "tracking_reference": "KOSPI_CLOSE_PROXY",
+            "tracking_gap": None,
+        })
+        try:
+            inverse_close = ohlcv_store.get(inverse_ticker, pd.DataFrame())["close"]
+            inverse_return = float(inverse_close.iloc[-1] / inverse_close.iloc[-2] - 1.0)
+            market_return = float(kospi_close.iloc[-1] / kospi_close.iloc[-2] - 1.0)
+            payload["daily_inverse_return"] = round(inverse_return, 6)
+            payload["daily_market_return"] = round(market_return, 6)
+            payload["tracking_gap"] = round(inverse_return + market_return, 6)
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError, ZeroDivisionError):
+            pass
+        return payload
 
     def _append_account_history(self, balance_info, total_eval):
         timestamp = datetime.datetime.now(ZoneInfo("Asia/Seoul")).isoformat(
@@ -1148,7 +1301,9 @@ class LiveTrader:
             ticker
             for ticker in active
             if str(details.get(ticker, {}).get("signal_reason", "")).endswith("_HOLD")
-            or details.get(ticker, {}).get("signal_reason") == "INVERSE_HEDGE_ENTRY"
+            or str(details.get(ticker, {}).get("signal_reason", "")).startswith(
+                "INVERSE_HEDGE_"
+            )
         }
         protected_total = sum(result[ticker] for ticker in protected)
         allocatable = [ticker for ticker in active if ticker not in protected]
@@ -1219,6 +1374,20 @@ class LiveTrader:
                 result[ticker] = current_weight
                 details.setdefault(ticker, {})["signal_reason"] = reason
         return result
+
+    @staticmethod
+    def _hedge_exit_prerequisites_met(order, results):
+        """Require every planned long exit to be fully filled before hedging."""
+        required = set(order.get("requires_prior_sell_fills") or [])
+        if not required:
+            return True, []
+        filled = {
+            row.get("ticker")
+            for row in results
+            if row.get("type") == "SELL" and row.get("status") == "FILLED"
+        }
+        missing = sorted(required - filled)
+        return not missing, missing
         
     def _calculate_orders(
         self,
@@ -1274,11 +1443,19 @@ class LiveTrader:
             (normalize_symbol(r['symbol']), r['order_side_code'])
             for r in rows if r['order_status_code'] == 'FILLED'
         }
+        # An UNKNOWN_RESULT is a same-day retry blocker only while its final
+        # broker outcome remains unresolved.  Reconciliation can later prove
+        # that the broker did not receive the order and mark it REJECTED; in
+        # that case the normal bounded retry path is safe and must not remain
+        # permanently hidden behind the historical UNKNOWN_RESULT event.
+        terminal_order_statuses = {"FILLED", "REJECTED", "CANCELLED"}
         ambiguous_messages = {
             (normalize_symbol(r['symbol']), r['order_side_code']): r.get(
                 'unknown_result_message'
             )
-            for r in rows if r.get('had_unknown_result')
+            for r in rows
+            if r.get('had_unknown_result')
+            and r['order_status_code'] not in terminal_order_statuses
         }
         retry_counts = {}
         attempt_counts = {}
@@ -1294,7 +1471,8 @@ class LiveTrader:
             "COMPANY_RISK_BLOCKED",
             "DOWNTREND",
             "DOWNTREND_EXIT",
-            "INVERSE_HEDGE_ENTRY",
+            "INVERSE_HEDGE_STOP_LOSS",
+            "INVERSE_HEDGE_MAX_HOLD",
             "FA_SCORE_DETERIORATED",
             "TA_MOMENTUM_LOSS",
         }
@@ -1305,19 +1483,6 @@ class LiveTrader:
                 logging.info(f"[{ticker}] price guard cooldown is active for {side}")
                 self.last_order_suppressions.append({
                     "ticker": ticker, "side": side, "reason": "PRICE_GUARD_COOLDOWN"
-                })
-                return False
-            if key in open_keys:
-                logging.info(f"[{ticker}] 오늘 열린 {side} 주문이 존재하여 스킵합니다.")
-                self.last_order_suppressions.append({
-                    "ticker": ticker, "side": side, "reason": "OPEN_ORDER_TODAY"
-                })
-                return False
-            urgent_exit = side == "SELL" and reason in urgent_exit_reasons
-            if key in filled_keys and not urgent_exit:
-                logging.info(f"[{ticker}] 오늘 체결된 {side} 주문이 존재하여 스킵합니다.")
-                self.last_order_suppressions.append({
-                    "ticker": ticker, "side": side, "reason": "FILLED_ORDER_TODAY"
                 })
                 return False
             if key in ambiguous_messages:
@@ -1334,6 +1499,19 @@ class LiveTrader:
                     ambiguous_messages[key], "BROKER_UNKNOWN_RESULT"
                 )
                 self.last_order_suppressions.append(suppression)
+                return False
+            if key in open_keys:
+                logging.info(f"[{ticker}] 오늘 열린 {side} 주문이 존재하여 스킵합니다.")
+                self.last_order_suppressions.append({
+                    "ticker": ticker, "side": side, "reason": "OPEN_ORDER_TODAY"
+                })
+                return False
+            urgent_exit = side == "SELL" and reason in urgent_exit_reasons
+            if key in filled_keys and not urgent_exit:
+                logging.info(f"[{ticker}] 오늘 체결된 {side} 주문이 존재하여 스킵합니다.")
+                self.last_order_suppressions.append({
+                    "ticker": ticker, "side": side, "reason": "FILLED_ORDER_TODAY"
+                })
                 return False
             if retry_counts.get(key, 0) >= self.max_order_attempts:
                 logging.warning(f"[{ticker}] 오늘 {side} 주문 재시도 한도에 도달했습니다.")
@@ -1394,10 +1572,23 @@ class LiveTrader:
             if candidate and can_order(ticker, 'SELL', candidate.get("reason")):
                 orders.append(add_identity(candidate))
                     
+        hedge_exit_tickers = sorted(
+            ticker
+            for ticker in current_positions
+            if ticker != Tickers.INVERSE_ETF.ticker
+            and target_positions.get(ticker, 0.0) == 0.0
+        )
+
         # 2. 매수 주문 계산
         for ticker, weight in target_positions.items():
             if weight <= 0.0:
                 continue
+            signal_reason = str(
+                target_details.get(ticker, {}).get("signal_reason", "")
+            )
+            hedge_buy_reason = (
+                signal_reason if signal_reason.startswith("INVERSE_HEDGE_") else None
+            )
             if ticker in current_positions:
                 current_price = float(
                     current_positions[ticker].get('current_price') or 0.0
@@ -1427,7 +1618,10 @@ class LiveTrader:
                             "ticker": ticker,
                             "qty": buy_qty,
                             "expected_price": float(current_price),
-                            "reason": f"REBALANCE_WEIGHT_INCREASE_TO_{int(weight*100)}%"
+                            "reason": (
+                                hedge_buy_reason
+                                or f"REBALANCE_WEIGHT_INCREASE_TO_{int(weight*100)}%"
+                            ),
                         }
             else:
                 # 신규 진입
@@ -1438,8 +1632,21 @@ class LiveTrader:
                         "ticker": ticker,
                         "qty": target_qty,
                         "expected_price": float(current_price),
-                        "reason": f"FA+TA MOMENTUM ENTRY_{int(weight*100)}%"
+                        "reason": (
+                            hedge_buy_reason
+                            or f"FA+TA MOMENTUM ENTRY_{int(weight*100)}%"
+                        ),
                     }
+            if (
+                candidate
+                and ticker == Tickers.INVERSE_ETF.ticker
+                and candidate.get("reason") in {
+                    "INVERSE_HEDGE_ENTRY",
+                    "INVERSE_HEDGE_SCALE_UP",
+                }
+                and hedge_exit_tickers
+            ):
+                candidate["requires_prior_sell_fills"] = hedge_exit_tickers
             if candidate and can_order(ticker, 'BUY', candidate.get("reason")):
                 orders.append(add_identity(candidate))
                     
@@ -1472,6 +1679,25 @@ class LiveTrader:
         results = []
 
         for order in orders:
+            prerequisites_met, missing_exits = self._hedge_exit_prerequisites_met(
+                order, results
+            )
+            if not prerequisites_met:
+                self.last_order_suppressions = list(
+                    getattr(self, "last_order_suppressions", []) or []
+                )
+                self.last_order_suppressions.append({
+                    "ticker": order["ticker"],
+                    "side": "BUY",
+                    "reason": "HEDGE_EXIT_UNFILLED",
+                    "blocked_by": missing_exits,
+                })
+                results.append({
+                    **order,
+                    "status": "SKIPPED",
+                    "message": "HEDGE_EXIT_UNFILLED",
+                })
+                continue
             # ponytail: 한국투자증권 API의 모의투자 초당 거래제한(2 TPS)을 초과하지 않도록 0.6초 딜레이 부여
             time.sleep(0.6)
             ticker = order['ticker']
@@ -1677,6 +1903,25 @@ class LiveTrader:
     def _execute_simulation_orders(self, orders):
         results = []
         for order in orders:
+            prerequisites_met, missing_exits = self._hedge_exit_prerequisites_met(
+                order, results
+            )
+            if not prerequisites_met:
+                self.last_order_suppressions = list(
+                    getattr(self, "last_order_suppressions", []) or []
+                )
+                self.last_order_suppressions.append({
+                    "ticker": order["ticker"],
+                    "side": "BUY",
+                    "reason": "HEDGE_EXIT_UNFILLED",
+                    "blocked_by": missing_exits,
+                })
+                results.append({
+                    **order,
+                    "status": "SKIPPED",
+                    "message": "HEDGE_EXIT_UNFILLED",
+                })
+                continue
             ticker = order["ticker"]
             qty = int(order["qty"])
             price = float(order["expected_price"])
@@ -2083,6 +2328,7 @@ class LiveTrader:
     def _load_published_fa_candidates(self, cutoff_date, as_of_date=None):
         """검증·발행된 최신 월간 FA 결과만 라이브 후보로 반환한다."""
         as_of_date = as_of_date or datetime.date.today()
+        model_version = getattr(self, "fa_model_version", REAL_TRADING_MODEL_VERSION)
         quality_condition = ""
         if not self.allow_warning_fa_run:
             quality_condition = "AND COALESCE(r.validation_summary->>'status', 'FAIL') = 'PASS'"
@@ -2093,12 +2339,13 @@ class LiveTrader:
             JOIN strategies s ON s.id = r.strategy_id
             WHERE r.status_code = 'PUBLISHED'
               AND s.name = %s
+              AND r.model_version = %s
               AND r.effective_date <= %s::date
               {quality_condition}
             ORDER BY r.effective_date DESC, r.run_version DESC, r.id DESC
             LIMIT 1
             """,
-            (self.strategy_name, as_of_date),
+            (self.strategy_name, model_version, as_of_date),
         )
         if not run:
             mode = "PASS 또는 WARNING" if self.allow_warning_fa_run else "PASS"

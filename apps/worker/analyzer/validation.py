@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import date
+from datetime import date, timedelta
 import re
 
 from apps.worker.collector.readiness import ReadinessReport, run as run_readiness
@@ -67,6 +67,7 @@ _WARNING_CHECKS = frozenset({
     "sector_selection",
     "company_selection",
     "company_contract",
+    "company_fa_freshness",
     "company_risk",
 })
 
@@ -127,6 +128,16 @@ def validate_run(
     checks.append(ResultCheck(
         "company_contract", not invalid_companies,
         str(invalid_companies or "complete"),
+    ))
+    stale_companies = sorted(
+        row["stock_code"] for row in company_rows
+        if row["latest_available_date"] is None
+        or row["latest_available_date"]
+        < run["cutoff_date"] - timedelta(days=config.scoring.max_company_fa_age_days)
+    )
+    checks.append(ResultCheck(
+        "company_fa_freshness", not stale_companies,
+        str(stale_companies or "complete"),
     ))
     blocked = fetch_buy_blocked_stock_codes(
         db, run["effective_date"], [row["stock_code"] for row in company_rows]

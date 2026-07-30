@@ -24,16 +24,27 @@ from storage.postgres.repositories.company_risk_repo import (
 from storage.postgres.repositories.fa_analysis_repo import insert_sector_results
 
 
+MAX_KRX_SINGLE_SESSION_RETURN = 0.50
+
+
 def reconstruct_industry_indices(
     price_rows: list[dict],
     wics_rows: list[dict],
     *,
     minimum_coverage: float = 0.80,
-    method_version: str = "mcap-v1",
+    method_version: str = "mcap-v1.1",
+    max_abs_daily_return: float = MAX_KRX_SINGLE_SESSION_RETURN,
 ) -> list[dict]:
-    """Reconstruct point-in-time market-cap weighted industry indices."""
+    """Reconstruct point-in-time market-cap weighted industry indices.
+
+    Returns beyond the KRX single-session price-limit ceiling are excluded from
+    both the weighted return and coverage.  This prevents a malformed vendor
+    close from contaminating an entire sector's displayed daily performance.
+    """
     if not price_rows or not wics_rows:
         return []
+    if not 0 < max_abs_daily_return <= 1:
+        raise ValueError("max_abs_daily_return must be in (0, 1]")
     prices = pd.DataFrame(price_rows)
     prices["price_date"] = pd.to_datetime(prices["price_date"])
     prices["close"] = pd.to_numeric(prices["close"], errors="coerce").astype(float)
@@ -78,10 +89,13 @@ def reconstruct_industry_indices(
                 continue
             weights = full_weights.reindex(available_symbols).fillna(0.0)
             member_returns = period_returns[available_symbols]
-            valid_weight = member_returns.notna().mul(weights, axis=1).sum(axis=1)
+            validated_returns = member_returns.where(
+                member_returns.abs().le(max_abs_daily_return)
+            )
+            valid_weight = validated_returns.notna().mul(weights, axis=1).sum(axis=1)
             total_weight = float(full_weights.sum())
             coverage = valid_weight / total_weight if total_weight else 0.0
-            weighted_return = member_returns.mul(weights, axis=1).sum(
+            weighted_return = validated_returns.mul(weights, axis=1).sum(
                 axis=1, min_count=1
             ) / valid_weight.where(valid_weight != 0)
             for price_date, value in weighted_return.items():

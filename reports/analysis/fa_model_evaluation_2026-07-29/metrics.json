@@ -1,0 +1,157 @@
+{
+  "generated_at": "2026-07-29T17:14:42",
+  "status": "RESEARCH_ONLY_NOT_AN_ORDER_PERMISSION",
+  "baseline_model_version": "topdown-fa-v1.0.0",
+  "candidate_model_version": "topdown-fa-v1.1.0",
+  "methodology": {
+    "comparison": "FA-score-direct monthly allocation, same cost and exposure assumptions",
+    "baseline_metadata": {
+      "generated_at": "2026-07-29T17:14:21",
+      "methodology": "monthly point-in-time latest eligible FA scores; no security-count cap",
+      "model_version": "topdown-fa-v1.0.0",
+      "exposure": 0.9,
+      "fa_minimum": 50.0,
+      "buy_cost_rate": 0.00115,
+      "sell_cost_rate": 0.00295,
+      "score_history_start": "2023-05-02",
+      "score_history_end": "2026-07-02",
+      "price_history_start": "2023-01-02",
+      "price_history_end": "2026-07-28",
+      "important_limitations": [
+        "Only two PUBLISHED aggressive FA runs exist, so historical candidates are reconstructed from point-in-time quarterly FA scores.",
+        "Sector selection and live TA entry timing are not replayed; this isolates allocation-method effects.",
+        "Monthly close-to-close returns and approximate transaction costs are used."
+      ]
+    },
+    "candidate_metadata": {
+      "generated_at": "2026-07-29T17:14:41",
+      "methodology": "monthly point-in-time latest eligible FA scores; no security-count cap",
+      "model_version": "topdown-fa-v1.1.0",
+      "exposure": 0.9,
+      "fa_minimum": 50.0,
+      "buy_cost_rate": 0.00115,
+      "sell_cost_rate": 0.00295,
+      "score_history_start": "2023-05-02",
+      "score_history_end": "2026-07-02",
+      "price_history_start": "2023-01-02",
+      "price_history_end": "2026-07-28",
+      "important_limitations": [
+        "Only two PUBLISHED aggressive FA runs exist, so historical candidates are reconstructed from point-in-time quarterly FA scores.",
+        "Sector selection and live TA entry timing are not replayed; this isolates allocation-method effects.",
+        "Monthly close-to-close returns and approximate transaction costs are used."
+      ]
+    }
+  },
+  "baseline": {
+    "equal": {
+      "months": 38,
+      "total_return": 0.27919792228490836,
+      "cagr": 0.08086091925813377,
+      "annual_volatility": 0.17148283452226631,
+      "sharpe_zero_rf": 0.5371614360885901,
+      "max_drawdown": -0.21900612471547998,
+      "average_monthly_turnover": 0.10608941629985931,
+      "total_cost_ratio": 0.007454365529759041,
+      "final_equity_multiple": 1.2791979222849084
+    },
+    "fa_direct": {
+      "months": 38,
+      "total_return": 0.29133773350286196,
+      "cagr": 0.08408968732650157,
+      "annual_volatility": 0.17155941866071334,
+      "sharpe_zero_rf": 0.5543908367282214,
+      "max_drawdown": -0.21718282911041642,
+      "average_monthly_turnover": 0.1132078541107094,
+      "total_cost_ratio": 0.008008891835224265,
+      "final_equity_multiple": 1.291337733502862
+    },
+    "fa_excess": {
+      "months": 38,
+      "total_return": 0.3593625954073223,
+      "cagr": 0.10180791820931012,
+      "annual_volatility": 0.1717388986367331,
+      "sharpe_zero_rf": 0.648621190192575,
+      "max_drawdown": -0.20860964699491924,
+      "average_monthly_turnover": 0.1825174356253397,
+      "total_cost_ratio": 0.01340810823521396,
+      "final_equity_multiple": 1.3593625954073223
+    }
+  },
+  "candidate": {
+    "equal": {
+      "months": 38,
+      "total_return": 0.2820971460804418,
+      "cagr": 0.08163391129788611,
+      "annual_volatility": 0.17151547558643365,
+      "sharpe_zero_rf": 0.5412868848302131,
+      "max_drawdown": -0.21895716666500986,
+      "average_monthly_turnover": 0.10657224283284954,
+      "total_cost_ratio": 0.007491977716678979,
+      "final_equity_multiple": 1.2820971460804418
+    },
+    "fa_direct": {
+      "months": 38,
+      "total_return": 0.2921388046165512,
+      "cagr": 0.08430201272502602,
+      "annual_volatility": 0.17162275755679765,
+      "sharpe_zero_rf": 0.5553886034822246,
+      "max_drawdown": -0.21740372695765964,
+      "average_monthly_turnover": 0.11334768326527324,
+      "total_cost_ratio": 0.008019784526364784,
+      "final_equity_multiple": 1.2921388046165512
+    },
+    "fa_excess": {
+      "months": 38,
+      "total_return": 0.34544267846909293,
+      "cagr": 0.09823245436260852,
+      "annual_volatility": 0.1721140628865505,
+      "sharpe_zero_rf": 0.6284713652243616,
+      "max_drawdown": -0.21010318365965686,
+      "average_monthly_turnover": 0.18078886722473675,
+      "total_cost_ratio": 0.01327345275680699,
+      "final_equity_multiple": 1.345442678469093
+    }
+  },
+  "fa_direct_delta_candidate_minus_baseline": {
+    "months": 0.0,
+    "total_return": 0.0008010711136892112,
+    "cagr": 0.00021232539852444887,
+    "annual_volatility": 6.333889608431398e-05,
+    "sharpe_zero_rf": 0.0009977667540032042,
+    "max_drawdown": -0.0002208978472432177,
+    "average_monthly_turnover": 0.00013982915456384193,
+    "total_cost_ratio": 1.0892691140518274e-05
+  },
+  "candidate_fa_direct_minus_equal": {
+    "months": 0.0,
+    "total_return": 0.010041658536109388,
+    "cagr": 0.002668101427139913,
+    "annual_volatility": 0.00010728197036399822,
+    "sharpe_zero_rf": 0.014101718652011486,
+    "max_drawdown": 0.0015534397073502237,
+    "average_monthly_turnover": 0.006775440432423702,
+    "total_cost_ratio": 0.000527806809685805
+  },
+  "interpretation": {
+    "candidate_sharpe_not_lower": true,
+    "candidate_drawdown_not_worse": false,
+    "candidate_has_same_period_count": true
+  },
+  "promotion_gate": {
+    "ready_for_manual_review": false,
+    "order_permission": "DENIED_BY_DESIGN",
+    "checks": {
+      "same_period_count": true,
+      "sharpe_not_lower": true,
+      "drawdown_not_worse": false
+    },
+    "blockers": [
+      "drawdown_not_worse"
+    ]
+  },
+  "limitations": [
+    "This is a historical research comparison, not a forecast or a return guarantee.",
+    "It isolates monthly FA allocation and does not replay sector selection, intraday execution, or live TA timing.",
+    "A PASS research result does not publish the candidate model or grant order permission."
+  ]
+}

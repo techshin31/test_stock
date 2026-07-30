@@ -3,9 +3,13 @@ from datetime import date
 import pandas as pd
 
 from storage.postgres.connection import PostgreDB
+from apps.worker.fa_contract import REAL_TRADING_MODEL_VERSION
 
 
-FA_MODEL_VERSION = "topdown-fa-v1.0.0"
+# This loader is used by more than one execution venue. Its implicit default
+# therefore remains the REAL-safe baseline; the PAPER trader passes its pilot
+# version explicitly.
+FA_MODEL_VERSION = REAL_TRADING_MODEL_VERSION
 DEFAULT_MAX_FA_AGE_DAYS = 180
 DEFAULT_MIN_SCORE_CONFIDENCE = 0.70
 

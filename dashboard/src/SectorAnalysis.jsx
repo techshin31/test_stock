@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react'
+import React, { useMemo } from 'react'
 import { Layers, TrendingUp, Flame, Snowflake } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -10,6 +10,14 @@ import {
   Cell,
   CartesianGrid,
 } from 'recharts'
+import {
+  CHART_COLORS,
+  chartAxisLine,
+  chartAxisTick,
+  chartCursor,
+  chartGrid,
+  chartTooltipStyle,
+} from './chartTheme'
 
 const mono = { fontFamily: 'var(--font-mono)' }
 
@@ -27,13 +35,13 @@ function fmtVolume(vol) {
 }
 
 function getGradientStyle(rate) {
-  if (rate >= 3) return { background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.4) 0%, rgba(34, 197, 94, 0.1) 100%)', borderColor: 'rgba(34, 197, 94, 0.3)' }
-  if (rate >= 1) return { background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.25) 0%, rgba(34, 197, 94, 0.05) 100%)', borderColor: 'rgba(34, 197, 94, 0.2)' }
-  if (rate > 0) return { background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, transparent 100%)', borderColor: 'rgba(34, 197, 94, 0.1)' }
-  if (rate <= -3) return { background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.4) 0%, rgba(239, 68, 68, 0.1) 100%)', borderColor: 'rgba(239, 68, 68, 0.3)' }
-  if (rate <= -1) return { background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.25) 0%, rgba(239, 68, 68, 0.05) 100%)', borderColor: 'rgba(239, 68, 68, 0.2)' }
-  if (rate < 0) return { background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, transparent 100%)', borderColor: 'rgba(239, 68, 68, 0.1)' }
-  return { background: 'linear-gradient(135deg, var(--gray-800) 0%, var(--gray-850) 100%)', borderColor: 'var(--gray-700)' }
+  if (rate >= 3) return { background: 'rgba(52, 211, 153, 0.18)', borderColor: 'rgba(52, 211, 153, 0.52)' }
+  if (rate >= 1) return { background: 'rgba(52, 211, 153, 0.12)', borderColor: 'rgba(52, 211, 153, 0.36)' }
+  if (rate > 0) return { background: 'rgba(52, 211, 153, 0.07)', borderColor: 'rgba(52, 211, 153, 0.22)' }
+  if (rate <= -3) return { background: 'rgba(248, 113, 113, 0.18)', borderColor: 'rgba(248, 113, 113, 0.52)' }
+  if (rate <= -1) return { background: 'rgba(248, 113, 113, 0.12)', borderColor: 'rgba(248, 113, 113, 0.36)' }
+  if (rate < 0) return { background: 'rgba(248, 113, 113, 0.07)', borderColor: 'rgba(248, 113, 113, 0.22)' }
+  return { background: 'var(--gray-850)', borderColor: 'var(--gray-700)' }
 }
 
 function heatmapTextColor(rate) {
@@ -42,38 +50,7 @@ function heatmapTextColor(rate) {
   return 'var(--gray-400)'
 }
 
-function useAnimatedNumber(targetValue, duration = 1200) {
-  const [val, setVal] = useState(0)
-  const valRef = useRef(0)
-
-  useEffect(() => {
-    if (targetValue == null) return
-    let startTime
-    const startVal = valRef.current
-    
-    const animate = (timestamp) => {
-      if (!startTime) startTime = timestamp
-      const progress = Math.min((timestamp - startTime) / duration, 1)
-      const easeOutQuart = 1 - Math.pow(1 - progress, 4)
-      const current = startVal + (targetValue - startVal) * easeOutQuart
-      
-      setVal(current)
-      
-      if (progress < 1) {
-        requestAnimationFrame(animate)
-      } else {
-        setVal(targetValue)
-        valRef.current = targetValue
-      }
-    }
-    requestAnimationFrame(animate)
-  }, [targetValue, duration])
-
-  return val
-}
-
 function AnimatedRate({ value }) {
-  const animatedValue = useAnimatedNumber(value)
   if (value == null) return <span className="sector-rate-text">—</span>
   
   return (
@@ -81,7 +58,7 @@ function AnimatedRate({ value }) {
       className="sector-rate-text"
       style={{ color: heatmapTextColor(value), ...mono }}
     >
-      {fmtRate(animatedValue)}
+      {fmtRate(value)}
     </span>
   )
 }
@@ -94,21 +71,11 @@ function SectorEmpty({ message }) {
   return <div className="sector-empty" role="status">{message}</div>
 }
 
-const chartTooltipStyle = {
-  backgroundColor: 'var(--gray-900)',
-  border: '1px solid var(--gray-800)',
-  borderRadius: '6px',
-  color: 'var(--gray-200)',
-  fontSize: '12px',
-  fontFamily: 'var(--font-mono)',
-  boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-}
-
 export default function SectorAnalysis({ sectors, loading }) {
   const items = useMemo(() => sectors?.items || [], [sectors])
   const top5 = useMemo(() => items.slice(0, 5), [items])
   const bottom5 = useMemo(() => [...items].reverse().slice(0, 5), [items])
-  const sourceLabel = sectors?.source === 'WICS_DERIVED_MCAP_V1'
+  const sourceLabel = ['WICS_DERIVED_MCAP_V1', 'WICS_DERIVED_MCAP_V1_1'].includes(sectors?.source)
     ? '구성종목 시가총액 가중 재구성'
     : sectors?.source === 'WICS_OFFICIAL'
       ? 'WiseIndex 공식'
@@ -142,7 +109,6 @@ export default function SectorAnalysis({ sectors, loading }) {
           padding: 24px;
           position: relative;
           overflow: hidden;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.2);
         }
 
         .sector-header-wrapper {
@@ -172,31 +138,9 @@ export default function SectorAnalysis({ sectors, loading }) {
 
         .sector-title {
           color: var(--white);
-          font-size: 20px;
+          font-size: 18px;
           font-weight: 600;
           margin: 0;
-          position: relative;
-          display: inline-block;
-          padding-bottom: 4px;
-        }
-
-        .sector-title::after {
-          content: '';
-          position: absolute;
-          left: 0;
-          bottom: 0;
-          width: 40px;
-          height: 3px;
-          background: linear-gradient(90deg, var(--blue), transparent);
-          border-radius: 2px;
-        }
-        
-        .sector-title-red::after {
-          background: linear-gradient(90deg, var(--red), transparent);
-        }
-        
-        .sector-title-green::after {
-          background: linear-gradient(90deg, var(--green), transparent);
         }
 
         .sector-updated {
@@ -211,43 +155,21 @@ export default function SectorAnalysis({ sectors, loading }) {
         .sector-heatmap-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-          gap: 16px;
-          perspective: 1200px;
+          gap: 8px;
         }
 
         .sector-heatmap-tile {
           border-radius: 10px;
-          padding: 16px;
+          padding: 14px;
           display: flex;
           flex-direction: column;
-          gap: 12px;
-          transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
-          transform-style: preserve-3d;
-          cursor: pointer;
-          position: relative;
-          min-height: 100px;
+          gap: 10px;
+          transition: border-color 160ms ease-out;
+          min-height: 96px;
         }
 
         .sector-heatmap-tile:hover {
-          transform: translateY(-6px) rotateX(4deg) rotateY(-4deg);
-          box-shadow: 0 12px 24px -10px rgba(0,0,0,0.6);
-          z-index: 10;
-        }
-
-        .sector-heatmap-tile::after {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background: inherit;
-          filter: blur(15px);
-          opacity: 0;
-          transition: opacity 0.4s ease;
-          z-index: -1;
-          border-radius: inherit;
-        }
-
-        .sector-heatmap-tile:hover::after {
-          opacity: 0.5;
+          border-color: var(--gray-300) !important;
         }
 
         .sector-tile-name {
@@ -255,14 +177,12 @@ export default function SectorAnalysis({ sectors, loading }) {
           font-size: 14px;
           font-weight: 600;
           line-height: 1.2;
-          text-shadow: 0 1px 2px rgba(0,0,0,0.5);
         }
 
         .sector-rate-text {
           font-size: 20px;
           font-weight: 700;
           line-height: 1;
-          text-shadow: 0 1px 2px rgba(0,0,0,0.3);
         }
 
         .sector-tile-stock {
@@ -272,7 +192,7 @@ export default function SectorAnalysis({ sectors, loading }) {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          background: rgba(0,0,0,0.2);
+          background: rgba(255,255,255,0.04);
           padding: 4px 6px;
           border-radius: 4px;
           display: inline-block;
@@ -517,25 +437,14 @@ export default function SectorAnalysis({ sectors, loading }) {
           <div className="sector-chart-wrapper">
             <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 28)}>
               <BarChart data={chartData} layout="vertical" margin={{ top: 10, right: 40, left: 10, bottom: 10 }}>
-                <defs>
-                  <linearGradient id="sectorGreenGrad" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="var(--green)" stopOpacity={0.8}/>
-                    <stop offset="100%" stopColor="var(--green)" stopOpacity={0.3}/>
-                  </linearGradient>
-                  <linearGradient id="sectorRedGrad" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="var(--red)" stopOpacity={0.3}/>
-                    <stop offset="100%" stopColor="var(--red)" stopOpacity={0.8}/>
-                  </linearGradient>
-                </defs>
+                <CartesianGrid {...chartGrid} horizontal={false} />
+                <XAxis type="number" tick={chartAxisTick} axisLine={chartAxisLine} tickLine={false} tickFormatter={(value) => `${value}%`} />
+                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ ...chartAxisTick, fontFamily: 'var(--font-sans)' }} width={132} />
+                <Tooltip cursor={chartCursor} contentStyle={chartTooltipStyle} formatter={(value) => [`${Number(value).toFixed(2)}%`, '등락률']} />
                 
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--gray-800)" horizontal={false} />
-                <XAxis type="number" tick={{ fill: 'var(--gray-400)', fontSize: 12, fontFamily: 'var(--font-mono)' }} axisLine={{ stroke: 'var(--gray-700)' }} tickLine={false} tickFormatter={(v) => `${v}%`} />
-                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: 'var(--gray-300)', fontSize: 12, fontWeight: 500, fontFamily: 'Inter, sans-serif' }} width={110} />
-                <Tooltip cursor={{ fill: 'rgba(255,255,255,0.03)' }} contentStyle={chartTooltipStyle} formatter={(v) => [`${v > 0 ? '+' : ''}${v}%`, '등락률']} />
-                
-                <Bar dataKey="change_rate" radius={[0, 4, 4, 0]} barSize={18}>
+                <Bar dataKey="change_rate" radius={[0, 4, 4, 0]} barSize={16} isAnimationActive={false}>
                   {chartData.map((entry, i) => (
-                    <Cell key={i} fill={entry.change_rate >= 0 ? 'url(#sectorGreenGrad)' : 'url(#sectorRedGrad)'} />
+                    <Cell key={i} fill={entry.change_rate >= 0 ? CHART_COLORS.positive : CHART_COLORS.negative} />
                   ))}
                 </Bar>
               </BarChart>

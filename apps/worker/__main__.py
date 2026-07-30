@@ -72,6 +72,10 @@ def _parse_args() -> argparse.Namespace:
     analyze_p.add_argument("--analysis-month", metavar="YYYY-MM")
     analyze_p.add_argument("--cutoff", metavar="YYYY-MM-DD")
     analyze_p.add_argument("--effective-date", metavar="YYYY-MM-DD")
+    analyze_p.add_argument(
+        "--strategy", metavar="NAME",
+        help="발행·실행 대상 전략명. PAPER trader와 같은 전략을 명시한다.",
+    )
     analyze_p.add_argument("--publish", action="store_true")
     analyze_p.add_argument("--force", action="store_true")
     analyze_p.add_argument("--no-progress", action="store_true")
@@ -260,7 +264,12 @@ def run_analyze(args: argparse.Namespace) -> None:
             force=args.force,
             reuse_quarter_scores=args.reuse_quarter_scores,
         )
-        context = run(db, request, load_analyzer_config(), show_progress=not args.no_progress)
+        context = run(
+            db,
+            request,
+            load_analyzer_config(args.strategy),
+            show_progress=not args.no_progress,
+        )
         print()
         print(json.dumps({
             "run_id": context.run_id,

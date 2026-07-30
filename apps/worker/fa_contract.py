@@ -11,7 +11,13 @@ from datetime import date, time, timedelta
 from typing import Callable, Iterable, Mapping
 
 
-MODEL_VERSION = "topdown-fa-v1.0.0"
+# v1.1 prevents later disclosures in the same fiscal quarter from changing the
+# score available on an earlier disclosure date. It is approved only for the
+# PAPER pilot; REAL continues to use the established model until separately
+# approved.
+MODEL_VERSION = "topdown-fa-v1.1.0"
+PAPER_TRADING_MODEL_VERSION = MODEL_VERSION
+REAL_TRADING_MODEL_VERSION = "topdown-fa-v1.0.0"
 
 
 @dataclass(frozen=True)
@@ -119,6 +125,7 @@ class FaV1Config:
     minimum_company_fa_score: float = 50.0
     minimum_scoring_cohort_size: int = 10
     minimum_score_confidence: float = 0.70
+    max_company_fa_age_days: int = 180
     minimum_industry_price_coverage: float = 0.80
     sector_score_weights: tuple[float, float, float] = (0.45, 0.35, 0.20)
     macro_category_contribution_cap: float = 0.30
@@ -145,6 +152,8 @@ class FaV1Config:
             raise ValueError("cohort_quality_penalty_rate must be non-negative")
         if self.maximum_cohort_quality_penalty < 0:
             raise ValueError("maximum_cohort_quality_penalty must be non-negative")
+        if self.max_company_fa_age_days < 1:
+            raise ValueError("max_company_fa_age_days must be positive")
         if set(SUPPORTED_INDUSTRIES) & set(UNSUPPORTED_INDUSTRIES):
             raise ValueError("supported and unsupported industries overlap")
 

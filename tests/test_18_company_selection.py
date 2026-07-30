@@ -1,3 +1,5 @@
+from datetime import date
+
 from apps.worker.analyzer.company_job import select_companies
 from apps.worker.analyzer.config import load_config
 
@@ -69,3 +71,23 @@ def test_company_risk_state_is_saved_as_exclusion_lineage():
     )
     assert rows[0]["exclusion_reason_code"] == "BUY_BLOCKED"
     assert rows[0]["selection_detail"]["risk_state"]["source_dart_event_id"] == 9
+
+
+def test_company_selection_excludes_stale_fundamental_scores():
+    sectors = [{"id": 77, "sector_code": "G45", "industry_code": "G4530"}]
+    snapshot = [{
+        "stock_code": "A", "sector_code": "G45", "industry_code": "G4530",
+        "company_size_code": "LARGE", "trd_amt": 100,
+    }]
+    statuses = [{"stock_code": "A", "status_code": "ACTIVE", "market_type_code": "KOSPI"}]
+    stale = _fa("A", 1, 80)
+    stale["available_date"] = "2025-12-01"
+
+    rows = select_companies(
+        sectors, snapshot, [stale], statuses, load_config(),
+        as_of_date=date(2026, 6, 1),
+    )
+
+    assert rows[0]["is_selected"] is False
+    assert rows[0]["exclusion_reason_code"] == "STALE_FA"
+    assert rows[0]["selection_detail"]["fa_age_days"] == 182

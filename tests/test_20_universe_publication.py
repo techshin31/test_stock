@@ -215,6 +215,14 @@ class PartialSelectionValidationDB(ValidationDB):
         return super().fetch_all(query, params)
 
 
+class StaleFAValidationDB(ValidationDB):
+    def fetch_all(self, query, params=None):
+        rows = super().fetch_all(query, params)
+        if "fa_company_results" in query:
+            rows[0]["latest_available_date"] = date(2025, 10, 1)
+        return rows
+
+
 def test_run_validation_rechecks_stored_result_contract(monkeypatch):
     from apps.worker.analyzer import validation
 
@@ -257,6 +265,18 @@ def test_run_validation_warns_when_macro_inputs_are_missing(monkeypatch):
     macro_check = next(check for check in result.checks if check.name == "macro_results")
     assert not macro_check.passed
     assert "COPPER" in macro_check.detail
+
+
+def test_run_validation_warns_when_selected_company_fa_is_stale(monkeypatch):
+    from apps.worker.analyzer import validation
+
+    monkeypatch.setattr(validation, "fetch_buy_blocked_stock_codes", lambda *args: set())
+    result = validate_run(StaleFAValidationDB(), 9, load_config("risk_neutral"))
+
+    assert result.status == "WARNING"
+    freshness = next(check for check in result.checks if check.name == "company_fa_freshness")
+    assert not freshness.passed
+    assert "000000" in freshness.detail
 
 
 def test_reused_pass_run_can_be_published(monkeypatch):

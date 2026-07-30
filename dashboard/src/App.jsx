@@ -32,6 +32,8 @@ const TradingJournal = lazy(() => import('./TradingJournal.jsx'))
 
 const MODE = 'PAPER'
 const REFRESH_MS = 30_000
+const INVERSE_HEDGE_TICKER = '114800.KS'
+const INVERSE_HEDGE_POSITION_LABEL = 'KODEX 인버스 · 인버스 1X ETF'
 
 const money = new Intl.NumberFormat('ko-KR', {
   style: 'currency',
@@ -72,10 +74,24 @@ function formatPercent(value, { decimal = false } = {}) {
   return `${normalized.toFixed(2)}%`
 }
 
+function positionIdentity(position) {
+  const ticker = position?.ticker || ''
+  if (ticker === INVERSE_HEDGE_TICKER) {
+    return {
+      name: INVERSE_HEDGE_POSITION_LABEL,
+      detail: `${ticker} · 하락장 헤지용 보유`,
+    }
+  }
+  return {
+    name: position?.name || ticker,
+    detail: ticker,
+  }
+}
+
 function toneForState(state) {
-  if (['CURRENT', 'NORMAL', 'SCANNING', 'READY', 'FINAL'].includes(state)) return 'positive'
-  if (['GENERATING', 'OBSERVING', 'ORDER_SUPPRESSION', 'DEGRADED_DATA_STALE'].includes(state)) return 'warning'
-  if (['OVERDUE', 'MISSING', 'FAILED', 'ERROR', 'BLOCKED'].includes(state)) return 'negative'
+  if (['CURRENT', 'NORMAL', 'SCANNING', 'READY', 'FINAL', 'ACTIVE', 'ENTRY_READY'].includes(state)) return 'positive'
+  if (['GENERATING', 'OBSERVING', 'ORDER_SUPPRESSION', 'DEGRADED_DATA_STALE', 'WAIT_CONFIRMATION', 'WAIT_CONFIDENCE', 'COOLDOWN'].includes(state)) return 'warning'
+  if (['OVERDUE', 'MISSING', 'FAILED', 'ERROR', 'BLOCKED', 'EXIT_STOP_LOSS'].includes(state)) return 'negative'
   return 'neutral'
 }
 
@@ -295,11 +311,81 @@ function FreshnessBanner({ freshness }) {
   )
 }
 
+const HEDGE_STATUS_LABELS = {
+  INACTIVE: '비활성',
+  WAIT_CONFIRMATION: '하락 확인 대기',
+  WAIT_CONFIDENCE: '추세 신뢰도 대기',
+  ENTRY_READY: '진입 가능',
+  ACTIVE: '헤지 운용 중',
+  COOLDOWN: '재진입 대기',
+  EXIT_REGIME: '시장 전환 청산',
+  EXIT_STOP_LOSS: '손절 청산',
+  EXIT_MAX_HOLD: '보유기간 청산',
+  DISABLED: 'PAPER 전용',
+}
+
+const HEDGE_REASON_LABELS = {
+  INVERSE_HEDGE_WAIT_CONFIRMATION: '하락 신호 2회 확인 대기',
+  INVERSE_HEDGE_LOW_CONFIDENCE: '추세 신뢰도 기준 미충족',
+  INVERSE_HEDGE_COOLDOWN: '손절 또는 보유기간 종료 후 재진입 대기',
+  INVERSE_HEDGE_ENTRY: '1차 헤지 진입 조건 충족',
+  INVERSE_HEDGE_SCALE_UP: '확정 신호 증가에 따른 비중 확대',
+  INVERSE_HEDGE_HOLD: '현재 헤지 비중 유지',
+  INVERSE_HEDGE_STOP_LOSS: '헤지 전용 손절 기준 도달',
+  INVERSE_HEDGE_MAX_HOLD: '최대 보유기간 도달',
+  DOWNTREND_EXIT: '하락장 해제에 따른 인버스 청산',
+}
+
+function InverseHedgePanel({ hedge }) {
+  if (!hedge) {
+    return (
+      <Panel title="인버스 헤지" eyebrow="PAPER · KOSPI200 1X" className="content-grid__side">
+        <div className="empty-inline">다음 PAPER 스캔에서 헤지 신호를 계산합니다.</div>
+      </Panel>
+    )
+  }
+
+  const targetWeight = Number(hedge.effective_target_weight ?? hedge.target_weight ?? 0)
+  const currentWeight = Number(hedge.actual_weight ?? hedge.current_weight ?? 0)
+  const confidence = Number(hedge.confidence)
+  const status = hedge.status || 'INACTIVE'
+  const pendingExit = hedge.entry_blocked_by || (targetWeight > currentWeight + 0.001 ? '롱 청산 체결 확인 후 진입' : null)
+
+  return (
+    <Panel
+      title="하락장 헤지"
+      eyebrow="PAPER · 인버스 1X ETF"
+      className="content-grid__side inverse-hedge"
+      action={<StatusChip state={status}>{HEDGE_STATUS_LABELS[status] || status}</StatusChip>}
+    >
+      <p className="inverse-hedge__summary">
+        {INVERSE_HEDGE_POSITION_LABEL} · 직접 공매도가 아닌 하락장 헤지용 ETF 보유입니다.
+      </p>
+      <dl className="inverse-hedge__metrics">
+        <div><dt>목표 / 실제</dt><dd>{formatPercent(targetWeight, { decimal: true })} / {formatPercent(currentWeight, { decimal: true })}</dd></div>
+        <div><dt>순시장노출</dt><dd>{formatPercent(hedge.net_market_exposure, { decimal: true })}</dd></div>
+        <div><dt>헤지 손익</dt><dd className={Number(hedge.unrealized_pnl) >= 0 ? 'text-positive' : 'text-negative'}>{formatMoney(hedge.unrealized_pnl)}</dd></div>
+        <div><dt>KOSPI 기준 관측오차</dt><dd>{formatPercent(hedge.tracking_gap, { decimal: true })}</dd></div>
+      </dl>
+      <div className="inverse-hedge__details">
+        <span>하락 확인 <strong>{hedge.confirmed_downtrend_sessions ?? 0}/{hedge.required_confirmations ?? 2}일</strong></span>
+        <span>추세 신뢰도 <strong>{Number.isFinite(confidence) ? formatPercent(confidence, { decimal: true }) : '—'}</strong></span>
+        <span>보유 <strong>{hedge.held_sessions ?? 0}/{hedge.max_holding_sessions ?? 5}일</strong></span>
+      </div>
+      <p className="inverse-hedge__reason" role="status">
+        신호: <strong>{HEDGE_REASON_LABELS[hedge.reason] || hedge.reason || '확인 중'}</strong>
+        {pendingExit ? ` · ${pendingExit}` : ''}
+      </p>
+    </Panel>
+  )
+}
+
 function Overview({ overview, onOpenReports }) {
   const dashboard = overview.dashboard || {}
   const report = overview.latest_report || {}
   const operations = report.operations || {}
   const performance = report.performance || {}
+  const hedge = dashboard.inverse_hedge
   const positions = Array.isArray(dashboard.positions) ? dashboard.positions : []
   const orders = dashboard.actual_orders || dashboard.daily_orders || {}
   const suppressions = dashboard.order_suppressions || dashboard.data_health?.order_suppressions || {}
@@ -332,21 +418,26 @@ function Overview({ overview, onOpenReports }) {
       </div>
 
       <div className="content-grid">
+        <InverseHedgePanel hedge={hedge} />
+
         <Panel title="보유 포지션" eyebrow="PAPER ACCOUNT" className="content-grid__wide">
           {positions.length ? (
             <div className="table-wrap">
               <table>
                 <thead><tr><th>종목</th><th>수량</th><th>평균단가</th><th>현재가</th><th>수익률</th></tr></thead>
                 <tbody>
-                  {positions.map((position) => (
+                  {positions.map((position) => {
+                    const identity = positionIdentity(position)
+                    return (
                     <tr key={position.ticker}>
-                      <td><strong>{position.name || position.ticker}</strong><span className="subline">{position.ticker}</span></td>
+                      <td><strong>{identity.name}</strong><span className="subline">{identity.detail}</span></td>
                       <td>{number.format(position.qty || 0)}</td>
                       <td>{formatMoney(position.avg_price)}</td>
                       <td>{formatMoney(position.current_price)}</td>
                       <td className={Number(position.profit_rate) >= 0 ? 'text-positive' : 'text-negative'}>{formatPercent(position.profit_rate)}</td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

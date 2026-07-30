@@ -98,7 +98,35 @@ services:
       start_period: 25s
 
   ############################################################
-  # 4. React Web Console Dashboard (Nginx)
+  # 4. Completed-session WICS Sector Data Refresh
+  ############################################################
+  sector-refresh:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    container_name: quantpilot-sector-refresh
+    restart: unless-stopped
+    command: ["uv", "run", "python", "-m", "core.utils.wics_sector_refresh", "--poll-seconds", "300"]
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      TZ: Asia/Seoul
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import json; from pathlib import Path; p=Path('/app/logs/paper/wics_sector_refresh_status.json'); assert p.exists(); assert json.loads(p.read_text(encoding='utf-8')).get('status') == 'READY'\""]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 15m
+
+  ############################################################
+  # 5. React Web Console Dashboard (Nginx)
   ############################################################
   dashboard:
     build:

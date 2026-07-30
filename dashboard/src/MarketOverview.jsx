@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import {
   TrendingUp,
   TrendingDown,
@@ -12,15 +12,27 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  LabelList,
+  AreaChart,
+  Area,
   LineChart,
   Line,
   XAxis,
   YAxis,
   Tooltip,
-  Cell,
   Legend,
   CartesianGrid,
 } from 'recharts'
+import {
+  CHART_COLORS,
+  chartAxisLine,
+  chartAxisTick,
+  chartCursor,
+  chartGrid,
+  chartLegendStyle,
+  chartTooltipStyle,
+  formatShortDate,
+} from './chartTheme'
 
 const mono = { fontFamily: 'var(--font-mono)' }
 
@@ -66,16 +78,71 @@ function EmptyData({ message }) {
   return <div className="market-empty" role="status">{message}</div>
 }
 
-const chartTooltipStyle = {
-  backgroundColor: 'rgba(17, 17, 19, 0.9)',
-  border: '1px solid var(--gray-800)',
-  borderRadius: '8px',
-  color: 'var(--gray-200)',
-  fontSize: '13px',
-  fontFamily: 'var(--font-mono)',
-  boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
-  backdropFilter: 'blur(8px)',
-  padding: '10px 14px'
+function fmtVolatility(value) {
+  return value == null ? '—' : `${Number(value).toFixed(1)}%`
+}
+
+function MarketTrend({ label, history, color, volatility, value }) {
+  const points = Array.isArray(history) ? history : []
+  const hasHistory = points.length >= 2
+  const firstDate = points[0]?.date
+  const lastDate = points.at(-1)?.date
+  const gradientId = `market-trend-fill-${label.replace(/[^A-Za-z0-9]/g, '-')}`
+
+  return (
+    <section className="market-trend" aria-label={`${label} 60거래일 추이와 변동성`}>
+      <div className="market-trend__header">
+        <div>
+          <p className="market-trend__label">{label}</p>
+          <strong className="market-trend__value" style={mono}>{fmt(value)}</strong>
+        </div>
+        <div className="market-trend__volatility" title="최근 20개 일간 수익률의 연환산 표준편차입니다.">
+          <span>20일 실현 변동성</span>
+          <strong style={mono}>{fmtVolatility(volatility)}</strong>
+        </div>
+      </div>
+      {hasHistory ? (
+        <div className="market-trend__chart" role="img" aria-label={`${label} 종가 추이: ${firstDate}부터 ${lastDate}까지`}>
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={points} margin={{ top: 8, right: 2, left: 2, bottom: 0 }}>
+              <defs>
+                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={color} stopOpacity={0.32} />
+                  <stop offset="100%" stopColor={color} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <XAxis
+                dataKey="date"
+                axisLine={chartAxisLine}
+                tickLine={false}
+                tick={chartAxisTick}
+                ticks={[firstDate, lastDate]}
+                tickFormatter={formatShortDate}
+              />
+              <YAxis hide domain={['auto', 'auto']} />
+              <Tooltip
+                contentStyle={chartTooltipStyle}
+                cursor={chartCursor}
+                labelStyle={{ color: 'var(--gray-300)', marginBottom: 4 }}
+                formatter={(close) => [fmt(close), '종가']}
+              />
+              <Area
+                type="monotone"
+                dataKey="close"
+                stroke={color}
+                strokeWidth={2}
+                fill={`url(#${gradientId})`}
+                isAnimationActive={false}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <EmptyData message={`${label} 추이 데이터가 아직 충분하지 않습니다.`} />
+      )}
+      {hasHistory && <p className="market-trend__caption">종가 기준 {firstDate} — {lastDate}</p>}
+    </section>
+  )
 }
 
 const styles = `
@@ -94,12 +161,11 @@ const styles = `
 .market-text-muted { color: var(--gray-400); }
 
 .market-panel {
-  background: linear-gradient(145deg, var(--gray-900) 0%, var(--gray-850) 100%);
+  background: var(--gray-900);
   border: 1px solid var(--gray-800);
-  border-radius: 16px;
+  border-radius: 12px;
   padding: 24px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s;
+  transition: border-color 160ms ease-out;
 }
 .market-source-note {
   margin: -8px 0 0;
@@ -118,8 +184,6 @@ const styles = `
   text-align: center;
 }
 .market-panel:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
   border-color: var(--gray-700);
 }
 
@@ -136,15 +200,6 @@ const styles = `
 .market-regime--negative { --glow-color: var(--red); --glow-shadow: rgba(239, 68, 68, 0.4); }
 .market-regime--warning { --glow-color: var(--amber); --glow-shadow: rgba(245, 158, 11, 0.4); }
 .market-regime--accent { --glow-color: var(--blue); --glow-shadow: rgba(59, 130, 246, 0.4); }
-
-.market-regime::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: radial-gradient(circle at 100% 50%, var(--glow-color), transparent 60%);
-  opacity: 0.15;
-  pointer-events: none;
-}
 
 .market-regime__left {
   display: flex;
@@ -165,20 +220,13 @@ const styles = `
   z-index: 1;
 }
 
-@keyframes market-pulse-glow {
-  0% { box-shadow: 0 0 0 0 var(--glow-shadow); }
-  70% { box-shadow: 0 0 0 10px transparent; }
-  100% { box-shadow: 0 0 0 0 transparent; }
-}
-
 .market-regime__badge {
-  padding: 6px 14px;
-  border-radius: 20px;
+  padding: 5px 8px;
+  border-radius: 6px;
   font-weight: 600;
-  font-size: 14px;
-  color: var(--white);
-  animation: market-pulse-glow 2s infinite cubic-bezier(0.4, 0, 0.2, 1);
-  background: var(--glow-shadow);
+  font-size: 13px;
+  color: var(--gray-100);
+  background: var(--gray-850);
   border: 1px solid var(--glow-color);
 }
 
@@ -273,6 +321,76 @@ const styles = `
   font-weight: 600;
 }
 
+.market-trends-panel { padding: 20px 24px 16px; }
+.market-trends-panel__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.market-trends-panel__header h2 {
+  margin: 0;
+  color: var(--gray-100);
+  font-size: 14px;
+  font-weight: 650;
+}
+.market-trends-panel__header p {
+  margin: 0;
+  color: var(--gray-500);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+.market-trends-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.market-trend {
+  min-width: 0;
+  padding: 14px 18px 8px;
+}
+.market-trend + .market-trend { border-left: 1px solid var(--gray-800); }
+.market-trend__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+.market-trend__label {
+  margin: 0 0 3px;
+  color: var(--gray-400);
+  font-size: 12px;
+  font-weight: 650;
+}
+.market-trend__value {
+  color: var(--gray-100);
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.market-trend__volatility {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  color: var(--gray-500);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.market-trend__volatility strong { color: var(--gray-300); font-size: 12px; }
+.market-trend__chart { height: 130px; margin-top: 10px; }
+.market-trend__caption {
+  margin: 4px 0 0;
+  color: var(--gray-500);
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+@media (max-width: 860px) {
+  .market-trends-grid { grid-template-columns: 1fr; }
+  .market-trend { padding: 16px 0; }
+  .market-trend + .market-trend { border-left: 0; border-top: 1px solid var(--gray-800); }
+}
+
 .market-breadth {
   display: flex;
   flex-direction: column;
@@ -310,23 +428,21 @@ const styles = `
 .market-dot--red { color: var(--red); background: var(--red); }
 
 .market-breadth__bar {
-  height: 14px;
-  border-radius: 7px;
+  height: 10px;
+  border-radius: 5px;
   display: flex;
   overflow: hidden;
   background: var(--gray-850);
-  box-shadow: inset 0 2px 6px rgba(0,0,0,0.4);
   border: 1px solid var(--gray-800);
 }
 
 .market-breadth__bar span {
   height: 100%;
-  transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: inset 0 1px 1px rgba(255,255,255,0.15);
+  transition: width 160ms ease-out;
 }
-.market-breadth__bar--adv { background: linear-gradient(180deg, #4ade80, var(--green)); }
-.market-breadth__bar--unch { background: linear-gradient(180deg, #fbbf24, var(--amber)); }
-.market-breadth__bar--dec { background: linear-gradient(180deg, #f87171, var(--red)); }
+.market-breadth__bar--adv { background: var(--green); }
+.market-breadth__bar--unch { background: var(--amber); }
+.market-breadth__bar--dec { background: var(--red); }
 
 .market-breadth__stats {
   display: flex;
@@ -393,6 +509,26 @@ export default function MarketOverview({ indices, breadth, sectors, exchangeRate
     .map((item) => item.source)
     .filter((value, index, values) => values.indexOf(value) === index)
     .join(' · ')
+
+  const indexComparison = useMemo(() => {
+    const points = Array.isArray(indices?.history) ? indices.history : []
+    const baseline = points[0]
+    const kospiBase = Number(baseline?.KOSPI)
+    const kosdaqBase = Number(baseline?.KOSDAQ)
+    if (!Number.isFinite(kospiBase) || kospiBase <= 0 || !Number.isFinite(kosdaqBase) || kosdaqBase <= 0) {
+      return []
+    }
+    return points.flatMap((point) => {
+      const kospi = Number(point?.KOSPI)
+      const kosdaq = Number(point?.KOSDAQ)
+      if (!Number.isFinite(kospi) || !Number.isFinite(kosdaq)) return []
+      return [{
+        date: point.date,
+        kospi_relative: Number(((kospi / kospiBase) * 100).toFixed(2)),
+        kosdaq_relative: Number(((kosdaq / kosdaqBase) * 100).toFixed(2)),
+      }]
+    })
+  }, [indices])
 
   return (
     <>
@@ -519,34 +655,68 @@ export default function MarketOverview({ indices, breadth, sectors, exchangeRate
         <div className="market-panel">
           <div className="market-breadth__header" style={{ marginBottom: '16px' }}>
             <TrendingUp size={20} />
-            <span>KOSPI vs KOSDAQ 지수 추이 비교</span>
+            <span>KOSPI vs KOSDAQ 상대 추이 · 기준값 100</span>
           </div>
           {loading ? (
             <Shimmer height={200} />
-          ) : !indices?.history?.length ? (
+          ) : !indexComparison.length ? (
             <EmptyData message="지수 추이 이력은 아직 수집되지 않았습니다." />
           ) : (
             <div style={{ height: 200, width: '100%' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart
-                  data={indices.history}
-                  margin={{ top: 10, right: 30, left: 10, bottom: 0 }}
+                  data={indexComparison}
+                  margin={{ top: 12, right: 16, left: 4, bottom: 0 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--gray-800)" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fill: '#8b8b97', fontSize: 12, fontFamily: 'var(--font-mono)' }} axisLine={{ stroke: 'var(--gray-800)' }} />
-                  <YAxis yAxisId="left" orientation="left" domain={['auto', 'auto']} tick={{ fill: 'var(--blue)', fontSize: 12, fontFamily: 'var(--font-mono)' }} axisLine={false} />
-                  <YAxis yAxisId="right" orientation="right" domain={['auto', 'auto']} tick={{ fill: 'var(--green)', fontSize: 12, fontFamily: 'var(--font-mono)' }} axisLine={false} />
-                  <Tooltip contentStyle={chartTooltipStyle} />
-                  <Legend wrapperStyle={{ paddingTop: '6px', fontSize: '12px' }} />
-                  <Line yAxisId="left" type="monotone" dataKey="KOSPI" stroke="var(--blue)" strokeWidth={3} dot={{ r: 4 }} />
-                  <Line yAxisId="right" type="monotone" dataKey="KOSDAQ" stroke="var(--green)" strokeWidth={3} dot={{ r: 4 }} />
+                  <CartesianGrid {...chartGrid} />
+                  <XAxis dataKey="date" tick={chartAxisTick} axisLine={chartAxisLine} tickLine={false} tickFormatter={formatShortDate} minTickGap={28} />
+                  <YAxis domain={['auto', 'auto']} tick={chartAxisTick} axisLine={chartAxisLine} tickLine={false} tickFormatter={(value) => value.toFixed(0)} width={34} />
+                  <Tooltip cursor={chartCursor} contentStyle={chartTooltipStyle} formatter={(value) => [`${Number(value).toFixed(2)}`, '기준값']} />
+                  <Legend wrapperStyle={chartLegendStyle} />
+                  <Line name="KOSPI" type="monotone" dataKey="kospi_relative" stroke={CHART_COLORS.accent} strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: CHART_COLORS.accent, stroke: 'var(--gray-900)', strokeWidth: 2 }} isAnimationActive={false} />
+                  <Line name="KOSDAQ" type="monotone" dataKey="kosdaq_relative" stroke={CHART_COLORS.positive} strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: CHART_COLORS.positive, stroke: 'var(--gray-900)', strokeWidth: 2 }} isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
           )}
         </div>
 
-        {/* 3. Market Breadth */}
+        {/* 3. Separate market trends and realised volatility */}
+        <section className="market-panel market-trends-panel" aria-labelledby="market-trends-heading">
+          <div className="market-trends-panel__header">
+            <h2 id="market-trends-heading">시장 추이와 변동성</h2>
+            <p>60거래일 종가 · 20일 실현 변동성</p>
+          </div>
+          {loading ? (
+            <Shimmer height={180} />
+          ) : (
+            <div className="market-trends-grid">
+              <MarketTrend
+                label="KOSPI"
+                history={indices?.series?.kospi}
+                color="var(--blue)"
+                volatility={indices?.volatility?.kospi_20d}
+                value={indices?.kospi?.price}
+              />
+              <MarketTrend
+                label="KOSDAQ"
+                history={indices?.series?.kosdaq}
+                color="var(--green)"
+                volatility={indices?.volatility?.kosdaq_20d}
+                value={indices?.kosdaq?.price}
+              />
+              <MarketTrend
+                label="USD/KRW"
+                history={exchangeRate?.history}
+                color="var(--amber)"
+                volatility={exchangeRate?.volatility_20d}
+                value={exchangeRate?.usd_krw}
+              />
+            </div>
+          )}
+        </section>
+
+        {/* 4. Market Breadth */}
         <div className="market-panel market-breadth">
           <div className="market-breadth__header">
             <BarChart3 size={20} />
@@ -595,17 +765,11 @@ export default function MarketOverview({ indices, breadth, sectors, exchangeRate
               <div className="market-sector-chart">
                 <ResponsiveContainer width="100%" height={240}>
                   <BarChart data={sectors.top} layout="vertical" margin={{ top: 0, right: 30, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="market-grad-green" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="var(--green)" stopOpacity={1} />
-                        <stop offset="100%" stopColor="var(--green)" stopOpacity={0.6} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis type="number" hide />
-                    <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: 'var(--gray-300)', fontSize: 13, fontFamily: 'var(--font-sans)', fontWeight: 500 }} width={90} />
-                    <Tooltip cursor={{ fill: 'var(--gray-800)', opacity: 0.5 }} contentStyle={chartTooltipStyle} formatter={(val) => [`+${val}%`, '등락률']} />
-                    <Bar dataKey="change_rate" radius={[0, 6, 6, 0]} barSize={18}>
-                      {sectors.top.map((_, i) => <Cell key={i} fill="url(#market-grad-green)" />)}
+                    <XAxis type="number" tick={chartAxisTick} axisLine={chartAxisLine} tickLine={false} tickFormatter={(value) => `${value}%`} />
+                    <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ ...chartAxisTick, fontFamily: 'var(--font-sans)' }} width={112} />
+                    <Tooltip cursor={chartCursor} contentStyle={chartTooltipStyle} formatter={(val) => [`+${Number(val).toFixed(2)}%`, '등락률']} />
+                    <Bar dataKey="change_rate" fill={CHART_COLORS.positive} radius={[0, 4, 4, 0]} barSize={16} isAnimationActive={false}>
+                      <LabelList dataKey="change_rate" position="right" fill={CHART_COLORS.text} fontSize={11} formatter={(value) => `${Number(value) > 0 ? '+' : ''}${Number(value).toFixed(2)}%`} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -626,17 +790,11 @@ export default function MarketOverview({ indices, breadth, sectors, exchangeRate
               <div className="market-sector-chart">
                 <ResponsiveContainer width="100%" height={240}>
                   <BarChart data={sectors.bottom.map(s => ({ ...s, abs_rate: Math.abs(s.change_rate) }))} layout="vertical" margin={{ top: 0, right: 30, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="market-grad-red" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="var(--red)" stopOpacity={1} />
-                        <stop offset="100%" stopColor="var(--red)" stopOpacity={0.6} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis type="number" hide />
-                    <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: 'var(--gray-300)', fontSize: 13, fontFamily: 'var(--font-sans)', fontWeight: 500 }} width={90} />
-                    <Tooltip cursor={{ fill: 'var(--gray-800)', opacity: 0.5 }} contentStyle={chartTooltipStyle} formatter={(val, _name, props) => [`${props.payload.change_rate}%`, '등락률']} />
-                    <Bar dataKey="abs_rate" radius={[0, 6, 6, 0]} barSize={18}>
-                      {sectors.bottom.map((_, i) => <Cell key={i} fill="url(#market-grad-red)" />)}
+                    <XAxis type="number" tick={chartAxisTick} axisLine={chartAxisLine} tickLine={false} tickFormatter={(value) => `${value}%`} />
+                    <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ ...chartAxisTick, fontFamily: 'var(--font-sans)' }} width={112} />
+                    <Tooltip cursor={chartCursor} contentStyle={chartTooltipStyle} formatter={(val, _name, props) => [`${Number(props.payload.change_rate).toFixed(2)}%`, '등락률']} />
+                    <Bar dataKey="abs_rate" fill={CHART_COLORS.negative} radius={[0, 4, 4, 0]} barSize={16} isAnimationActive={false}>
+                      <LabelList dataKey="change_rate" position="right" fill={CHART_COLORS.text} fontSize={11} formatter={(value) => `${Number(value).toFixed(2)}%`} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>

@@ -492,7 +492,9 @@ def _latest_volume(frame: object) -> int | None:
     return int(value) if value is not None and value >= 0 else None
 
 
-def _index_history_points(kospi: object, kosdaq: object) -> list[dict]:
+def _index_history_points(
+    kospi: object, kosdaq: object, limit: int = 60
+) -> list[dict]:
     """Build only overlapping, observed KOSPI/KOSDAQ closes for the UI chart."""
     try:
         if "Close" not in kospi or "Close" not in kosdaq:
@@ -502,7 +504,7 @@ def _index_history_points(kospi: object, kosdaq: object) -> list[dict]:
         return []
 
     history: list[dict] = []
-    for value_date in common_dates[-5:]:
+    for value_date in common_dates[-limit:]:
         try:
             kospi_close = _finite_float(kospi.loc[value_date, "Close"])
             kosdaq_close = _finite_float(kosdaq.loc[value_date, "Close"])
@@ -523,6 +525,52 @@ def _index_history_points(kospi: object, kosdaq: object) -> list[dict]:
             }
         )
     return history
+
+
+def _close_history_points(frame: object, limit: int = 60) -> list[dict]:
+    """Return observed close-only points without filling missing market sessions."""
+    try:
+        closes = frame["Close"].dropna().tail(limit)
+    except (AttributeError, KeyError, TypeError):
+        return []
+
+    history: list[dict] = []
+    for value_date, close in closes.items():
+        close_value = _finite_float(close)
+        if close_value is None:
+            continue
+        date_text = (
+            value_date.strftime("%Y-%m-%d")
+            if hasattr(value_date, "strftime")
+            else str(value_date)[:10]
+        )
+        history.append({"date": date_text, "close": round(close_value, 2)})
+    return history
+
+
+def _annualized_realized_volatility(
+    frame: object, window: int = 20
+) -> float | None:
+    """Calculate observed close-to-close volatility, annualised over 252 sessions."""
+    if window < 2:
+        raise ValueError("window must be at least 2")
+    points = _close_history_points(frame, limit=window + 1)
+    if len(points) < window + 1:
+        return None
+
+    returns: list[float] = []
+    for previous, current in zip(points, points[1:]):
+        previous_close = previous["close"]
+        current_close = current["close"]
+        if previous_close <= 0:
+            return None
+        returns.append((current_close / previous_close) - 1)
+    if len(returns) < 2:
+        return None
+
+    average = sum(returns) / len(returns)
+    variance = sum((value - average) ** 2 for value in returns) / (len(returns) - 1)
+    return round(math.sqrt(variance) * math.sqrt(252) * 100, 2)
 
 
 def _latest_paper_decision() -> dict | None:
@@ -672,7 +720,7 @@ def _fetch_paper_universe_breadth() -> dict | None:
 
 
 def _fetch_live_yfinance():
-    """Fetch live KOSPI, KOSDAQ, USD/KRW data from yfinance with 5-min caching."""
+    """Fetch observed KOSPI, KOSDAQ, USD/KRW data with 5-min caching."""
     now_ts = time.time()
     if _MARKET_CACHE["indices"] and (now_ts - _MARKET_CACHE["timestamp"]) < 300:
         return _MARKET_CACHE["indices"], _MARKET_CACHE["exchange"]
@@ -682,9 +730,11 @@ def _fetch_live_yfinance():
         now_str = dt.datetime.now(SEOUL).strftime("%Y-%m-%d %H:%M")
         
         # KOSPI & KOSDAQ
-        kospi_t = yf.Ticker("^KS11").history(period="5d")
-        kosdaq_t = yf.Ticker("^KQ11").history(period="5d")
-        usd_t = yf.Ticker("KRW=X").history(period="5d")
+        # Three months supplies 60 completed sessions for the dashboard trend
+        # while the displayed change remains the most recently observed close.
+        kospi_t = yf.Ticker("^KS11").history(period="3mo")
+        kosdaq_t = yf.Ticker("^KQ11").history(period="3mo")
+        usd_t = yf.Ticker("KRW=X").history(period="3mo")
 
         indices = None
         if not kospi_t.empty and not kosdaq_t.empty:
@@ -712,6 +762,14 @@ def _fetch_live_yfinance():
                     "volume": _latest_volume(kosdaq_t),
                 },
                 "history": _index_history_points(kospi_t, kosdaq_t),
+                "series": {
+                    "kospi": _close_history_points(kospi_t),
+                    "kosdaq": _close_history_points(kosdaq_t),
+                },
+                "volatility": {
+                    "kospi_20d": _annualized_realized_volatility(kospi_t),
+                    "kosdaq_20d": _annualized_realized_volatility(kosdaq_t),
+                },
                 "updated_at": now_str,
             }
 
@@ -725,6 +783,8 @@ def _fetch_live_yfinance():
                 "usd_krw": round(u_price, 2),
                 "change": round(u_change, 2),
                 "change_rate": round(u_rate, 2),
+                "history": _close_history_points(usd_t),
+                "volatility_20d": _annualized_realized_volatility(usd_t),
                 "updated_at": now_str,
             }
 
@@ -996,7 +1056,7 @@ def get_sectors():
                 with conn.cursor() as cur:
                     for source_code, method_version, source_label in (
                         ("WISEINDEX", "OFFICIAL", "WICS_OFFICIAL"),
-                        ("DERIVED", "mcap-v1", "WICS_DERIVED_MCAP_V1"),
+                        ("DERIVED", "mcap-v1.1", "WICS_DERIVED_MCAP_V1_1"),
                     ):
                         payload = _sector_payload_from_prices(
                             cur,

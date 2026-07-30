@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from apps.backtester.config import build_db_config, load_env
+from apps.worker.fa_contract import MODEL_VERSION
 from storage.postgres.connection import PostgreDB
 
 
@@ -19,18 +20,21 @@ BUY_COST = 0.00015 + 0.001
 SELL_COST = 0.00015 + 0.001 + 0.0018
 
 
-def _load_frames(db: PostgreDB) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _load_frames(
+    db: PostgreDB, model_version: str
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     scores = pd.DataFrame(db.fetch_all("""
         SELECT stock_code, available_date, fa_score, score_confidence,
                is_eligible, market_cap, market_data_date
         FROM company_quarter_fa
-        WHERE available_date IS NOT NULL
+        WHERE model_version = %s
+          AND available_date IS NOT NULL
           AND fa_score IS NOT NULL
           AND score_confidence IS NOT NULL
           AND market_cap IS NOT NULL
           AND score_model_code <> 'UNSUPPORTED'
         ORDER BY available_date, stock_code
-    """))
+    """, (model_version,)))
     prices = pd.DataFrame(db.fetch_all("""
         SELECT stock_code, price_date, close
         FROM wics_constituent_prices
@@ -83,8 +87,10 @@ def _metrics(returns: pd.Series, costs: pd.Series, turnovers: pd.Series) -> dict
     }
 
 
-def run_research(db: PostgreDB) -> tuple[dict, pd.DataFrame]:
-    scores, prices = _load_frames(db)
+def run_research(
+    db: PostgreDB, *, model_version: str = MODEL_VERSION
+) -> tuple[dict, pd.DataFrame]:
+    scores, prices = _load_frames(db, model_version)
     price_matrix = prices.pivot_table(
         index="price_date", columns="stock_code", values="close", aggfunc="last"
     ).sort_index()
@@ -160,6 +166,7 @@ def run_research(db: PostgreDB) -> tuple[dict, pd.DataFrame]:
     metadata = {
         "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
         "methodology": "monthly point-in-time latest eligible FA scores; no security-count cap",
+        "model_version": model_version,
         "exposure": EXPOSURE,
         "fa_minimum": FA_MINIMUM,
         "buy_cost_rate": BUY_COST,
@@ -225,11 +232,12 @@ def _write_report(result: dict, details: pd.DataFrame, output_dir: Path) -> None
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", default="reports/fa_weighting_research")
+    parser.add_argument("--model-version", default=MODEL_VERSION)
     args = parser.parse_args()
     load_env()
     db = PostgreDB(build_db_config())
     try:
-        result, details = run_research(db)
+        result, details = run_research(db, model_version=args.model_version)
     finally:
         db.close()
     _write_report(result, details, Path(args.output_dir))

@@ -7,76 +7,76 @@
   "full_history": {
     "BUY": {
       "side": "BUY",
-      "orders": 479,
+      "orders": 480,
       "filled_orders": 146,
-      "rejected_orders": 324,
+      "rejected_orders": 325,
       "cancelled_orders": 2,
       "status_counts": {
-        "REJECTED": 324,
+        "REJECTED": 325,
         "FILLED": 142,
         "EXPIRED_UNFILLED": 7,
         "PARTIAL": 4,
         "CANCELLED": 2
       },
-      "order_fill_rate": 0.3048016701461378,
-      "quantity_fill_rate": 0.06647540898790369,
-      "beta_1_1_posterior_mean_fill_rate": 0.30561330561330563,
-      "wilson_95_lower_fill_rate": 0.2652655591722889,
-      "wilson_95_upper_fill_rate": 0.3474438676873687,
+      "order_fill_rate": 0.30416666666666664,
+      "quantity_fill_rate": 0.06646818725006855,
+      "beta_1_1_posterior_mean_fill_rate": 0.3049792531120332,
+      "wilson_95_lower_fill_rate": 0.26469876323157265,
+      "wilson_95_upper_fill_rate": 0.34674432062066324,
       "sample_sufficient": true
     },
     "SELL": {
       "side": "SELL",
-      "orders": 80,
-      "filled_orders": 64,
-      "rejected_orders": 4,
+      "orders": 84,
+      "filled_orders": 67,
+      "rejected_orders": 5,
       "cancelled_orders": 12,
       "status_counts": {
-        "FILLED": 64,
+        "FILLED": 67,
         "CANCELLED": 12,
-        "REJECTED": 4
+        "REJECTED": 5
       },
-      "order_fill_rate": 0.8,
-      "quantity_fill_rate": 0.8174136534873077,
-      "beta_1_1_posterior_mean_fill_rate": 0.7926829268292683,
-      "wilson_95_lower_fill_rate": 0.6995355220341885,
-      "wilson_95_upper_fill_rate": 0.8729726362070666,
+      "order_fill_rate": 0.7976190476190477,
+      "quantity_fill_rate": 0.8128103748220781,
+      "beta_1_1_posterior_mean_fill_rate": 0.7906976744186046,
+      "wilson_95_lower_fill_rate": 0.6995798859846238,
+      "wilson_95_upper_fill_rate": 0.8696265036986242,
       "sample_sufficient": true
     }
   },
   "stabilized": {
     "BUY": {
       "side": "BUY",
-      "orders": 12,
+      "orders": 13,
       "filled_orders": 7,
-      "rejected_orders": 5,
+      "rejected_orders": 6,
       "cancelled_orders": 0,
       "status_counts": {
         "FILLED": 7,
-        "REJECTED": 5
+        "REJECTED": 6
       },
-      "order_fill_rate": 0.5833333333333334,
-      "quantity_fill_rate": 0.6226232678053497,
-      "beta_1_1_posterior_mean_fill_rate": 0.5714285714285714,
-      "wilson_95_lower_fill_rate": 0.3195073356553728,
-      "wilson_95_upper_fill_rate": 0.8067425380947535,
+      "order_fill_rate": 0.5384615384615384,
+      "quantity_fill_rate": 0.618437900128041,
+      "beta_1_1_posterior_mean_fill_rate": 0.5333333333333333,
+      "wilson_95_lower_fill_rate": 0.2914343243183205,
+      "wilson_95_upper_fill_rate": 0.7679424569851186,
       "sample_sufficient": false
     },
     "SELL": {
       "side": "SELL",
-      "orders": 9,
-      "filled_orders": 8,
-      "rejected_orders": 1,
+      "orders": 13,
+      "filled_orders": 11,
+      "rejected_orders": 2,
       "cancelled_orders": 0,
       "status_counts": {
-        "FILLED": 8,
-        "REJECTED": 1
+        "FILLED": 11,
+        "REJECTED": 2
       },
-      "order_fill_rate": 0.8888888888888888,
-      "quantity_fill_rate": 0.7908571428571428,
-      "beta_1_1_posterior_mean_fill_rate": 0.8181818181818182,
-      "wilson_95_lower_fill_rate": 0.5649937852319399,
-      "wilson_95_upper_fill_rate": 0.9801096286728695,
+      "order_fill_rate": 0.8461538461538461,
+      "quantity_fill_rate": 0.7829181494661922,
+      "beta_1_1_posterior_mean_fill_rate": 0.8,
+      "wilson_95_lower_fill_rate": 0.5776482949136899,
+      "wilson_95_upper_fill_rate": 0.9567427368172621,
       "sample_sufficient": false
     }
   },
@@ -84,22 +84,22 @@
     "STABILIZED_POSTERIOR_MEAN": {
       "label": "post-hardening expected fill",
       "application": "DETERMINISTIC_BERNOULLI",
-      "buy_fill_fraction": 0.5714285714285714,
-      "sell_fill_fraction": 0.8181818181818182,
+      "buy_fill_fraction": 0.5333333333333333,
+      "sell_fill_fraction": 0.8,
       "interpretation": "Beta(1,1) posterior mean from orders since the safety hardening date."
     },
     "STABILIZED_WILSON_LOWER": {
       "label": "post-hardening conservative fill",
       "application": "DETERMINISTIC_BERNOULLI",
-      "buy_fill_fraction": 0.3195073356553728,
-      "sell_fill_fraction": 0.5649937852319399,
+      "buy_fill_fraction": 0.2914343243183205,
+      "sell_fill_fraction": 0.5776482949136899,
       "interpretation": "95% Wilson lower bound; deliberately conservative for small samples."
     },
     "FULL_HISTORY_EMPIRICAL": {
       "label": "legacy-contaminated empirical fill",
       "application": "DETERMINISTIC_BERNOULLI",
-      "buy_fill_fraction": 0.3048016701461378,
-      "sell_fill_fraction": 0.8,
+      "buy_fill_fraction": 0.30416666666666664,
+      "sell_fill_fraction": 0.7976190476190477,
       "interpretation": "All reconstructed orders, including the unstable pre-hardening period."
     }
   },

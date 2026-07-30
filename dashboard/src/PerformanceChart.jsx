@@ -7,6 +7,14 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import {
+  CHART_COLORS,
+  chartAxisLine,
+  chartAxisTick,
+  chartCursor,
+  chartGrid,
+  chartTooltipStyle,
+} from './chartTheme'
 
 export default function PerformanceChart({ data }) {
   return (
@@ -14,54 +22,46 @@ export default function PerformanceChart({ data }) {
       <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -24 }}>
         <defs>
           <linearGradient id="colorFreshness" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.15} />
-            <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.0} />
+            <stop offset="0%" stopColor={CHART_COLORS.accent} stopOpacity={0.22} />
+            <stop offset="100%" stopColor={CHART_COLORS.accent} stopOpacity={0} />
           </linearGradient>
           <linearGradient id="colorRisk" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#22c55e" stopOpacity={0.15} />
-            <stop offset="100%" stopColor="#22c55e" stopOpacity={0.0} />
+            <stop offset="0%" stopColor={CHART_COLORS.positive} stopOpacity={0.22} />
+            <stop offset="100%" stopColor={CHART_COLORS.positive} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid stroke="rgba(255, 255, 255, 0.04)" strokeDasharray="3 3" vertical={false} />
+        <CartesianGrid {...chartGrid} />
         <XAxis
           dataKey="index"
-          tick={{ fill: '#63636e', fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
-          axisLine={false}
+          tick={chartAxisTick}
+          axisLine={chartAxisLine}
           tickLine={false}
         />
         <YAxis
-          tick={{ fill: '#63636e', fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
-          axisLine={false}
+          tick={chartAxisTick}
+          axisLine={chartAxisLine}
           tickLine={false}
         />
-        <Tooltip
-          contentStyle={{
-            background: '#1c1c1f',
-            border: '1px solid #2c2c30',
-            borderRadius: '4px',
-            color: '#d2d2d9',
-            fontSize: '11px',
-            fontFamily: 'JetBrains Mono, monospace',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-          }}
-        />
+        <Tooltip cursor={chartCursor} contentStyle={chartTooltipStyle} />
         <Area
           type="monotone"
           dataKey="freshness"
           name="신선 종목"
-          stroke="#3b82f6"
-          strokeWidth={1.5}
+          stroke={CHART_COLORS.accent}
+          strokeWidth={2}
           fillOpacity={1}
           fill="url(#colorFreshness)"
+          isAnimationActive={false}
         />
         <Area
           type="monotone"
           dataKey="risk"
           name="완료 위험점검"
-          stroke="#22c55e"
-          strokeWidth={1.5}
+          stroke={CHART_COLORS.positive}
+          strokeWidth={2}
           fillOpacity={1}
           fill="url(#colorRisk)"
+          isAnimationActive={false}
         />
       </AreaChart>
     </ResponsiveContainer>

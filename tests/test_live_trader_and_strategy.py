@@ -202,7 +202,7 @@ def test_ambiguous_broker_result_blocks_same_day_retry():
     trader.db = type("DB", (), {
         "fetch_all": lambda *a, **k: [{
             "symbol": "005930", "order_side_code": "BUY",
-            "order_status_code": "REJECTED", "had_unknown_result": True,
+            "order_status_code": "SUBMITTED", "had_unknown_result": True,
             "unknown_result_message": "500 Server Error: Internal Server Error",
         }]
     })()
@@ -222,6 +222,35 @@ def test_ambiguous_broker_result_blocks_same_day_retry():
         "reason": "AMBIGUOUS_RESULT_SAME_DAY",
         "incident_code": "BROKER_HTTP_500",
     }]
+
+
+def test_reconciled_rejected_unknown_result_uses_bounded_retry():
+    trader = object.__new__(LiveTrader)
+    trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.broker = type("Broker", (), {"masked_account": "***1234-01"})()
+    trader.max_order_attempts = 2
+    trader.db = type("DB", (), {
+        "fetch_all": lambda *a, **k: [{
+            "symbol": "005930", "order_side_code": "SELL",
+            "order_status_code": "REJECTED", "had_unknown_result": True,
+            "unknown_result_message": "500 Server Error: Internal Server Error",
+        }]
+    })()
+    trader._price_guard_blocked = lambda *args: False
+
+    orders = trader._calculate_orders(
+        1_000_000,
+        {"005930.KS": {"qty": 10, "current_price": 100}},
+        {"005930.KS": 0.0},
+        {},
+        {"005930.KS": {"signal_reason": "HARD_STOP_LOSS"}},
+    )
+
+    assert len(orders) == 1
+    assert orders[0]["type"] == "SELL"
+    assert orders[0]["reason"] == "HARD_STOP_LOSS"
+    assert trader.last_order_suppressions == []
 
 
 def test_broker_incident_codes_redact_transport_details():

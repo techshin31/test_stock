@@ -62,7 +62,7 @@ def test_analyzer_config_is_versioned_and_deterministic(monkeypatch):
     monkeypatch.setenv("STRATEGY_NAME", "risk_neutral")
     first = load_config()
     second = load_config()
-    assert first.model_version == "topdown-fa-v1.0.0"
+    assert first.model_version == "topdown-fa-v1.1.0"
     assert first.fingerprint == second.fingerprint
     assert len(first.fingerprint) == 64
 

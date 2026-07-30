@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-28T17:57:31+09:00",
+  "generated_at": "2026-07-29T15:30:36+09:00",
   "mode": "PAPER",
   "account_scope": "***9904-01",
   "start_date": "2026-07-03",
-  "end_date": "2026-07-28",
+  "end_date": "2026-07-29",
   "strategy_lineage": [
     "risk_neutral",
     "aggressive"
@@ -28,11 +28,12 @@
     "2026-07-23": 3,
     "2026-07-24": 1,
     "2026-07-27": 3,
-    "2026-07-28": 1
+    "2026-07-28": 1,
+    "2026-07-29": 3
   },
-  "db_order_rows": 214,
-  "broker_order_rows": 225,
-  "exact_matched_rows": 198,
+  "db_order_rows": 217,
+  "broker_order_rows": 228,
+  "exact_matched_rows": 201,
   "fill_overrides": [
     {
       "date": "2026-07-03",
@@ -4101,6 +4102,63 @@
       "db_original_status": "FILLED",
       "db_original_filled_qty": 110.0,
       "db_original_avg_fill_price": 525327.0
+    },
+    {
+      "date": "2026-07-29",
+      "broker_order_id": "0000044267",
+      "symbol": "078930",
+      "stock_name": "GS",
+      "side": "SELL",
+      "ordered_qty": 732.0,
+      "filled_qty": 732.0,
+      "remaining_qty": 0.0,
+      "total_fill_amount": 61937700.0,
+      "avg_fill_price": 84614.0,
+      "cancelled": false,
+      "order_time": "144336",
+      "db_order_id": "294aba69-15de-43cb-8dd4-e5722fe3e4ea",
+      "db_strategy_name": "aggressive",
+      "db_original_status": "FILLED",
+      "db_original_filled_qty": 732.0,
+      "db_original_avg_fill_price": 84614.0
+    },
+    {
+      "date": "2026-07-29",
+      "broker_order_id": "0000036661",
+      "symbol": "161390",
+      "stock_name": "한국타이어앤테크놀로지",
+      "side": "SELL",
+      "ordered_qty": 990.0,
+      "filled_qty": 990.0,
+      "remaining_qty": 0.0,
+      "total_fill_amount": 63654300.0,
+      "avg_fill_price": 64297.0,
+      "cancelled": false,
+      "order_time": "132858",
+      "db_order_id": "19528800-c24d-4965-8f81-f5f8b296eb6a",
+      "db_strategy_name": "aggressive",
+      "db_original_status": "FILLED",
+      "db_original_filled_qty": 990.0,
+      "db_original_avg_fill_price": 64297.0
+    },
+    {
+      "date": "2026-07-29",
+      "broker_order_id": "0000036595",
+      "symbol": "021240",
+      "stock_name": "코웨이",
+      "side": "SELL",
+      "ordered_qty": 758.0,
+      "filled_qty": 758.0,
+      "remaining_qty": 0.0,
+      "total_fill_amount": 67478400.0,
+      "avg_fill_price": 89021.0,
+      "cancelled": false,
+      "order_time": "132842",
+      "db_order_id": "98deabcf-f8e0-4347-be2e-88344bf391a1",
+      "db_strategy_name": "aggressive",
+      "db_original_status": "FILLED",
+      "db_original_filled_qty": 758.0,
+      "db_original_avg_fill_price": 89021.0
     }
   ],
   "broker_only_rows": [

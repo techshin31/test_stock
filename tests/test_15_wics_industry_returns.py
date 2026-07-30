@@ -40,6 +40,25 @@ def test_low_constituent_coverage_is_excluded():
     assert reconstruct_industry_indices(prices, wics, minimum_coverage=0.8) == []
 
 
+def test_outlier_constituent_return_is_excluded_from_sector_return():
+    prices = [
+        {"stock_code": "A", "price_date": date(2026, 1, 1), "close": 100},
+        {"stock_code": "A", "price_date": date(2026, 1, 2), "close": 110},
+        {"stock_code": "B", "price_date": date(2026, 1, 1), "close": 100},
+        {"stock_code": "B", "price_date": date(2026, 1, 2), "close": 100_000},
+    ]
+    wics = [
+        {"stock_code": "A", "base_date": date(2026, 1, 1), "industry_code": "G4530", "mkt_val": 90},
+        {"stock_code": "B", "base_date": date(2026, 1, 1), "industry_code": "G4530", "mkt_val": 10},
+    ]
+
+    rows = reconstruct_industry_indices(prices, wics, minimum_coverage=0.8)
+
+    assert len(rows) == 1
+    assert rows[0]["index_value"] == pytest.approx(1100.0)
+    assert rows[0]["method_version"] == "mcap-v1.1"
+
+
 def test_weekly_and_monthly_returns_align_from_levels():
     rows = [
         {"industry_code": "G4530", "price_date": date(2026, 1, 2), "index_value": Decimal("100")},

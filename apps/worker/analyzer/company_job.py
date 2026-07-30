@@ -1,9 +1,9 @@
 """Quarterly company FA ledger and monthly company selection calculations."""
 from __future__ import annotations
 
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right, insort
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import pandas as pd
@@ -145,42 +145,40 @@ def build_quarter_fundamentals(financial_rows: list[dict]) -> list[dict]:
             "_individual_hint": individual_hint,
         })
 
-    reports.sort(key=lambda row: (
-        row["stock_code"], row["fiscal_year"], row["quarter_no"],
-        row["available_date"], row["source_rcept_no"],
-    ))
-    latest_by_period: dict[tuple[str, int, int, str], dict] = {}
-    for report in reports:
-        key = (
-            report["stock_code"], report["fiscal_year"],
-            report["quarter_no"], report["fs_div"],
-        )
-        latest_by_period[key] = report
-
     output: list[dict] = []
-    previous_cumulative: dict[tuple[str, int, str, str], float | None] = {}
-    for report in sorted(latest_by_period.values(), key=lambda row: (
-        row["stock_code"], row["fiscal_year"], row["quarter_no"], row["fs_div"]
-    )):
+    # Do not collapse amended filings into the last version.  The original and
+    # correction were both information sets available to the market on their
+    # respective receipt dates.  Cumulative flow subtraction instead uses the
+    # latest *previous-quarter* report that was available at the same time.
+    reports.sort(key=lambda row: (
+        row["stock_code"], row["fiscal_year"], row["fs_div"],
+        row["available_date"], row["quarter_no"], row["source_rcept_no"],
+    ))
+    latest_cumulative: dict[tuple[str, int, str, int, str], float | None] = {}
+    for report in reports:
         result = {key: value for key, value in report.items() if not key.startswith("_")}
         for metric, cumulative_value in report["_cumulative"].items():
             if metric not in _FLOW_METRICS:
                 result[metric] = cumulative_value
                 continue
             previous_key = (
-                report["stock_code"], report["fiscal_year"], report["fs_div"], metric
+                report["stock_code"], report["fiscal_year"], report["fs_div"],
+                report["quarter_no"] - 1, metric,
             )
             if report["quarter_no"] == 1:
                 individual = cumulative_value
             else:
-                previous = previous_cumulative.get(previous_key)
+                previous = latest_cumulative.get(previous_key)
                 individual = (
                     cumulative_value - previous
                     if cumulative_value is not None and previous is not None
                     else report["_individual_hint"].get(metric)
                 )
             result[metric] = individual
-            previous_cumulative[previous_key] = cumulative_value
+            latest_cumulative[(
+                report["stock_code"], report["fiscal_year"], report["fs_div"],
+                report["quarter_no"], metric,
+            )] = cumulative_value
         result["fiscal_quarter"] = f"{report['fiscal_year']}Q{report['quarter_no']}"
         capex = result.get("capex")
         ocf = result.get("operating_cashflow")
@@ -216,7 +214,21 @@ def _add_derived_metrics(records: list[dict]) -> pd.DataFrame:
     frame = pd.DataFrame(records)
     if frame.empty:
         return frame
-    frame = frame.sort_values(["stock_code", "fiscal_year", "quarter_no"])
+    # Production records always carry this point-in-time lineage.  Defaults
+    # keep the small pure-calculation helper usable for legacy callers/tests
+    # that only provide annual/quarter keys.
+    if "available_date" not in frame:
+        frame["available_date"] = pd.to_datetime(
+            frame["fiscal_year"].astype(str) + "-12-31"
+        )
+    if "fs_div" not in frame:
+        frame["fs_div"] = "CFS"
+    if "source_rcept_no" not in frame:
+        frame["source_rcept_no"] = frame.index.astype(str)
+    frame = frame.sort_values([
+        "stock_code", "available_date", "fiscal_year", "quarter_no",
+        "fs_div", "source_rcept_no",
+    ])
     for index, row in frame.iterrows():
         frame.at[index, "operating_margin"] = _safe_div(row.get("operating_income"), row.get("revenue"))
         frame.at[index, "roe"] = _safe_div(row.get("net_income"), row.get("total_equity"))
@@ -229,13 +241,21 @@ def _add_derived_metrics(records: list[dict]) -> pd.DataFrame:
         frame.at[index, "per_proxy"] = _safe_div(market_cap, row.get("net_income"))
         frame.at[index, "pbr_proxy"] = _safe_div(market_cap, row.get("total_equity"))
 
-    by_key = {
-        (row.stock_code, int(row.fiscal_year), int(row.quarter_no)): row
-        for row in frame.itertuples()
-    }
+    # A later correction to the prior-year quarter must not rewrite growth
+    # that was calculated from an earlier disclosure.  As with the raw flows,
+    # retain only the latest prior-year value available as of each row.
+    prior_reports: dict[tuple[str, int, int, str], pd.Series] = {}
     for index, row in frame.iterrows():
-        prior = by_key.get((row["stock_code"], int(row["fiscal_year"]) - 1, int(row["quarter_no"])))
+        key = (
+            row["stock_code"], int(row["fiscal_year"]), int(row["quarter_no"]),
+            row["fs_div"],
+        )
+        prior = prior_reports.get((
+            row["stock_code"], int(row["fiscal_year"]) - 1,
+            int(row["quarter_no"]), row["fs_div"],
+        ))
         if prior is None:
+            prior_reports[key] = row
             continue
         frame.at[index, "revenue_growth_yoy"] = _safe_div(
             row.get("revenue") - prior.revenue if row.get("revenue") is not None and prior.revenue is not None else None,
@@ -259,6 +279,7 @@ def _add_derived_metrics(records: list[dict]) -> pd.DataFrame:
             row.get("debt_ratio") - prior.debt_ratio
             if row.get("debt_ratio") is not None and prior.debt_ratio is not None else None
         )
+        prior_reports[key] = row
     return frame
 
 
@@ -358,21 +379,92 @@ def score_quarter_fundamentals(frame: pd.DataFrame, config: AnalyzerConfig) -> l
     if frame.empty:
         return []
     frame = frame.copy()
+
+    # A score attached to a disclosure must be reproducible using only the
+    # disclosures the market could have known on that date. Ranking the whole
+    # fiscal-quarter cohort would let a later filer change an earlier score and
+    # leak future information into historical analysis.
+    frame["available_date"] = pd.to_datetime(frame["available_date"], errors="coerce")
     for group_key, group in frame.groupby(["fiscal_quarter", "score_model_code"]):
-        if len(group) < config.scoring.minimum_scoring_cohort_size:
-            continue
         model_code = group_key[1]
         level_w, change_w = _MODEL_WEIGHTS.get(model_code, _MODEL_WEIGHTS["GENERAL_V1"])
-        for metric, (_, higher_is_better) in {**level_w, **change_w}.items():
-            frame.loc[group.index, f"_pct_{metric}"] = group[metric].rank(
-                pct=True, ascending=higher_is_better, method="average"
-            )
+        metrics = {**level_w, **change_w}
+        dated_group = group.dropna(subset=["available_date"]).sort_values(
+            ["available_date", "stock_code", "source_rcept_no"]
+        )
+        sorted_values: dict[str, list[float]] = {metric: [] for metric in metrics}
+        # The cohort has one active disclosure per company/statement type.
+        # A correction replaces that company's prior disclosure; it must not
+        # count as an additional peer observation.
+        active_values: dict[tuple[str, str], dict[str, float | None]] = {}
+        for available_date, newly_available in dated_group.groupby(
+            "available_date", sort=True
+        ):
+            # Apply the whole disclosure-date batch before scoring it.  This
+            # treats same-day reports symmetrically while retaining only each
+            # company's latest report version in the point-in-time cohort.
+            for _, row in newly_available.iterrows():
+                identity = (str(row["stock_code"]), str(row["fs_div"]))
+                previous_values = active_values.get(identity, {})
+                for metric, previous in previous_values.items():
+                    if previous is None:
+                        continue
+                    values = sorted_values[metric]
+                    previous_index = bisect_left(values, previous)
+                    if (
+                        previous_index < len(values)
+                        and values[previous_index] == previous
+                    ):
+                        values.pop(previous_index)
+
+                current_values = {
+                    metric: _number(row.get(metric)) for metric in metrics
+                }
+                active_values[identity] = current_values
+                for metric, value in current_values.items():
+                    if value is not None:
+                        insort(sorted_values[metric], value)
+
+            cohort_size = len(active_values)
+            frame.loc[newly_available.index, "_pit_cohort_size"] = cohort_size
+            frame.loc[newly_available.index, "_score_as_of_date"] = available_date
+            if cohort_size < config.scoring.minimum_scoring_cohort_size:
+                continue
+            for row_index, row in newly_available.iterrows():
+                for metric, (_, higher_is_better) in metrics.items():
+                    value = row.get(metric)
+                    values = sorted_values[metric]
+                    if pd.isna(value) or not values:
+                        continue
+                    lower = bisect_left(values, float(value))
+                    upper = bisect_right(values, float(value))
+                    ascending_rank = (lower + 1 + upper) / 2
+                    percentile = ascending_rank / len(values)
+                    if not higher_is_better:
+                        percentile = (len(values) - ascending_rank + 1) / len(values)
+                    frame.at[row_index, f"_pct_{metric}"] = percentile
 
     results: list[dict] = []
     for _, row in frame.iterrows():
         model_code = row.get("score_model_code", "GENERAL_V1")
         level_w, change_w = _MODEL_WEIGHTS.get(model_code, _MODEL_WEIGHTS["GENERAL_V1"])
-        detail: dict[str, Any] = {"percentiles": {}}
+        score_as_of = row.get("_score_as_of_date")
+        detail: dict[str, Any] = {
+            "score_method": "POINT_IN_TIME_COHORT_V1",
+            "point_in_time": {
+                "score_as_of_date": (
+                    score_as_of.date().isoformat()
+                    if isinstance(score_as_of, pd.Timestamp) and not pd.isna(score_as_of)
+                    else None
+                ),
+                "cohort_size": (
+                    int(row["_pit_cohort_size"])
+                    if pd.notna(row.get("_pit_cohort_size"))
+                    else 0
+                ),
+            },
+            "percentiles": {},
+        }
         def axis_score(weights: dict[str, tuple[float, bool]], total: float):
             weighted = 0.0
             available_weight = 0.0
@@ -477,6 +569,7 @@ def select_companies(
     *,
     buy_blocked_codes: set[str] | None = None,
     company_risk_rows: list[dict] | None = None,
+    as_of_date: date | None = None,
 ) -> list[dict]:
     """Apply hard filters and select up to the configured count per industry."""
     risk_by_stock = {
@@ -508,6 +601,12 @@ def select_companies(
             exclusion = "NOT_LARGE"
         elif fa is None:
             exclusion = "NO_QUARTER_FA"
+        elif as_of_date is not None and (
+            fa.get("available_date") is None
+            or pd.Timestamp(fa["available_date"]).date()
+            < as_of_date - timedelta(days=config.scoring.max_company_fa_age_days)
+        ):
+            exclusion = "STALE_FA"
         elif _ranking_number(fa.get("total_equity"), 0.0) <= 0 or fa.get("excluded_reason_code") == "CAPITAL_IMPAIRMENT":
             exclusion = "CAPITAL_IMPAIRMENT"
         elif _ranking_number(fa.get("score_confidence"), -1.0) < config.scoring.minimum_score_confidence:
@@ -538,6 +637,12 @@ def select_companies(
             "selection_detail": {
                 "sort_keys": ["fa_score", "score_confidence", "latest_trd_amt", "stock_code"],
                 "source_fa_id": fa.get("id") if fa else None,
+                "fa_age_days": (
+                    (as_of_date - pd.Timestamp(fa["available_date"]).date()).days
+                    if as_of_date is not None and fa and fa.get("available_date") is not None
+                    else None
+                ),
+                "max_company_fa_age_days": config.scoring.max_company_fa_age_days,
                 "risk_state": {
                     "risk_action_code": risk_state.get("risk_action_code"),
                     "reason_code": risk_state.get("reason_code"),
@@ -591,6 +696,7 @@ def run(
         sectors, members, company_fa, statuses, config,
         buy_blocked_codes=buy_blocked_codes,
         company_risk_rows=risk_states,
+        as_of_date=cutoff_date,
     )
     insert_company_results(db, run_id, results)
     return results

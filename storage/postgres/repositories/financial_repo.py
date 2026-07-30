@@ -128,7 +128,12 @@ def fetch_financial_statements_as_of(
     where = " AND ".join(conditions)
     return db.fetch_all(
         f"""
-        SELECT *
+        -- Keep the point-in-time FA rebuild bounded: the raw table has many
+        -- unused EAV columns, while company_job only needs this lineage and
+        -- the current/cumulative report amounts.
+        SELECT stock_code, bsns_year, reprt_code, fs_div, sj_div,
+               account_id, account_nm, source_rcept_no,
+               period_end, available_date, thstrm_amount, thstrm_add_amount
         FROM financial_statements
         WHERE {where}
         ORDER BY stock_code, period_end, available_date, source_rcept_no,
