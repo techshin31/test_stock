@@ -5,6 +5,7 @@ import re
 import pandas as pd
 import datetime
 import hashlib
+from collections import Counter
 from zoneinfo import ZoneInfo
 from pathlib import Path
 from data.loaders.kospi_data import download_multiple_stocks, download_kospi_index
@@ -820,6 +821,12 @@ class LiveTrader:
             inverse_hedge=inverse_hedge,
         )
 
+        signal_evaluation = self._signal_evaluation_summary(
+            target_details, target_positions
+        )
+        data_health["signal_evaluation"] = signal_evaluation
+        self.last_data_health = data_health
+
         print(f"[타겟 산출 완료] 타겟 포지션 수: {len([t for t, w in target_positions.items() if w > 0.0])}개")
 
         # 4. 주문 후보 계산. DRY_RUN에서는 후보만 기록되고 실제 주문은 0건이다.
@@ -833,6 +840,7 @@ class LiveTrader:
         )
         data_health["order_suppressions"] = suppression_summary
         dashboard_state["data_health"] = data_health
+        dashboard_state["signal_evaluation"] = signal_evaluation
         dashboard_state["inverse_hedge"] = inverse_hedge
         if shadow_reentry is not None:
             dashboard_state["shadow_reentry"] = shadow_reentry
@@ -933,6 +941,32 @@ class LiveTrader:
             "buy": sum(row.get("type") == "BUY" for row in rows),
             "sell": sum(row.get("type") == "SELL" for row in rows),
             "risk_exit": sum(row.get("reason") in risk_reasons for row in rows),
+        }
+
+    @staticmethod
+    def _signal_evaluation_summary(target_details, target_positions):
+        """Summarize why symbols did or did not produce target exposure.
+
+        This is diagnostic evidence only: it does not alter target weights or
+        order permissions.  Keeping reason counts beside the order outcome
+        distinguishes a quiet strategy scan from a broker execution failure.
+        """
+        details = target_details or {}
+        targets = target_positions or {}
+        reason_counts = Counter(
+            str((detail or {}).get("signal_reason") or "UNKNOWN")
+            for detail in details.values()
+        )
+        selected_count = sum(
+            float(targets.get(ticker, 0.0) or 0.0) > 0.0 for ticker in targets
+        )
+        return {
+            "evaluated_count": len(details),
+            "selected_count": int(selected_count),
+            "target_weight_sum": round(
+                sum(float(value or 0.0) for value in targets.values()), 6
+            ),
+            "reason_counts": dict(sorted(reason_counts.items())),
         }
 
     @staticmethod

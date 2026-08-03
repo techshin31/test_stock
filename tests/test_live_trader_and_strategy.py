@@ -592,6 +592,26 @@ def test_json_state_writer_replaces_dashboard_state_without_leaving_temp_file(tm
     assert not path.with_suffix(".json.tmp").exists()
 
 
+def test_signal_evaluation_summary_explains_quiet_scans():
+    summary = LiveTrader._signal_evaluation_summary(
+        {
+            "A.KS": {"signal_reason": "ENTRY_CONDITIONS_NOT_MET"},
+            "B.KS": {"signal_reason": "MARKET_TRANSITION_KEEP_HOLD"},
+            "C.KS": {"signal_reason": "TRANSITION_ENTRY"},
+        },
+        {"A.KS": 0.0, "B.KS": 0.0, "C.KS": 0.1},
+    )
+
+    assert summary["evaluated_count"] == 3
+    assert summary["selected_count"] == 1
+    assert summary["target_weight_sum"] == pytest.approx(0.1)
+    assert summary["reason_counts"] == {
+        "ENTRY_CONDITIONS_NOT_MET": 1,
+        "MARKET_TRANSITION_KEEP_HOLD": 1,
+        "TRANSITION_ENTRY": 1,
+    }
+
+
 def test_aggressive_news_timeline_update_replaces_dashboard_atomically(tmp_path):
     path = tmp_path / "dashboard_state.json"
     path.write_text(json.dumps({"timeline": []}), encoding="utf-8")
