@@ -95,4 +95,5 @@
 - EOD 사전검증: 컨테이너 scheduler가 15:30 KST 시각에 오늘 날짜 `2026-08-03`을 선택함을 확인했으며, 실제 EOD 생성은 장마감 전 실행하지 않음
 - 누적 표본 진행률을 dashboard·운영 로그에 노출: BUY 20/30, SELL 17/30, `PROVISIONAL_SMALL_SAMPLE` (관측 주문 37건)
 - readiness에 dashboard 표본과 스트레스 리포트의 수치·상태 일치 검사를 추가: 8/15 evidence checks 통과, 표본 불일치 시 readiness 차단
+- API 경로 확인: `/api/healthz` 200·DB ready, `/api/dashboard?mode=PAPER`에서 동일 표본 진행률 반환, `/api/system-readiness?mode=PAPER`에서 `paper_runtime_safe=true`·`real_execution_authorized=false` 반환
 - 위 진단은 원인 가시성 보강이며 주문 정책·주문 권한은 변경하지 않음
