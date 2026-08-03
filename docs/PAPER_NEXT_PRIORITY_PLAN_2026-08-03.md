@@ -83,14 +83,15 @@
 3. 장중 주문 기록은 operational log, trade history, PostgreSQL orders/executions를 서로 대조한다.
 4. 보고서 생성 실패 시 실패 상태를 보존하고 다음 재시도에서만 복구를 시도한다.
 
-## 최신 장중 진단 증거 부록 (2026-08-03 14:01 KST)
+## 최신 장중 진단 증거 부록 (2026-08-03 14:13 KST)
 
 - `FA_PASS_TA_FAIL`: 46건, `FA_FAIL_TA_FAIL`: 1건
 - TA 실패 세부: `CLOSE_NOT_ABOVE_MA` 43건, `FAST_MA_NOT_ABOVE_MA` 42건, `MOMENTUM_NON_POSITIVE` 40건 (조건별 중복 집계)
-- 신호 증거 검증: 48건 관측, 48건 유효, 0건 무효 (`validity_rate=1.0`)
-- 금일 데이터 품질: scan 283건, 신호 증거 48건 유효 (`coverage_rate=0.1696`)
+- 신호 증거 검증: 60건 관측, 60건 유효, 0건 무효 (`validity_rate=1.0`)
+- 금일 데이터 품질: scan 295건, 신호 증거 60건 유효 (`coverage_rate=0.2034`)
 - 실행 스트레스 fallback `C_CAP10`/`C_CAP08`은 3개 시나리오의 위험 한도를 통과했지만, BUY·SELL 각 30건 전에는 `PROVISIONAL_SMALL_SAMPLE` 및 수동 검토 상태를 유지함
 - 14:03 KST 진입 게이트 교차검증: FA 통과·종가/빠른 MA 모두 미충족·모멘텀 음수 35건, 동일 조건에서 모멘텀 양수 7건, 종가만 미충족·모멘텀 음수 1건, 두 MA 통과·모멘텀 음수 3건; FA 통과·모멘텀 양수·MA 하나 이상 통과 후보는 0건
 - 14:05 KST 원장 대조: PostgreSQL PAPER orders는 BUY FILLED 6건·SELL FILLED 3건, executions 38건, 미체결 0건으로 dashboard의 6/3/0과 일치함
 - EOD 사전검증: 컨테이너 scheduler가 15:30 KST 시각에 오늘 날짜 `2026-08-03`을 선택함을 확인했으며, 실제 EOD 생성은 장마감 전 실행하지 않음
+- 누적 표본 진행률을 dashboard·운영 로그에 노출: BUY 20/30, SELL 17/30, `PROVISIONAL_SMALL_SAMPLE` (관측 주문 37건)
 - 위 진단은 원인 가시성 보강이며 주문 정책·주문 권한은 변경하지 않음

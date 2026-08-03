@@ -1165,6 +1165,37 @@ def test_daily_order_summary_uses_kst_operating_date():
     assert "AT TIME ZONE 'Asia/Seoul'" in calls[0][0]
 
 
+def test_execution_sample_progress_is_side_aware_and_scope_bound():
+    calls = []
+
+    class DB:
+        def fetch_all(self, query, params):
+            calls.append((query, params))
+            return [
+                {"order_side_code": "BUY", "count": 20},
+                {"order_side_code": "SELL", "count": 17},
+            ]
+
+    broker = SafeBroker()
+    broker.is_simulated = False
+    trader = object.__new__(LiveTrader)
+    trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.broker = broker
+    trader.db = DB()
+
+    assert trader._execution_sample_progress() == {
+        "buy": 20,
+        "sell": 17,
+        "required_per_side": 30,
+        "observed_order_count": 37,
+        "sample_ready": False,
+        "status": "PROVISIONAL_SMALL_SAMPLE",
+    }
+    assert len(calls) == 1
+    assert calls[0][1] == ("aggressive", "PAPER", "***1234-01")
+
+
 def test_paper_fill_can_be_inferred_from_balance_change():
     broker = SafeBroker(price=100)
     broker.get_balance = lambda: {

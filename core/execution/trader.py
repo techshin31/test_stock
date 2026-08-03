@@ -402,6 +402,9 @@ class LiveTrader:
         dashboard_state["actual_orders"] = actual_orders
         dashboard_state["daily_orders"] = actual_orders
         dashboard_state["order_candidates"] = self._candidate_order_summary([])
+        dashboard_state["execution_sample_progress"] = (
+            self._execution_sample_progress()
+        )
         previous_data_health = dashboard_state.get("data_health") or {}
         previous_suppressions = (
             dashboard_state.get("order_suppressions")
@@ -848,6 +851,9 @@ class LiveTrader:
             dashboard_state["portfolio_cap_shadow"] = portfolio_cap_shadow
         dashboard_state["order_candidates"] = candidate_summary
         dashboard_state["order_suppressions"] = suppression_summary
+        dashboard_state["execution_sample_progress"] = (
+            self._execution_sample_progress()
+        )
         dashboard_state["actual_orders"] = actual_orders
         dashboard_state["daily_orders"] = actual_orders
         dashboard_state["operational_status"] = self._derive_operational_status(
@@ -1132,6 +1138,9 @@ class LiveTrader:
             "data_health": dashboard_state.get("data_health", {}),
             "order_candidates": dashboard_state.get("order_candidates", {}),
             "order_suppressions": dashboard_state.get("order_suppressions", {}),
+            "execution_sample_progress": dashboard_state.get(
+                "execution_sample_progress", {}
+            ),
             "actual_orders": dashboard_state.get(
                 "actual_orders", dashboard_state.get("daily_orders", {})
             ),
@@ -1182,6 +1191,57 @@ class LiveTrader:
             elif status in {"REJECTED", "CANCELLED"}:
                 summary["rejected"] += count
         return summary
+
+    def _execution_sample_progress(self):
+        """Expose cumulative PAPER order-side samples without changing execution."""
+        empty = {
+            "buy": 0,
+            "sell": 0,
+            "required_per_side": 30,
+            "observed_order_count": 0,
+            "sample_ready": False,
+            "status": "UNAVAILABLE",
+        }
+        if getattr(self, "execution_venue", None) in {"DRY_RUN", "SIMULATE"}:
+            return empty
+        if getattr(getattr(self, "broker", None), "is_simulated", False):
+            return empty
+        if not hasattr(self, "db"):
+            return empty
+        try:
+            strategy_name, execution_venue, account_scope = self._order_scope()
+            rows = self.db.fetch_all(
+                """SELECT o.order_side_code, COUNT(*) AS count
+                   FROM orders o
+                   JOIN strategies s ON s.id = o.strategy_id
+                   WHERE s.name = %s
+                     AND o.execution_venue_code = %s
+                     AND o.account_scope = %s
+                   GROUP BY o.order_side_code""",
+                (strategy_name, execution_venue, account_scope),
+            )
+        except Exception as exc:
+            logging.warning(f"execution sample progress unavailable: {exc}")
+            return empty
+        buy = sum(
+            int(row.get("count") or 0)
+            for row in rows
+            if row.get("order_side_code") == "BUY"
+        )
+        sell = sum(
+            int(row.get("count") or 0)
+            for row in rows
+            if row.get("order_side_code") == "SELL"
+        )
+        ready = buy >= 30 and sell >= 30
+        return {
+            "buy": buy,
+            "sell": sell,
+            "required_per_side": 30,
+            "observed_order_count": buy + sell,
+            "sample_ready": ready,
+            "status": "READY" if ready else "PROVISIONAL_SMALL_SAMPLE",
+        }
 
     def _order_scope(self):
         """Return the current strategy/account scope used by every order query."""
