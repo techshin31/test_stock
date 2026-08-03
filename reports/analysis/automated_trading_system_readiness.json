@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-03T13:01:09+09:00",
+  "generated_at": "2026-08-03T13:06:22+09:00",
   "scope": "PAPER_AUTOMATED_TRADING_SYSTEM",
   "paper_runtime_safe": true,
   "full_system_complete": false,
@@ -86,7 +86,7 @@
     {
       "name": "dashboard_freshness",
       "passed": true,
-      "detail": "age_seconds=24, limit=300"
+      "detail": "age_seconds=29, limit=300"
     },
     {
       "name": "real_environment_disabled",
