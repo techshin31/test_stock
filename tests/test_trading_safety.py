@@ -887,6 +887,28 @@ def test_scheduler_default_clock_is_kst():
     assert now.utcoffset() == datetime.timedelta(hours=9)
 
 
+def test_paper_eod_trigger_uses_kst_close_boundary(tmp_path):
+    operational = tmp_path / "logs/paper/operational_health.jsonl"
+    operational.parent.mkdir(parents=True, exist_ok=True)
+    operational.write_text(
+        json.dumps(
+            {
+                "timestamp": "2026-08-03T15:20:00+09:00",
+                "operational_status": "NORMAL",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    kst = scheduler.KST
+    assert scheduler.pending_paper_eod_report_date(
+        datetime.datetime(2026, 8, 3, 15, 29, tzinfo=kst), tmp_path
+    ) is None
+    assert scheduler.pending_paper_eod_report_date(
+        datetime.datetime(2026, 8, 3, 15, 30, tzinfo=kst), tmp_path
+    ) == datetime.date(2026, 8, 3)
+
+
 def test_clear_screen_skips_non_interactive_posix_runtime(monkeypatch):
     calls = []
     monkeypatch.setattr(scheduler.os, "name", "posix")
