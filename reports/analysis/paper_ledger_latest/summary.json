@@ -1,7 +1,7 @@
 {
   "metadata": {
-    "generated_at": "2026-08-03T11:04:00+09:00",
-    "cutoff": "2026-08-03T11:03:23+09:00",
+    "generated_at": "2026-08-03T11:47:53+09:00",
+    "cutoff": "2026-08-03T11:47:16+09:00",
     "timezone": "Asia/Seoul",
     "mode": "PAPER",
     "strategy": "aggressive",
@@ -15,14 +15,14 @@
   },
   "endpoint": {
     "cash": 305528416.0,
-    "total_asset": 436817116.0,
+    "total_asset": 436636216.0,
     "position_count": 3,
-    "total_pnl": -63182884.0,
-    "total_return": -0.126365768,
-    "broker_unrealized_pnl": 515135.0,
+    "total_pnl": -63363784.0,
+    "total_return": -0.126727568,
+    "broker_unrealized_pnl": 334235.0,
     "certified_baseline_asset": 463025590.0,
-    "post_baseline_pnl": -26208474.0,
-    "post_baseline_return": -0.056602646950895306
+    "post_baseline_pnl": -26389374.0,
+    "post_baseline_return": -0.056993338100384476
   },
   "order_result_replay": {
     "orders": 575,
