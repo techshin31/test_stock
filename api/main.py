@@ -36,6 +36,8 @@ STOCK_NAME_CACHE_SECONDS = 60 * 60
 _stock_name_cache: dict[str, str] = {}
 _stock_name_cache_loaded_at = 0.0
 _stock_name_cache_lock = threading.Lock()
+READINESS_CACHE_SECONDS = 30
+_readiness_cache: tuple[float, Path, dict] | None = None
 
 app = FastAPI(
     title="QuantPilot Operations API",
@@ -285,7 +287,46 @@ def _system_readiness(mode: ReportMode) -> dict | None:
     path = ANALYSIS_ROOT / "automated_trading_system_readiness.json"
     if not path.exists():
         return None
-    return _read_json(path)
+    global _readiness_cache
+    now = time.monotonic()
+    project_root = ANALYSIS_ROOT.parent.parent
+    try:
+        report_mtime = path.stat().st_mtime
+        runtime_paths = [
+            LOG_ROOT / "paper" / "dashboard_state.json",
+            LOG_ROOT / "paper" / "operational_health.jsonl",
+        ]
+        runtime_mtime = max(
+            (item.stat().st_mtime for item in runtime_paths if item.exists()),
+            default=0.0,
+        )
+        stale = report_mtime < runtime_mtime
+    except OSError:
+        stale = False
+
+    if (
+        _readiness_cache is not None
+        and _readiness_cache[1] == project_root
+        and now - _readiness_cache[0] < READINESS_CACHE_SECONDS
+        and not stale
+    ):
+        return _readiness_cache[2]
+
+    if stale:
+        try:
+            from core.analytics.system_readiness import audit_system_readiness
+
+            readiness = audit_system_readiness(project_root)
+            _readiness_cache = (now, project_root, readiness)
+            return readiness
+        except Exception:
+            # Keep the dashboard available if an evidence file is temporarily
+            # incomplete while the scheduler is writing its next snapshot.
+            pass
+
+    readiness = _read_json(path)
+    _readiness_cache = (now, project_root, readiness)
+    return readiness
 
 
 def _eod_report_status(mode: ReportMode) -> dict | None:
