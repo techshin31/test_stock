@@ -83,10 +83,11 @@
 3. 장중 주문 기록은 operational log, trade history, PostgreSQL orders/executions를 서로 대조한다.
 4. 보고서 생성 실패 시 실패 상태를 보존하고 다음 재시도에서만 복구를 시도한다.
 
-## 최신 장중 진단 증거 부록 (2026-08-03 13:49 KST)
+## 최신 장중 진단 증거 부록 (2026-08-03 13:54 KST)
 
 - `FA_PASS_TA_FAIL`: 46건, `FA_FAIL_TA_FAIL`: 1건
 - TA 실패 세부: `CLOSE_NOT_ABOVE_MA` 43건, `FAST_MA_NOT_ABOVE_MA` 42건, `MOMENTUM_NON_POSITIVE` 40건 (조건별 중복 집계)
-- 신호 증거 검증: 37건 관측, 37건 유효, 0건 무효 (`validity_rate=1.0`)
-- 금일 데이터 품질: scan 272건, 신호 증거 37건 유효 (`coverage_rate=0.1360`)
+- 신호 증거 검증: 41건 관측, 41건 유효, 0건 무효 (`validity_rate=1.0`)
+- 금일 데이터 품질: scan 276건, 신호 증거 41건 유효 (`coverage_rate=0.1486`)
+- 실행 스트레스 fallback `C_CAP10`/`C_CAP08`은 3개 시나리오의 위험 한도를 통과했지만, BUY·SELL 각 30건 전에는 `PROVISIONAL_SMALL_SAMPLE` 및 수동 검토 상태를 유지함
 - 위 진단은 원인 가시성 보강이며 주문 정책·주문 권한은 변경하지 않음
