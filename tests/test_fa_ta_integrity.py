@@ -123,8 +123,8 @@ def test_transition_entry_hold_does_not_immediately_rebalance():
         _strategy_frame(), "TRANSITION", current_position=0.08
     )
 
-    assert target == pytest.approx(0.08)
-    assert metadata["signal_reason"] == "MARKET_TRANSITION_ENTRY_HOLD"
+    assert target == pytest.approx(0.10)
+    assert metadata["signal_reason"] == "TRANSITION_ENTRY_TOPUP"
 
 
 def test_transition_entry_can_be_disabled():

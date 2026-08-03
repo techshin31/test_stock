@@ -182,10 +182,33 @@ class FaTaMomentumStrategy(AbstractStrategy):
                 target, reason = 0.0, "TA_MOMENTUM_LOSS"
             elif regime == MarketRegime.TRANSITION.name:
                 if current_position <= self.TRANSITION_ENTRY_SIZE:
-                    # Do not immediately unwind a starter position created by
-                    # the transition-entry rule on the next scan.
-                    target = current_position
-                    reason = "MARKET_TRANSITION_ENTRY_HOLD"
+                    valid_fa = (
+                        is_eligible
+                        and pd.notnull(fa_score)
+                        and float(fa_score) >= self.FA_SCORE_MIN
+                        and pd.notnull(debt_ratio)
+                        and float(debt_ratio) <= self.DEBT_RATIO_MAX
+                        and pd.notnull(score_confidence)
+                        and float(score_confidence) >= self.MIN_SCORE_CONFIDENCE
+                    )
+                    valid_ta = (
+                        curr_close > curr_ma
+                        and curr_ma_fast > curr_ma
+                        and curr_momentum > 0
+                    )
+                    if (
+                        self.TRANSITION_ENTRY_ENABLED
+                        and valid_fa
+                        and valid_ta
+                        and current_position < self.TRANSITION_ENTRY_SIZE
+                    ):
+                        target = self.TRANSITION_ENTRY_SIZE
+                        reason = "TRANSITION_ENTRY_TOPUP"
+                    else:
+                        # Do not immediately unwind a starter position created
+                        # by the transition-entry rule on the next scan.
+                        target = current_position
+                        reason = "MARKET_TRANSITION_ENTRY_HOLD"
                 else:
                     target = round(
                         current_position * self.TRANSITION_KEEP_RATIO,
