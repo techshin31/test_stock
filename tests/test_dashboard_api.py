@@ -82,6 +82,9 @@ def test_overview_uses_mode_scoped_official_report(monkeypatch, tmp_path):
     assert body["dashboard"]["positions"][0]["name"] == "삼성전자"
     assert body["latest_report"]["date"] == "2026-07-21"
     assert body["system_readiness"]["progress"]["paper_sessions"]["completed"] == 1
+    assert body["dashboard"]["strategy_policy"]["status"] == "PAPER_RECOVERY_PROVISIONAL"
+    assert body["dashboard"]["risk_controls"]["rebalance_band"] == 0.20
+    assert body["dashboard"]["risk_controls"]["trailing_stop_enabled"] is False
 
 
 def test_overview_exposes_the_paper_inverse_hedge_snapshot(monkeypatch, tmp_path):

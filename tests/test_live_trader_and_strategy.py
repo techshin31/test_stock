@@ -72,6 +72,10 @@ def test_live_trader_calculate_orders(monkeypatch):
     trader = LiveTrader(mock=True)
     trader.broker = type("Broker", (), {"masked_account": "***1234-01"})()
     assert trader.strategy.FA_SCORE_MIN == FA_CONTRACT.minimum_company_fa_score
+    assert trader.strategy_policy.status == "PAPER_RECOVERY_PROVISIONAL"
+    assert trader.rebalance_band == 0.20
+    assert trader.strategy.STOP_LOSS_PCT == 0.20
+    assert trader.strategy.TRAILING_STOP_ENABLED is False
     
     total_eval = 10_000_000
     current_positions = {
@@ -336,6 +340,26 @@ def test_held_position_rebalance_uses_broker_current_price():
     assert orders[0]["type"] == "SELL"
     assert orders[0]["expected_price"] == 6_000
     assert orders[0]["qty"] == 116
+
+
+def test_paper_recovery_band_suppresses_small_rebalance_churn():
+    trader = object.__new__(LiveTrader)
+    trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.rebalance_band = 0.20
+    trader.broker = type("Broker", (), {"masked_account": "***1234-01"})()
+    trader.max_order_attempts = 2
+    trader.db = type("DB", (), {"fetch_all": lambda *a, **k: []})()
+    trader._price_guard_blocked = lambda *args: False
+
+    orders = trader._calculate_orders(
+        1_000_000,
+        {"005930.KS": {"qty": 1_750, "current_price": 100}},
+        {"005930.KS": 0.15},
+        {"005930.KS": pd.DataFrame({"close": [100]})},
+    )
+
+    assert orders == []
 
 
 def test_urgent_risk_exit_is_allowed_after_earlier_filled_sell():

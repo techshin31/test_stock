@@ -155,6 +155,35 @@ def test_live_strategy_trailing_stop_protects_gains():
     assert metadata["signal_reason"] == "TRAILING_STOP"
 
 
+def test_disabled_trailing_stop_keeps_position_but_hard_stop_remains_active():
+    strategy = FaTaMomentumStrategy({
+        "ma_window": 20,
+        "ma_window_fast": 5,
+        "stop_loss_pct": 0.20,
+        "trailing_stop_enabled": False,
+        "trailing_stop_pct": 0.08,
+    })
+
+    target, metadata = strategy.evaluate_position_risk(
+        current_position=0.12,
+        average_price=100,
+        current_price=105,
+        peak_price=120,
+    )
+    assert target == 0.12
+    assert metadata["signal_reason"] == "RISK_CLEAR"
+    assert metadata["trailing_stop_enabled"] is False
+
+    target, metadata = strategy.evaluate_position_risk(
+        current_position=0.12,
+        average_price=100,
+        current_price=79,
+        peak_price=120,
+    )
+    assert target == 0.0
+    assert metadata["signal_reason"] == "HARD_STOP_LOSS"
+
+
 def test_portfolio_limit_keeps_all_eligible_positions_without_upscaling():
     trader = object.__new__(LiveTrader)
     targets = {f"{i:06d}.KS": 0.15 for i in range(6)}

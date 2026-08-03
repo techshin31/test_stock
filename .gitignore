@@ -37,3 +37,9 @@ obsidian/.obsidian/
 all_services.txt
 tasks.txt
 service_check.txt
+
+# Regenerable strategy experiment detail (canonical metrics and summaries stay tracked)
+reports/analysis/paper_reentry_experiments/**/daily_*.csv
+reports/analysis/paper_reentry_experiments/**/events.csv
+reports/analysis/paper_execution_stress/latest/stabilized_*/daily_*.csv
+reports/analysis/paper_execution_stress/latest/stabilized_*/events.csv

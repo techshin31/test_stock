@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.analytics.trading_kpis import sanitize_incident_error
+from core.execution.strategy_policy import resolve_strategy_policy
 from core.utils.trading_calendar import (
     is_krx_trading_day,
     previous_krx_trading_day,
@@ -159,6 +160,20 @@ def _dashboard(mode: ReportMode) -> dict:
         if not current_name or current_name == ticker:
             position["name"] = stock_names.get(ticker.split(".")[0], ticker)
     data["positions"] = positions
+    if mode == "PAPER":
+        policy = resolve_strategy_policy("PAPER", os.environ)
+        data["strategy_policy"] = policy.as_dict()
+        risk_controls = dict(data.get("risk_controls") or {})
+        risk_controls.update(
+            {
+                "stop_loss_pct": policy.stop_loss_pct,
+                "trailing_stop_enabled": policy.trailing_stop_enabled,
+                "trailing_stop_pct": policy.trailing_stop_pct,
+                "max_position_weight": policy.max_position_weight,
+                "rebalance_band": policy.rebalance_band,
+            }
+        )
+        data["risk_controls"] = risk_controls
     return _sanitize_runtime_errors(data)
 
 

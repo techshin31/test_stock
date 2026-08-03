@@ -25,6 +25,7 @@ from core.broker.kis_api import BrokerResponseError, KisBroker, normalize_symbol
 from core.broker.simulation import LocalSimulationBroker
 from core.constant.types import Tickers
 from core.execution.inverse_hedge import InverseHedgeConfig, evaluate_inverse_hedge
+from core.execution.strategy_policy import resolve_strategy_policy
 from core.utils.trading_calendar import previous_krx_trading_day
 
 KST = ZoneInfo("Asia/Seoul")
@@ -59,6 +60,16 @@ class LiveTrader:
         if not db_config['password']:
             raise ValueError("POSTGRES_PASSWORD 환경변수가 필요합니다.")
         self.db = PostgreDB(db_config)
+        self.execution_venue = (
+            "DRY_RUN"
+            if dry_run
+            else "SIMULATE"
+            if simulate
+            else "PAPER"
+            if mock
+            else "REAL"
+        )
+        self.strategy_policy = resolve_strategy_policy(self.execution_venue, os.environ)
         self.max_price_deviation = float(os.getenv("MAX_PRICE_DEVIATION", "0.02"))
         self.buy_cash_buffer = float(os.getenv("BUY_CASH_BUFFER", "1.03"))
         self.max_order_attempts = int(os.getenv("MAX_ORDER_ATTEMPTS", "2"))
@@ -69,7 +80,8 @@ class LiveTrader:
         )
         self.allow_warning_fa_run = os.getenv("ALLOW_WARNING_FA_RUN", "false").lower() == "true"
         self.price_guard_cooldown_seconds = int(os.getenv("PRICE_GUARD_COOLDOWN_SECONDS", "900"))
-        self.max_position_weight = float(os.getenv("MAX_POSITION_WEIGHT", "0.15"))
+        self.max_position_weight = self.strategy_policy.max_position_weight
+        self.rebalance_band = self.strategy_policy.rebalance_band
         self.transition_max_gross_exposure = float(
             os.getenv("TRANSITION_MAX_GROSS_EXPOSURE", "0.30")
         )
@@ -90,9 +102,6 @@ class LiveTrader:
         if not 0 < self.max_daily_loss_rate <= 0.20:
             raise ValueError("MAX_DAILY_LOSS_RATE must be in (0, 0.20]")
 
-        self.execution_venue = (
-            "DRY_RUN" if dry_run else "SIMULATE" if simulate else "PAPER" if mock else "REAL"
-        )
         self.force_rebalance = bool(force_rebalance)
         if self.force_rebalance and self.execution_venue != "PAPER":
             raise PermissionError(
@@ -132,8 +141,9 @@ class LiveTrader:
             "fa_score_exit": 40.0,  # fa_score 하락 시 매도 기준
             "debt_ratio_max": 2.0,  # 부채비율 상한 (200%)
             "min_score_confidence": FA_CONTRACT.minimum_score_confidence,
-            "stop_loss_pct": float(os.getenv("STOP_LOSS_PCT", "0.10")),
-            "trailing_stop_pct": float(os.getenv("TRAILING_STOP_PCT", "0.08")),
+            "stop_loss_pct": self.strategy_policy.stop_loss_pct,
+            "trailing_stop_enabled": self.strategy_policy.trailing_stop_enabled,
+            "trailing_stop_pct": self.strategy_policy.trailing_stop_pct,
             "transition_keep_ratio": float(
                 os.getenv("TRANSITION_KEEP_RATIO", "0.40")
             ),
@@ -389,10 +399,14 @@ class LiveTrader:
         )
         dashboard_state["risk_controls"] = {
             "stop_loss_pct": self.strategy.STOP_LOSS_PCT,
+            "trailing_stop_enabled": self.strategy.TRAILING_STOP_ENABLED,
             "trailing_stop_pct": self.strategy.TRAILING_STOP_PCT,
+            "max_position_weight": self.max_position_weight,
+            "rebalance_band": self.rebalance_band,
             "max_daily_loss_rate": self.max_daily_loss_rate,
             "manual_entry_pause": self.manual_entry_pause,
         }
+        dashboard_state["strategy_policy"] = self.strategy_policy.as_dict()
         dashboard_state["execution_mode"] = self.execution_venue
         dashboard_state["strategy"] = self.strategy_name
         dashboard_state["account_scope"] = getattr(
@@ -2032,7 +2046,9 @@ class LiveTrader:
                         "signal_reason", "TARGET_WEIGHT_ZERO"
                     )
                 }
-            elif current_value > target_value * 1.10: # 10% 이상 초과 시 부분 매도
+            elif current_value > target_value * (
+                1 + getattr(self, "rebalance_band", 0.10)
+            ):
                 sell_qty = int((current_value - target_value) // current_price)
                 if sell_qty > 0:
                     candidate = {
@@ -2085,7 +2101,9 @@ class LiveTrader:
             if ticker in current_positions:
                 pos = current_positions[ticker]
                 current_value = pos['qty'] * current_price
-                if current_value < target_value * 0.90: # 10% 이상 부족 시 부분 매수
+                if current_value < target_value * (
+                    1 - getattr(self, "rebalance_band", 0.10)
+                ):
                     buy_qty = int((target_value - current_value) // current_price)
                     if buy_qty > 0:
                         candidate = {

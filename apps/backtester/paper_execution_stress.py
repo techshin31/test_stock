@@ -17,8 +17,9 @@ from storage.postgres.connection import PostgreDB
 
 KST = ZoneInfo("Asia/Seoul")
 SCENARIO_CODES = ("STABILIZED_POSTERIOR_MEAN", "STABILIZED_WILSON_LOWER")
-DECISION_VARIANTS = ("A_CURRENT", "R_TREND_REARM", "C_CAP10", "C_CAP08")
-RISK_CONTROL_VARIANTS = ("C_CAP10", "C_CAP08")
+RECOVERY_CANDIDATE = "F_CAP15_HARD20_BAND20"
+DECISION_VARIANTS = ("A_CURRENT", RECOVERY_CANDIDATE, "C_CAP10", "C_CAP08")
+RISK_CONTROL_VARIANTS = (RECOVERY_CANDIDATE, "C_CAP10", "C_CAP08")
 RISK_THRESHOLDS = {
     "total_return_floor": -0.10,
     "max_drawdown_floor": -0.20,
@@ -116,7 +117,7 @@ def run_stress_suite(
             code: _metric_view(result["summary"][code]) for code in DECISION_VARIANTS
         }
 
-    candidate = "R_TREND_REARM"
+    candidate = RECOVERY_CANDIDATE
     baseline = "A_CURRENT"
     scenario_checks = []
     for scenario_code, metrics in scenarios.items():
@@ -158,7 +159,7 @@ def run_stress_suite(
         )
     if not all_scenarios_pass:
         blockers.append(
-            "trend-rearm does not improve return, drawdown, and turnover in every execution scenario"
+            "PAPER recovery candidate does not improve return, drawdown, and turnover in every execution scenario"
         )
     summary = {
         "schema_version": 1,

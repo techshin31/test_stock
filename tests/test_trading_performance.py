@@ -36,7 +36,7 @@ def _strategy_gate_fixture(tmp_path, *, execution_coverage=1.0, cost_zero_rate=0
                         "max_drawdown": -0.2,
                         "annualized_turnover": 10.0,
                     },
-                    "R_TREND_REARM": {
+                    "F_CAP15_HARD20_BAND20": {
                         "total_return": -0.01,
                         "max_drawdown": -0.1,
                         "annualized_turnover": 5.0,

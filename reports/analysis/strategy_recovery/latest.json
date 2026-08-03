@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "decision_id": "PAPER_STRATEGY_RECOVERY_2026-08-03",
+  "generated_at": "2026-08-03T16:30:00+09:00",
+  "decision": {
+    "previous_strategy_status": "FAILED",
+    "previous_strategy": "A_CURRENT",
+    "recovery_policy_status": "PAPER_RECOVERY_PROVISIONAL",
+    "recovery_policy": "paper_recovery_cap15_hard20_band20_v1",
+    "selected_experiment": "F_CAP15_HARD20_BAND20",
+    "paper_rule_changed": true,
+    "real_rule_changed": false,
+    "real_execution_authorized": false
+  },
+  "account_evidence": {
+    "as_of": "2026-08-03T15:21:17+09:00",
+    "starting_capital": 500000000.0,
+    "ending_total_asset": 434834316.0,
+    "pnl_vs_starting_capital": -65165684.0,
+    "return_vs_starting_capital": -0.130331368,
+    "certified_baseline_total_asset": 463025590.0,
+    "post_baseline_pnl": -28191274.0,
+    "post_baseline_return": -0.06088491566956378,
+    "benchmark_return": -0.04366301867148792,
+    "excess_return": -0.01722189699807586,
+    "max_drawdown": -0.08224601312370328,
+    "cost_drag": -0.008452792750612335,
+    "cash": 305528416.0,
+    "position_count": 3,
+    "gross_exposure": 0.29736820495096344,
+    "open_orders": 0
+  },
+  "pass_only_experiment": {
+    "period_start": "2026-01-30",
+    "period_end": "2026-07-31",
+    "trading_days": 122,
+    "quality_grade": "MEDIUM",
+    "selection_runs": 7,
+    "price_tickers": 789,
+    "price_missing_rate_after_fill": 0.0015894782771302125,
+    "baseline": {
+      "total_return": -0.06693732780274086,
+      "max_drawdown": -0.19655738159258007,
+      "annualized_turnover": 43.861624326978756,
+      "total_cost_ratio": 0.043127507331087854,
+      "average_exposure": 0.6597173538248915,
+      "hard_stop_count": 20,
+      "trailing_stop_count": 36
+    },
+    "candidate": {
+      "total_return": 0.014716145274253023,
+      "max_drawdown": -0.1744389417144655,
+      "annualized_turnover": 19.93028103489728,
+      "total_cost_ratio": 0.01939380730924069,
+      "average_exposure": 0.7370478346217152,
+      "hard_stop_count": 6,
+      "trailing_stop_count": 0
+    },
+    "candidate_improvement": {
+      "total_return_percentage_points": 8.165347307699388,
+      "max_drawdown_percentage_points": 2.211843987811457,
+      "annualized_turnover_reduction": 23.931343292081476,
+      "cost_ratio_reduction_percentage_points": 2.3733700021847165,
+      "average_exposure_percentage_points": 7.733048079682372
+    }
+  },
+  "execution_stress": {
+    "methodology": "common date/ticker/side execution shocks across variants",
+    "all_scenarios_improve_return_drawdown_and_turnover": true,
+    "scenario_pass_count": 3,
+    "scenario_count": 3,
+    "sample_status": "PROVISIONAL_SMALL_SAMPLE",
+    "buy_orders": 20,
+    "sell_orders": 17,
+    "minimum_orders_per_side": 30,
+    "promotion_ready": false,
+    "remaining_blocker": "BUY and SELL execution samples have not each reached 30 orders"
+  },
+  "active_paper_policy": {
+    "max_position_weight": 0.15,
+    "rebalance_band": 0.2,
+    "stop_loss_pct": 0.2,
+    "trailing_stop_enabled": false,
+    "transition_max_gross_exposure": 0.3,
+    "max_daily_loss_rate": 0.03,
+    "effective_at": "2026-08-03T16:28:42+09:00",
+    "runtime_status": "DEPLOYED_AND_HEALTHY",
+    "next_order_evaluation": "next scheduled PAPER trading scan"
+  },
+  "monitoring_and_rollback": {
+    "minimum_policy_observation_sessions": 10,
+    "minimum_execution_samples_per_side": 30,
+    "turnover_ceiling": 30.0,
+    "portfolio_drawdown_review_trigger": -0.05,
+    "excess_return_review_trigger": -0.03,
+    "non_defensive_exposure_floor": 0.4,
+    "non_defensive_exposure_breach_sessions": 3,
+    "emergency_configuration_rollback": "paper_legacy_cap15_hard10_trail08_band10_v1",
+    "emergency_rollback_only": true
+  },
+  "validation": {
+    "analytical_confidence": "SHARE_WITH_CAVEATS",
+    "paper_runtime_safe": true,
+    "full_system_complete": false,
+    "real_execution_authorized": false,
+    "limitations": [
+      "The controlling pass-only replay covers 122 trading days and is not an out-of-sample production trial.",
+      "Daily closes and proportional weights approximate share-level fills and intraday stops.",
+      "Execution calibration remains below 30 BUY and 30 SELL orders.",
+      "The full-scope replay is LOW quality because 32 of 39 selection runs are WARNING and is sensitivity evidence only."
+    ]
+  },
+  "sources": [
+    "reports/promotion/paper/latest.json",
+    "logs/paper/dashboard_state.json",
+    "reports/analysis/paper_reentry_experiments/pass_only/metrics.json",
+    "reports/analysis/paper_reentry_experiments/full/metrics.json",
+    "reports/analysis/paper_execution_stress/latest/summary.json",
+    "reports/analysis/automated_trading_system_readiness.json",
+    "core/execution/strategy_policy.py"
+  ]
+}

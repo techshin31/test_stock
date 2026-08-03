@@ -72,6 +72,19 @@ VARIANTS = (
         description="FA 초과점수, 종목당 15%, 10% 리밸런싱 밴드, 10%/8% 손절.",
     ),
     Variant(
+        "F_CAP15_HARD20_BAND20",
+        "PAPER 복구: 15% 상한·20% 하드스톱·20% 밴드",
+        "fa_excess",
+        0.15,
+        0.20,
+        0.20,
+        None,
+        description=(
+            "현행 전략의 잦은 10%/8% 손절 재진입과 리밸런싱 회전율을 줄이는 "
+            "PAPER 전용 복구 후보. 트레일링 스톱은 사용하지 않는다."
+        ),
+    ),
+    Variant(
         "X_COOLDOWN5",
         "진단: 현재+5일 재진입 금지",
         "fa_excess",
@@ -290,6 +303,11 @@ def _apply_execution_model(
     return current + delta, delta, fill_fraction
 
 
+def _common_execution_event_key(trading_day: object) -> str:
+    """Return a variant-independent key for cross-strategy stress shocks."""
+    return pd.Timestamp(trading_day).date().isoformat()
+
+
 def _bootstrap_alpha_ci(alpha: pd.Series, *, block: int = 20, samples: int = 1000) -> tuple[float, float]:
     values = alpha.dropna().to_numpy(dtype=float)
     if len(values) < block:
@@ -486,7 +504,10 @@ def run_experiments(
                 current,
                 requested_final,
                 execution_model,
-                event_key=f"{today.date().isoformat()}:{variant.code}",
+                # Common random numbers make execution-stress comparisons fair:
+                # the same date/ticker/side receives the same fill outcome for
+                # every strategy variant.
+                event_key=_common_execution_event_key(today),
             )
             buy_turnover = float(delta.clip(lower=0.0).sum())
             sell_turnover = float(-delta.clip(upper=0.0).sum())
@@ -643,7 +664,13 @@ def run_experiments(
     return result, frames
 
 
-def write_outputs(result: dict, frames: dict[str, pd.DataFrame], output_dir: Path) -> None:
+def write_outputs(
+    result: dict,
+    frames: dict[str, pd.DataFrame],
+    output_dir: Path,
+    *,
+    include_detail_files: bool = False,
+) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "metrics.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     summary_rows = []
@@ -651,7 +678,13 @@ def write_outputs(result: dict, frames: dict[str, pd.DataFrame], output_dir: Pat
     for code, metrics in result["summary"].items():
         summary_rows.append({"variant": code, "label": labels[code], **metrics})
     pd.DataFrame(summary_rows).to_csv(output_dir / "summary.csv", index=False, encoding="utf-8-sig")
-    for name, frame in frames.items():
+    frame_names = (
+        tuple(frames)
+        if include_detail_files
+        else ("period_summary", "comparison_vs_current")
+    )
+    for name in frame_names:
+        frame = frames[name]
         export = frame.copy()
         if isinstance(export.index, pd.DatetimeIndex):
             export.index.name = "date"
@@ -665,6 +698,11 @@ def main() -> None:
     parser.add_argument("--execution-model-code")
     parser.add_argument("--buy-fill-fraction", type=float)
     parser.add_argument("--sell-fill-fraction", type=float)
+    parser.add_argument(
+        "--include-detail-files",
+        action="store_true",
+        help="Write regenerable daily series and event-level CSV files locally.",
+    )
     args = parser.parse_args()
     load_env()
     db = PostgreDB(build_db_config())
@@ -689,7 +727,12 @@ def main() -> None:
         )
     finally:
         db.close()
-    write_outputs(result, frames, Path(args.output_dir))
+    write_outputs(
+        result,
+        frames,
+        Path(args.output_dir),
+        include_detail_files=args.include_detail_files,
+    )
     print(json.dumps({"metadata": result["metadata"], "summary": result["summary"], "data_quality": result["data_quality"], "robustness": result["robustness"]}, ensure_ascii=False, indent=2))
 
 

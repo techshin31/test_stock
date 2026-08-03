@@ -50,6 +50,7 @@ class FaTaMomentumStrategy(AbstractStrategy):
         self.DEBT_RATIO_MAX = params.get("debt_ratio_max", 2.0)     # 부채비율 상한 (200%)
         self.MIN_SCORE_CONFIDENCE = params.get("min_score_confidence", 0.70)
         self.STOP_LOSS_PCT = params.get("stop_loss_pct", 0.10)
+        self.TRAILING_STOP_ENABLED = params.get("trailing_stop_enabled", True)
         self.TRAILING_STOP_PCT = params.get("trailing_stop_pct", 0.08)
         # Keep a controlled fraction of an existing long position while the
         # market is transitioning. New entries can be enabled separately with
@@ -61,6 +62,8 @@ class FaTaMomentumStrategy(AbstractStrategy):
         self.MA_WINDOW_FAST = params.get("ma_window_fast", 20)
         if not 0 < self.MIN_SCORE_CONFIDENCE <= 1:
             raise ValueError("min_score_confidence must be in (0, 1]")
+        if not isinstance(self.TRAILING_STOP_ENABLED, bool):
+            raise ValueError("trailing_stop_enabled must be a bool")
         if not 0 < self.STOP_LOSS_PCT < 1 or not 0 < self.TRAILING_STOP_PCT < 1:
             raise ValueError("stop-loss settings must be in (0, 1)")
         if not 0 < self.TRANSITION_KEEP_RATIO <= 1:
@@ -91,7 +94,11 @@ class FaTaMomentumStrategy(AbstractStrategy):
         if target > 0 and average > 0 and current > 0:
             if current <= average * (1 - self.STOP_LOSS_PCT):
                 target, reason = 0.0, "HARD_STOP_LOSS"
-            elif peak > average and current <= peak * (1 - self.TRAILING_STOP_PCT):
+            elif (
+                self.TRAILING_STOP_ENABLED
+                and peak > average
+                and current <= peak * (1 - self.TRAILING_STOP_PCT)
+            ):
                 target, reason = 0.0, "TRAILING_STOP"
 
         return target, {
@@ -101,6 +108,7 @@ class FaTaMomentumStrategy(AbstractStrategy):
             "average_price": average or None,
             "peak_price": peak or None,
             "stop_loss_pct": self.STOP_LOSS_PCT,
+            "trailing_stop_enabled": self.TRAILING_STOP_ENABLED,
             "trailing_stop_pct": self.TRAILING_STOP_PCT,
             "risk_price_source": "BROKER_BALANCE",
         }
@@ -282,6 +290,7 @@ class FaTaMomentumStrategy(AbstractStrategy):
             "average_price": average_price or None,
             "peak_price": peak_price or None,
             "stop_loss_pct": self.STOP_LOSS_PCT,
+            "trailing_stop_enabled": self.TRAILING_STOP_ENABLED,
             "trailing_stop_pct": self.TRAILING_STOP_PCT,
             "transition_keep_ratio": self.TRANSITION_KEEP_RATIO,
             "transition_entry_enabled": self.TRANSITION_ENTRY_ENABLED,

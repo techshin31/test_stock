@@ -31,6 +31,7 @@ from core.analytics.trading_kpis import (
     snapshot_from_operational_log,
 )
 from core.constant.values import TradingCostParam
+from core.execution.strategy_policy import PAPER_RECOVERY_EXPERIMENT
 from storage.postgres.connection import PostgreDB
 
 
@@ -594,7 +595,7 @@ def _build_strategy_change_gate(
     try:
         experiment = json.loads(experiment_path.read_text(encoding="utf-8-sig"))
         current = experiment["summary"]["A_CURRENT"]
-        candidate = experiment["summary"]["R_TREND_REARM"]
+        candidate = experiment["summary"][PAPER_RECOVERY_EXPERIMENT]
         add(
             "recent_return_improves",
             candidate["total_return"] > current["total_return"],
@@ -762,8 +763,10 @@ def _build_strategy_change_gate(
 
     blockers = [item["detail"] for item in criteria if not item["passed"]]
     return {
-        "candidate": "R_TREND_REARM",
+        "candidate": PAPER_RECOVERY_EXPERIMENT,
         "ready": not blockers,
+        "policy_status": "PAPER_RECOVERY_PROVISIONAL",
+        "paper_rule_changed": True,
         "production_rule_changed": False,
         "minimum_live_observation_sessions": required_sessions,
         "criteria": criteria,

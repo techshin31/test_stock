@@ -2,7 +2,11 @@ import pandas as pd
 import pytest
 
 from apps.backtester.paper_execution_stress import _risk_control_gate
-from apps.backtester.paper_strategy_experiments import _apply_execution_model
+from apps.backtester.paper_strategy_experiments import (
+    _apply_execution_model,
+    _common_execution_event_key,
+    write_outputs,
+)
 
 
 def test_execution_model_applies_side_specific_expected_fills():
@@ -48,10 +52,38 @@ def test_deterministic_bernoulli_model_is_reproducible_and_discrete():
     assert set(first[2].unique()) <= {0.0, 1.0}
 
 
+def test_common_execution_event_key_is_variant_independent():
+    assert _common_execution_event_key(pd.Timestamp("2026-07-21")) == "2026-07-21"
+
+
+def test_strategy_output_defaults_to_compact_canonical_files(tmp_path):
+    result = {"summary": {"A_CURRENT": {"total_return": -0.01}}}
+    frames = {
+        "daily_returns": pd.DataFrame({"A_CURRENT": [0.01]}),
+        "events": pd.DataFrame({"event": ["BUY"]}),
+        "period_summary": pd.DataFrame({"total_return": [-0.01]}),
+        "comparison_vs_current": pd.DataFrame({"delta": [0.0]}),
+    }
+
+    write_outputs(result, frames, tmp_path)
+
+    assert {path.name for path in tmp_path.iterdir()} == {
+        "comparison_vs_current.csv",
+        "metrics.json",
+        "period_summary.csv",
+        "summary.csv",
+    }
+
+
 def test_risk_control_gate_requires_every_execution_scenario():
     scenarios = {}
     for scenario in ("IDEAL", "POSTERIOR", "LOWER"):
         scenarios[scenario] = {
+            "F_CAP15_HARD20_BAND20": {
+                "total_return": -0.05,
+                "max_drawdown": -0.15,
+                "annualized_turnover": 20.0,
+            },
             "C_CAP10": {
                 "total_return": -0.05,
                 "max_drawdown": -0.15,
@@ -63,6 +95,7 @@ def test_risk_control_gate_requires_every_execution_scenario():
                 "annualized_turnover": 15.0,
             },
         }
+    scenarios["LOWER"]["F_CAP15_HARD20_BAND20"]["max_drawdown"] = -0.21
     scenarios["LOWER"]["C_CAP10"]["max_drawdown"] = -0.21
 
     gate = _risk_control_gate(scenarios)
