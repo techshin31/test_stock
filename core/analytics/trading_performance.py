@@ -487,6 +487,32 @@ def _unavailable_snapshot(report_date: dt.date) -> TradingKpiSnapshot:
     )
 
 
+def _daily_operational_validation_errors(
+    snapshot: TradingKpiSnapshot,
+) -> list[str]:
+    """Return blocking errors for an incomplete PAPER/REAL session snapshot.
+
+    A report can be after the close and still have an incomplete operational
+    sample.  Marking that report ``FINAL``/``READY`` would make the immutable
+    evidence disagree with the readiness coverage gate, so future reports
+    must surface the incomplete rates explicitly.
+    """
+    errors: list[str] = []
+    if snapshot.observed_trading_days <= 0:
+        errors.append("no operational observations for report date")
+        return errors
+    rates = {
+        "data_freshness_rate": snapshot.data_freshness_rate,
+        "risk_check_coverage": snapshot.risk_check_coverage,
+        "order_reconciliation_rate": snapshot.order_reconciliation_rate,
+        "operational_integrity": snapshot.operational_integrity,
+    }
+    for name, value in rates.items():
+        if value != 1.0:
+            errors.append(f"daily {name} incomplete ({value:.6f})")
+    return errors
+
+
 def _refresh_canonical_paper_evidence(
     *,
     analysis_root: Path,
@@ -801,6 +827,20 @@ def build_end_of_day_report(
                 f"{daily_operational.scan_count} daily scans"
             ),
         })
+        if mode in {"PAPER", "REAL"}:
+            daily_operational_errors = _daily_operational_validation_errors(
+                daily_operational
+            )
+            validation_errors.extend(daily_operational_errors)
+            validation_checks.append({
+                "name": "daily_operational_integrity",
+                "passed": not daily_operational_errors,
+                "detail": (
+                    "all required daily rates are complete"
+                    if not daily_operational_errors
+                    else "; ".join(daily_operational_errors)
+                ),
+            })
     except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
         operational = _unavailable_snapshot(report_date)
         daily_operational = _unavailable_snapshot(report_date)

@@ -8,6 +8,7 @@ from core.analytics.trading_performance import (
     BASELINE_CONFIRMATION,
     _build_strategy_change_gate,
     _benchmark_anchor_freshness,
+    _daily_operational_validation_errors,
     _markdown_v2,
     _publish_latest_if_not_older,
     _refresh_canonical_paper_evidence,
@@ -19,6 +20,7 @@ from core.analytics.trading_performance import (
     refresh_daily_operations_fields,
     write_end_of_day_report,
 )
+from core.analytics.trading_kpis import TradingKpiSnapshot
 
 
 def _strategy_gate_fixture(tmp_path, *, execution_coverage=1.0, cost_zero_rate=0.0):
@@ -426,6 +428,39 @@ def test_eod_report_keeps_daily_operations_separate_from_cumulative_history(tmp_
     assert report["daily_operations"]["data_freshness_rate"] == 1.0
 
 
+def test_paper_daily_operational_incompleteness_is_a_validation_error():
+    incomplete = TradingKpiSnapshot(
+        as_of=dt.date(2026, 7, 24),
+        observed_trading_days=1,
+        scan_count=100,
+        fresh_scan_count=98,
+        risk_checks_total=2,
+        risk_checks_completed=2,
+        submitted_orders=3,
+        reconciled_orders=3,
+        critical_incidents=0,
+    )
+    assert _daily_operational_validation_errors(incomplete) == [
+        "daily data_freshness_rate incomplete (0.980000)",
+        "daily operational_integrity incomplete (0.980000)",
+    ]
+
+    empty = TradingKpiSnapshot(
+        as_of=dt.date(2026, 7, 24),
+        observed_trading_days=0,
+        scan_count=0,
+        fresh_scan_count=0,
+        risk_checks_total=0,
+        risk_checks_completed=0,
+        submitted_orders=0,
+        reconciled_orders=0,
+        critical_incidents=1,
+    )
+    assert _daily_operational_validation_errors(empty) == [
+        "no operational observations for report date"
+    ]
+
+
 def test_paper_report_writes_flat_real_readiness_snapshot(tmp_path):
     report_date = dt.date(2026, 7, 20)
     log_dir = tmp_path / "logs" / "paper"
@@ -489,6 +524,27 @@ def test_paper_report_writes_flat_real_readiness_snapshot(tmp_path):
     assert (
         tmp_path / "reports" / "analysis" / "paper_incident_evidence" / "latest.json"
     ).exists()
+
+    incomplete_row = _operational_row("2026-07-20T15:20:00+09:00")
+    incomplete_row["data_health"] = {
+        **incomplete_row["data_health"],
+        "expected_count": 100,
+        "fresh_count": 98,
+    }
+    _write_jsonl(log_dir / "operational_health.jsonl", [incomplete_row])
+    blocked = build_end_of_day_report(
+        mode="PAPER",
+        report_date=report_date,
+        log_dir=log_dir,
+        promotion_dir=promotion_dir,
+        benchmark_loader=benchmark_loader,
+        db=FakeDB(),
+        as_of=dt.datetime(2026, 7, 20, 16, 0, tzinfo=dt.timezone(dt.timedelta(hours=9))),
+    )
+    assert blocked["validation"]["status"] == "BLOCKED"
+    assert "daily data_freshness_rate incomplete" in " ".join(
+        blocked["validation"]["errors"]
+    )
 
 
 def test_paper_eod_failure_retries_when_readiness_audit_fails(
