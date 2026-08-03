@@ -91,4 +91,5 @@
 - 금일 데이터 품질: scan 283건, 신호 증거 48건 유효 (`coverage_rate=0.1696`)
 - 실행 스트레스 fallback `C_CAP10`/`C_CAP08`은 3개 시나리오의 위험 한도를 통과했지만, BUY·SELL 각 30건 전에는 `PROVISIONAL_SMALL_SAMPLE` 및 수동 검토 상태를 유지함
 - 14:03 KST 진입 게이트 교차검증: FA 통과·종가/빠른 MA 모두 미충족·모멘텀 음수 35건, 동일 조건에서 모멘텀 양수 7건, 종가만 미충족·모멘텀 음수 1건, 두 MA 통과·모멘텀 음수 3건; FA 통과·모멘텀 양수·MA 하나 이상 통과 후보는 0건
+- 14:05 KST 원장 대조: PostgreSQL PAPER orders는 BUY FILLED 6건·SELL FILLED 3건, executions 38건, 미체결 0건으로 dashboard의 6/3/0과 일치함
 - 위 진단은 원인 가시성 보강이며 주문 정책·주문 권한은 변경하지 않음
