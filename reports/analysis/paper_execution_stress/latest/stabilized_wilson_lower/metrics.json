@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generated_at": "2026-08-03T11:49:07+09:00",
+    "generated_at": "2026-08-03T12:08:42+09:00",
     "period_start": "2026-01-30",
     "period_end": "2026-07-31",
     "pass_only": true,
@@ -197,8 +197,8 @@
       "trading_days": 122,
       "total_return": 0.10849630587649362,
       "cagr": 0.2370917018083727,
-      "annual_volatility": 0.3898139024091418,
-      "sharpe_zero_rf": 0.7410533511572408,
+      "annual_volatility": 0.3898139024091419,
+      "sharpe_zero_rf": 0.7410533511572407,
       "sortino_zero_rf": 0.9455143157658509,
       "calmar": 1.5460928467154558,
       "max_drawdown": -0.15334894169651847,
@@ -448,7 +448,7 @@
   "robustness": {
     "deflated_sharpe_probability": {
       "A0_LEGACY": 0.5271549112431009,
-      "X_CAP15_ONLY": 0.4305784805669531,
+      "X_CAP15_ONLY": 0.430578480566953,
       "A_CURRENT": 0.388592400036427,
       "X_COOLDOWN5": 0.13949408073798586,
       "R_EXIT_RECOVERY": 0.2511181617662085,

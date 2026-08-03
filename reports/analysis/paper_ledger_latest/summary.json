@@ -1,7 +1,7 @@
 {
   "metadata": {
-    "generated_at": "2026-08-03T11:47:53+09:00",
-    "cutoff": "2026-08-03T11:47:16+09:00",
+    "generated_at": "2026-08-03T12:08:11+09:00",
+    "cutoff": "2026-08-03T12:08:03+09:00",
     "timezone": "Asia/Seoul",
     "mode": "PAPER",
     "strategy": "aggressive",
@@ -15,14 +15,14 @@
   },
   "endpoint": {
     "cash": 305528416.0,
-    "total_asset": 436636216.0,
+    "total_asset": 435999116.0,
     "position_count": 3,
-    "total_pnl": -63363784.0,
-    "total_return": -0.126727568,
-    "broker_unrealized_pnl": 334235.0,
+    "total_pnl": -64000884.0,
+    "total_return": -0.128001768,
+    "broker_unrealized_pnl": -302864.0,
     "certified_baseline_asset": 463025590.0,
-    "post_baseline_pnl": -26389374.0,
-    "post_baseline_return": -0.056993338100384476
+    "post_baseline_pnl": -27026474.0,
+    "post_baseline_return": -0.05836928796959149
   },
   "order_result_replay": {
     "orders": 575,
@@ -59,7 +59,7 @@
     "phantom_nonzero_replay_positions": 0,
     "balancing_qty_abs_sum": 0.0,
     "minimum_opening_inventory_abs_sum": 0.0,
-    "unresolved_pnl_balancing_item": -423188.07540011965,
+    "unresolved_pnl_balancing_item": -423189.07540011965,
     "known_replay_nonzero_positions": 3
   },
   "data_quality": {
