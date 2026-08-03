@@ -115,3 +115,10 @@
 - 안전성: `paper_runtime_safe=true`, safety checks 13/13; `full_system_complete=false`, `real_execution_authorized=false`
 - 남은 핵심 조건: BUY 20/30·SELL 17/30, shadow 9/10, PAPER 세션 10/60, FINAL/READY 리포트 4/60
 - 결론: 1번 세션 완주 조건은 충족했으며, 다음은 자연 발생 BUY 10건·SELL 13건을 추가 관측하는 단계다. 강제 주문·합성 체결·정책 완화는 적용하지 않는다.
+
+## EOD 운영률 검증 보강 (2026-08-03)
+
+- 과거 일부 리포트는 파일 상태가 `FINAL/READY`였지만 일일 데이터 신선도·운영무결성이 1.0 미만이라 readiness 커버리지에서 제외되는 불일치가 확인됨
+- 과거 원본 리포트는 수정하지 않고 보존함
+- 이후 PAPER/REAL EOD 생성기는 일일 데이터 신선도·위험점검·주문대사·운영무결성 중 하나라도 불완전하면 validation을 `BLOCKED`로 기록함
+- 회귀 테스트 전체 380개 통과, 변경 커밋 `bb15a550`
