@@ -164,6 +164,8 @@ class FaTaMomentumStrategy(AbstractStrategy):
         curr_momentum = float(momentum.iloc[-1])
         reason = "HOLD"
         target = risk_target
+        valid_fa = None
+        valid_ta = None
 
         risk_price = float(current_price) if current_price and current_price > 0 else curr_close
         average_price = float(average_price or 0.0)
@@ -265,6 +267,9 @@ class FaTaMomentumStrategy(AbstractStrategy):
             "target_position": target,
             "signal_reason": reason,
             "fa_score": None if pd.isna(fa_score) else float(fa_score),
+            "is_eligible": is_eligible,
+            "fa_conditions_met": valid_fa,
+            "ta_conditions_met": valid_ta,
             "score_confidence": (
                 None if pd.isna(score_confidence) else float(score_confidence)
             ),

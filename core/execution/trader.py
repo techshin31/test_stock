@@ -957,6 +957,20 @@ class LiveTrader:
             str((detail or {}).get("signal_reason") or "UNKNOWN")
             for detail in details.values()
         )
+        condition_breakdown = Counter()
+        for detail in details.values():
+            if str((detail or {}).get("signal_reason")) != "ENTRY_CONDITIONS_NOT_MET":
+                continue
+            fa_met = (detail or {}).get("fa_conditions_met")
+            ta_met = (detail or {}).get("ta_conditions_met")
+            if fa_met is True and ta_met is False:
+                condition_breakdown["FA_PASS_TA_FAIL"] += 1
+            elif fa_met is False and ta_met is False:
+                condition_breakdown["FA_FAIL_TA_FAIL"] += 1
+            elif fa_met is True and ta_met is True:
+                condition_breakdown["FA_PASS_TA_PASS"] += 1
+            else:
+                condition_breakdown["UNAVAILABLE"] += 1
         selected_count = sum(
             float(targets.get(ticker, 0.0) or 0.0) > 0.0 for ticker in targets
         )
@@ -967,6 +981,7 @@ class LiveTrader:
                 sum(float(value or 0.0) for value in targets.values()), 6
             ),
             "reason_counts": dict(sorted(reason_counts.items())),
+            "condition_breakdown": dict(sorted(condition_breakdown.items())),
         }
 
     @staticmethod
@@ -1311,6 +1326,14 @@ class LiveTrader:
                 "target_weight": round(float(target_positions.get(ticker, 0.0)), 6),
                 "signal_reason": detail.get("signal_reason", "UNKNOWN"),
                 "fa_score": detail.get("fa_score"),
+                "is_eligible": detail.get("is_eligible"),
+                "fa_conditions_met": detail.get("fa_conditions_met"),
+                "ta_conditions_met": detail.get("ta_conditions_met"),
+                "score_confidence": detail.get("score_confidence"),
+                "debt_ratio": detail.get("debt_ratio"),
+                "close": detail.get("close"),
+                "ma": detail.get("ma"),
+                "ma_fast": detail.get("ma_fast"),
                 "momentum": detail.get("momentum"),
                 "transition_exposure_scale": detail.get(
                     "transition_exposure_scale"

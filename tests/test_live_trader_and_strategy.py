@@ -568,7 +568,19 @@ def test_decision_snapshot_explains_zero_and_selected_targets(tmp_path, monkeypa
         {"HELD.KS": 0.0, "NEW.KS": 0.2},
         {
             "HELD.KS": {"signal_reason": "PORTFOLIO_RANK_EXIT", "fa_score": 60},
-            "NEW.KS": {"signal_reason": "FA_TA_ENTRY", "fa_score": 80},
+            "NEW.KS": {
+                "signal_reason": "FA_TA_ENTRY",
+                "fa_score": 80,
+                "is_eligible": True,
+                "fa_conditions_met": True,
+                "ta_conditions_met": True,
+                "score_confidence": 0.9,
+                "debt_ratio": 0.4,
+                "close": 110,
+                "ma": 100,
+                "ma_fast": 105,
+                "momentum": 0.1,
+            },
         },
         "UPTREND",
     )
@@ -577,6 +589,11 @@ def test_decision_snapshot_explains_zero_and_selected_targets(tmp_path, monkeypa
     assert payload["target_count"] == 1
     assert payload["decisions"][0]["signal_reason"] == "PORTFOLIO_RANK_EXIT"
     assert payload["decisions"][1]["selected"] is True
+    assert payload["decisions"][1]["is_eligible"] is True
+    assert payload["decisions"][1]["fa_conditions_met"] is True
+    assert payload["decisions"][1]["ta_conditions_met"] is True
+    assert payload["decisions"][1]["score_confidence"] == pytest.approx(0.9)
+    assert payload["decisions"][1]["ma_fast"] == pytest.approx(105)
     assert (trader.log_dir / "decision_history.jsonl").read_text(encoding="utf-8").count("\n") == 1
 
 
@@ -595,7 +612,11 @@ def test_json_state_writer_replaces_dashboard_state_without_leaving_temp_file(tm
 def test_signal_evaluation_summary_explains_quiet_scans():
     summary = LiveTrader._signal_evaluation_summary(
         {
-            "A.KS": {"signal_reason": "ENTRY_CONDITIONS_NOT_MET"},
+            "A.KS": {
+                "signal_reason": "ENTRY_CONDITIONS_NOT_MET",
+                "fa_conditions_met": True,
+                "ta_conditions_met": False,
+            },
             "B.KS": {"signal_reason": "MARKET_TRANSITION_KEEP_HOLD"},
             "C.KS": {"signal_reason": "TRANSITION_ENTRY"},
         },
@@ -610,6 +631,7 @@ def test_signal_evaluation_summary_explains_quiet_scans():
         "MARKET_TRANSITION_KEEP_HOLD": 1,
         "TRANSITION_ENTRY": 1,
     }
+    assert summary["condition_breakdown"] == {"FA_PASS_TA_FAIL": 1}
 
 
 def test_aggressive_news_timeline_update_replaces_dashboard_atomically(tmp_path):

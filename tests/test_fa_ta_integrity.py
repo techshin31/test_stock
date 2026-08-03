@@ -84,6 +84,9 @@ def test_live_ta_uses_actual_position_and_latest_regime_only():
     assert target == pytest.approx(0.10)
     assert metadata["signal_reason"] == "TRANSITION_ENTRY"
     assert metadata["transition_entry_enabled"] is True
+    assert metadata["is_eligible"] is True
+    assert metadata["fa_conditions_met"] is True
+    assert metadata["ta_conditions_met"] is True
 
 
 def test_live_ta_rejects_missing_or_low_confidence_fundamentals():

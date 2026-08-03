@@ -72,12 +72,14 @@ def test_build_report_validates_signal_reason_evidence(tmp_path):
         "selected_count": 1,
         "target_weight_sum": 0.1,
         "reason_counts": {"ENTRY_CONDITIONS_NOT_MET": 3, "TRANSITION_ENTRY": 1},
+        "condition_breakdown": {"FA_PASS_TA_FAIL": 3},
     }
     invalid = {
         "evaluated_count": 4,
         "selected_count": 5,
         "target_weight_sum": -0.1,
         "reason_counts": {"ENTRY_CONDITIONS_NOT_MET": 2},
+        "condition_breakdown": {"FA_PASS_TA_FAIL": 1},
     }
     rows = [
         _row("2026-07-29T09:00:00+09:00", signal_evaluation=valid),

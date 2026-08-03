@@ -115,6 +115,25 @@ def _validate_signal_evaluation(row: dict, signal: dict) -> list[str]:
         if reason_total != evaluated:
             errors.append(f"reason_total={reason_total} != evaluated_count={evaluated}")
 
+    condition_breakdown = signal.get("condition_breakdown")
+    if condition_breakdown is not None:
+        if not isinstance(condition_breakdown, dict):
+            errors.append("condition_breakdown is not an object")
+        else:
+            try:
+                condition_total = sum(int(value) for value in condition_breakdown.values())
+            except (TypeError, ValueError):
+                condition_total = -1
+                errors.append("condition_breakdown contains a non-integer value")
+            expected_condition_total = int(
+                (reason_counts or {}).get("ENTRY_CONDITIONS_NOT_MET", 0)
+            ) if isinstance(reason_counts, dict) else 0
+            if condition_total != expected_condition_total:
+                errors.append(
+                    "condition_total="
+                    f"{condition_total} != entry_reason_total={expected_condition_total}"
+                )
+
     try:
         selected = int(signal.get("selected_count"))
     except (TypeError, ValueError):
