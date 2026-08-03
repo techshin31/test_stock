@@ -680,6 +680,7 @@ def audit_system_readiness(
             "reports/promotion/paper/daily/*.json",
             "reports/analysis/paper_broker_history/latest.json",
             "reports/analysis/scheduler_recovery_evidence.json",
+            "reports/analysis/paper_data_quality_gaps/latest.json",
             str(ledger_path.relative_to(project_root)) if ledger_path else "paper ledger unavailable",
             str(parity_path.relative_to(project_root)) if parity_path else "order-result parity unavailable",
             str(stress_path.relative_to(project_root)) if stress_path else "execution stress unavailable",

@@ -4,6 +4,13 @@ import pytest
 from data.loaders import kospi_data
 
 
+def test_large_cap_pool_excludes_invalid_inverse_vendor_symbol():
+    # 153131.KS is not a valid Yahoo Finance symbol.  Keeping it in the
+    # fallback universe creates a repeated missing-data gate on every scan;
+    # the supported inverse ETF is managed separately via Tickers.INVERSE_ETF.
+    assert "153131.KS" not in kospi_data.KOSPI_LARGE_CAP_POOL
+
+
 def test_download_multiple_stocks_retries_only_the_initial_failures(monkeypatch):
     calls = []
     attempts = {"000001.KS": 0, "000002.KS": 0}
