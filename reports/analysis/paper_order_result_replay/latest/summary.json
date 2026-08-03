@@ -1,24 +1,32 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-31T15:30:33+09:00",
+  "generated_at": "2026-08-03T11:04:05+09:00",
   "mode": "PAPER",
   "observe_only": true,
   "broker_write_permission": "DENIED_BY_DESIGN",
   "method": "observed order-result event replay with explicit opening-balance calibration",
   "starting_capital": 500000000.0,
   "endpoint": {
-    "cash": 436545704.0,
-    "positions": {}
+    "cash": 305528416.0,
+    "positions": {
+      "021240": 469.0,
+      "078930": 509.0,
+      "161390": 650.0
+    }
   },
   "raw_replay": {
-    "ending_cash": 436956059.7255,
-    "cash_difference_vs_endpoint": 410355.7254999876,
-    "ending_positions": {},
+    "ending_cash": 305952485.0754,
+    "cash_difference_vs_endpoint": 424069.07539999485,
+    "ending_positions": {
+      "021240": 469.0,
+      "078930": 509.0,
+      "161390": 650.0
+    },
     "position_gaps": []
   },
   "calibration": {
-    "opening_cash_required": 499589644.2745002,
-    "opening_cash_difference_vs_500m": -410355.7254998088,
+    "opening_cash_required": 499575930.9246002,
+    "opening_cash_difference_vs_500m": -424069.07539981604,
     "cash_tolerance": 500000.0,
     "cash_tolerance_ratio": 0.001,
     "reconciled_from_starting_capital_within_tolerance": true,
@@ -27,16 +35,20 @@
     "note": "These are reconciliation balances, not fabricated trades."
   },
   "calibrated_replay": {
-    "ending_cash": 436545704.00000024,
+    "ending_cash": 305528416.00000024,
     "cash_difference_vs_endpoint": 2.384185791015625e-07,
-    "ending_positions": {},
+    "ending_positions": {
+      "021240": 469.0,
+      "078930": 509.0,
+      "161390": 650.0
+    },
     "position_gaps": [],
     "exact_endpoint_parity": true
   },
   "data_quality": {
-    "order_rows": 566,
-    "filled_order_rows": 215,
-    "priced_fill_event_count": 215,
+    "order_rows": 575,
+    "filled_order_rows": 224,
+    "priced_fill_event_count": 224,
     "priced_fill_event_coverage": 1.0,
     "issues": []
   },
@@ -45,7 +57,7 @@
     "exact_endpoint_parity": true,
     "calibration_free_from_500m": false,
     "reconciled_from_500m_within_tolerance": true,
-    "opening_cash_difference_abs": 410355.7254998088,
+    "opening_cash_difference_abs": 424069.07539981604,
     "opening_cash_tolerance": 500000.0,
     "full_priced_fill_coverage": true,
     "blockers": []

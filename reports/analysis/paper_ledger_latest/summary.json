@@ -1,7 +1,7 @@
 {
   "metadata": {
-    "generated_at": "2026-07-31T15:30:33+09:00",
-    "cutoff": "2026-07-31T15:21:18+09:00",
+    "generated_at": "2026-08-03T11:04:00+09:00",
+    "cutoff": "2026-08-03T11:03:23+09:00",
     "timezone": "Asia/Seoul",
     "mode": "PAPER",
     "strategy": "aggressive",
@@ -14,59 +14,59 @@
     "scope_policy": "PAPER confirmed rows plus UNKNOWN legacy rows across the risk_neutral-to-aggressive account lineage"
   },
   "endpoint": {
-    "cash": 436545704.0,
-    "total_asset": 436545704.0,
-    "position_count": 0,
-    "total_pnl": -63454296.0,
-    "total_return": -0.126908592,
-    "broker_unrealized_pnl": 0.0,
+    "cash": 305528416.0,
+    "total_asset": 436817116.0,
+    "position_count": 3,
+    "total_pnl": -63182884.0,
+    "total_return": -0.126365768,
+    "broker_unrealized_pnl": 515135.0,
     "certified_baseline_asset": 463025590.0,
-    "post_baseline_pnl": -26479886.0,
-    "post_baseline_return": -0.05718881757701556
+    "post_baseline_pnl": -26208474.0,
+    "post_baseline_return": -0.056602646950895306
   },
   "order_result_replay": {
-    "orders": 566,
-    "terminal_orders": 566,
+    "orders": 575,
+    "terminal_orders": 575,
     "status_counts": {
       "REJECTED": 330,
-      "FILLED": 211,
+      "FILLED": 220,
       "CANCELLED": 14,
       "EXPIRED_UNFILLED": 7,
       "PARTIAL": 4
     },
     "scope_counts": {
       "INFERRED_LEGACY_PAPER": 533,
-      "CONFIRMED_PAPER": 28,
+      "CONFIRMED_PAPER": 37,
       "CONFIRMED_PAPER_BROKER_ONLY": 5
     },
-    "filled_orders": 215,
-    "fill_rate": 0.37985865724381623,
-    "terminal_fill_rate": 0.37985865724381623,
-    "fill_notional": 5478580010.0,
-    "fill_notional_multiple_of_starting_capital": 10.95716002,
-    "modeled_commission_and_tax": 5700900.2745,
-    "recorded_slippage": -1310334.25,
-    "partially_matched_realized_gross_pnl": -57343039.99999988,
+    "filled_orders": 224,
+    "fill_rate": 0.38956521739130434,
+    "terminal_fill_rate": 0.38956521739130434,
+    "fill_notional": 5764238948.0,
+    "fill_notional_multiple_of_starting_capital": 11.528477896,
+    "modeled_commission_and_tax": 5883102.9246,
+    "recorded_slippage": -1271334.25,
+    "partially_matched_realized_gross_pnl": -57391727.99999988,
     "unmatched_sell_qty": 0.0
   },
   "reconciliation": {
     "position_rows": 24,
     "exact_position_matches": 24,
     "position_match_rate": 1.0,
-    "endpoint_held_positions": 0,
-    "exact_endpoint_held_position_matches": 0,
-    "endpoint_held_position_match_rate": 0.0,
+    "endpoint_held_positions": 3,
+    "exact_endpoint_held_position_matches": 3,
+    "endpoint_held_position_match_rate": 1.0,
     "phantom_nonzero_replay_positions": 0,
     "balancing_qty_abs_sum": 0.0,
     "minimum_opening_inventory_abs_sum": 0.0,
-    "unresolved_pnl_balancing_item": -410355.7255001189,
-    "known_replay_nonzero_positions": 0
+    "unresolved_pnl_balancing_item": -423188.07540011965,
+    "known_replay_nonzero_positions": 3
   },
   "data_quality": {
     "overall_grade": "LOW_FOR_TRADE_LEVEL_PNL__HIGH_FOR_ENDPOINT_PNL",
     "fill_price_coverage": 1.0,
     "auditable_fill_evidence_coverage": 1.0,
-    "execution_table_coverage_of_filled_orders": 0.7674418604651163,
+    "execution_table_coverage_of_filled_orders": 0.7767857142857143,
     "broker_daily_order_backfill_count": 45,
     "broker_only_filled_order_count": 5,
     "broker_nonfill_override_count": 7,
@@ -89,63 +89,5 @@
       "Commission and tax fields are zero; configured rates are modeled separately.",
       "Position gaps are preserved as balancing entries and are never fabricated into trades."
     ]
-  },
-  "broker_history_refresh": {
-    "status": "READY",
-    "audit_complete": true,
-    "broker_order_rows": 230
-  },
-  "observed_order_result_parity": {
-    "schema_version": 1,
-    "generated_at": "2026-07-31T15:30:33+09:00",
-    "mode": "PAPER",
-    "observe_only": true,
-    "broker_write_permission": "DENIED_BY_DESIGN",
-    "method": "observed order-result event replay with explicit opening-balance calibration",
-    "starting_capital": 500000000.0,
-    "endpoint": {
-      "cash": 436545704.0,
-      "positions": {}
-    },
-    "raw_replay": {
-      "ending_cash": 436956059.7255,
-      "cash_difference_vs_endpoint": 410355.7254999876,
-      "ending_positions": {},
-      "position_gaps": []
-    },
-    "calibration": {
-      "opening_cash_required": 499589644.2745002,
-      "opening_cash_difference_vs_500m": -410355.7254998088,
-      "cash_tolerance": 500000.0,
-      "cash_tolerance_ratio": 0.001,
-      "reconciled_from_starting_capital_within_tolerance": true,
-      "opening_position_balancing_entries": {},
-      "opening_position_balancing_abs_qty": 0,
-      "note": "These are reconciliation balances, not fabricated trades."
-    },
-    "calibrated_replay": {
-      "ending_cash": 436545704.00000024,
-      "cash_difference_vs_endpoint": 2.384185791015625e-07,
-      "ending_positions": {},
-      "position_gaps": [],
-      "exact_endpoint_parity": true
-    },
-    "data_quality": {
-      "order_rows": 566,
-      "filled_order_rows": 215,
-      "priced_fill_event_count": 215,
-      "priced_fill_event_coverage": 1.0,
-      "issues": []
-    },
-    "promotion_gate": {
-      "ready": true,
-      "exact_endpoint_parity": true,
-      "calibration_free_from_500m": false,
-      "reconciled_from_500m_within_tolerance": true,
-      "opening_cash_difference_abs": 410355.7254998088,
-      "opening_cash_tolerance": 500000.0,
-      "full_priced_fill_coverage": true,
-      "blockers": []
-    }
   }
 }
