@@ -1,17 +1,17 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-03T11:18:02+09:00",
+  "generated_at": "2026-08-03T11:28:55+09:00",
   "mode": "PAPER",
   "source": "logs\\paper\\operational_health.jsonl",
   "grain": "one operational health observation per trader scan",
   "freshness_gate": 0.995,
   "profile": {
-    "row_count": 2997,
+    "row_count": 3007,
     "date_count": 10,
     "parse_error_count": 0,
     "unscoped_row_count": 0,
     "first_observation_at": "2026-07-21T08:31:04+09:00",
-    "last_observation_at": "2026-08-03T11:17:02+09:00"
+    "last_observation_at": "2026-08-03T11:27:15+09:00"
   },
   "date_reports": [
     {
@@ -317,7 +317,7 @@
       "expected_dates": [
         "2026-07-31"
       ],
-      "scan_count": 132,
+      "scan_count": 142,
       "expected_count_mode": 50,
       "affected_scan_count": 0,
       "affected_scan_rate": 0.0,

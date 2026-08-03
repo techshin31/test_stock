@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-03T11:25:20+09:00",
+  "generated_at": "2026-08-03T11:28:55+09:00",
   "scope": "PAPER_AUTOMATED_TRADING_SYSTEM",
   "paper_runtime_safe": true,
   "full_system_complete": false,
@@ -41,12 +41,12 @@
     {
       "name": "scheduler_instance_scope",
       "passed": true,
-      "detail": "pid=11, mode=PAPER, label=scheduler, runtime_live=True, evidence=foreign heartbeat age=0.6s runtime=paper-trader"
+      "detail": "pid=12, mode=PAPER, label=scheduler, runtime_live=True, evidence=foreign heartbeat age=2.3s runtime=paper-trader"
     },
     {
       "name": "scheduler_supervisor_runtime",
       "passed": true,
-      "detail": "pid=9, mode=PAPER, event=SUPERVISOR_STARTED, detail=child_launch=managed, runtime_live=True, evidence=foreign heartbeat age=4.6s runtime=paper-trader"
+      "detail": "pid=10, mode=PAPER, event=SUPERVISOR_STARTED, detail=child_launch=managed, runtime_live=True, evidence=foreign heartbeat age=1.3s runtime=paper-trader"
     },
     {
       "name": "certified_account_scope",
@@ -86,7 +86,7 @@
     {
       "name": "dashboard_freshness",
       "passed": true,
-      "detail": "age_seconds=6, limit=300"
+      "detail": "age_seconds=45, limit=300"
     },
     {
       "name": "real_environment_disabled",
