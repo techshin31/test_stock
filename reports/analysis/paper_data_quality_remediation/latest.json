@@ -1,0 +1,263 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-03T11:25:03+09:00",
+  "mode": "PAPER",
+  "source_gap_report": "reports\\analysis\\paper_data_quality_gaps\\latest.json",
+  "probe_window": {
+    "start": "2026-07-01",
+    "end": "2026-08-04"
+  },
+  "historical_quality_issue_dates": [
+    "2026-07-21",
+    "2026-07-24",
+    "2026-07-27",
+    "2026-07-28",
+    "2026-07-29",
+    "2026-07-30",
+    "2026-07-31"
+  ],
+  "ticker_probes": [
+    {
+      "ticker": "003550.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "005380.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "005930.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "010120.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "010130.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "017670.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "028050.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "028260.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "030200.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "032640.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "033780.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "034730.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "035420.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "035720.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "036570.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "064350.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "064400.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "068270.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "078930.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "086280.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "090430.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "096770.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "153131.KS",
+      "status": "UNAVAILABLE_VENDOR_SYMBOL",
+      "latest_observation_date": null
+    },
+    {
+      "ticker": "161390.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "180640.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "207940.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "241560.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "259960.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "267250.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "267260.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "267270.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "278470.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "326030.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "329180.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "352820.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "353200.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "402340.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    },
+    {
+      "ticker": "443060.KS",
+      "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+      "latest_observation_date": "2026-08-03",
+      "rows": 23
+    }
+  ],
+  "index_probe": {
+    "instrument": "^KS11",
+    "status": "CURRENT_SOURCE_AVAILABLE__HISTORICAL_GAP_NOT_REWRITTEN",
+    "latest_observation_date": "2026-08-03",
+    "rows": 23
+  },
+  "remediation_summary": {
+    "current_source_available_ticker_count": 37,
+    "unavailable_vendor_symbols": [
+      "153131.KS"
+    ],
+    "probe_error_count": 0,
+    "historical_rewrite_performed": false,
+    "policy": "Current source availability identifies transient/vendor gaps only; historical PAPER scans remain immutable until separately re-sourced."
+  }
+}
