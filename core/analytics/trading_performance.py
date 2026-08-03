@@ -655,10 +655,21 @@ def _build_strategy_change_gate(
 
     reconciliation = ledger_quality.get("reconciliation", {})
     held_match_rate = reconciliation.get("endpoint_held_position_match_rate")
+    phantom_positions = int(reconciliation.get("phantom_nonzero_replay_positions") or 0)
     add(
         "held_quantity_ledger_match",
-        held_match_rate == 1.0,
-        "unavailable" if held_match_rate is None else f"{held_match_rate:.2%}",
+        held_match_rate == 1.0 and phantom_positions == 0,
+        (
+            "unavailable"
+            if held_match_rate is None
+            else (
+                "no held positions"
+                if held_match_rate == 1.0
+                and not reconciliation.get("endpoint_held_positions")
+                and phantom_positions == 0
+                else f"{held_match_rate:.2%}"
+            )
+        ),
     )
     quality = ledger_quality.get("data_quality", {})
     execution_coverage = quality.get(
@@ -669,6 +680,26 @@ def _build_strategy_change_gate(
         "filled_order_auditable_evidence_coverage",
         execution_coverage == 1.0,
         "unavailable" if execution_coverage is None else f"{execution_coverage:.2%}",
+    )
+    execution_table_coverage = quality.get("execution_table_coverage_of_filled_orders")
+    add(
+        "execution_table_coverage",
+        execution_table_coverage == 1.0,
+        (
+            "unavailable"
+            if execution_table_coverage is None
+            else f"{execution_table_coverage:.2%} of filled orders linked"
+        ),
+    )
+    recorded_cost_zero_rate = quality.get("zero_recorded_commission_tax_rate")
+    add(
+        "recorded_commission_tax_evidence",
+        recorded_cost_zero_rate == 0.0,
+        (
+            "unavailable"
+            if recorded_cost_zero_rate is None
+            else f"{(1.0 - recorded_cost_zero_rate):.2%} of fills have recorded commission and tax"
+        ),
     )
     parity = ledger_quality.get("observed_order_result_parity", {})
     parity_coverage = parity.get("data_quality", {}).get(

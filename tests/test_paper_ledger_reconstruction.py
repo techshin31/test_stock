@@ -6,6 +6,7 @@ from core.analytics.paper_ledger_reconstruction import (
     KST,
     _build_broker_only_ledger,
     _build_order_ledger,
+    _endpoint_held_position_match_rate,
     _minimum_opening_inventory,
 )
 
@@ -109,6 +110,38 @@ def test_minimum_opening_inventory_only_covers_preexisting_sell_quantity():
     ])
 
     assert _minimum_opening_inventory(orders) == {"A": 5.0, "B": 0.0}
+
+
+def test_empty_endpoint_positions_are_not_a_held_quantity_mismatch():
+    import pandas as pd
+
+    positions = pd.DataFrame(
+        [
+            {
+                "actual_endpoint_qty": 0.0,
+                "replay_qty_with_minimum_opening": 0.0,
+                "exact_qty_match": True,
+            }
+        ]
+    )
+
+    assert _endpoint_held_position_match_rate(positions) == 1.0
+
+
+def test_phantom_replay_position_keeps_empty_endpoint_blocked():
+    import pandas as pd
+
+    positions = pd.DataFrame(
+        [
+            {
+                "actual_endpoint_qty": 0.0,
+                "replay_qty_with_minimum_opening": 5.0,
+                "exact_qty_match": False,
+            }
+        ]
+    )
+
+    assert _endpoint_held_position_match_rate(positions) == 0.0
 
 
 def test_broker_nonfill_overrides_false_db_fill_without_mutating_source():

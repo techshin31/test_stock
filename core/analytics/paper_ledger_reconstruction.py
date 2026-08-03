@@ -525,6 +525,28 @@ def _position_reconciliation(
     return pd.DataFrame(rows)
 
 
+def _endpoint_held_position_match_rate(positions: pd.DataFrame) -> float:
+    """Return held-quantity parity without treating an empty account as a mismatch.
+
+    A zero-position endpoint has no held quantities to compare, so ``0/0`` is
+    not evidence of a mismatch.  It is considered complete only when the
+    replay also has no phantom non-zero position.
+    """
+    if positions.empty:
+        return 1.0
+
+    held_positions = positions[positions["actual_endpoint_qty"] > 0]
+    phantom_nonzero = (
+        (positions["actual_endpoint_qty"] == 0)
+        & (positions["replay_qty_with_minimum_opening"].abs() > 1e-9)
+    )
+    if held_positions.empty:
+        return 0.0 if bool(phantom_nonzero.any()) else 1.0
+
+    exact_held_matches = int(held_positions["exact_qty_match"].sum())
+    return exact_held_matches / len(held_positions)
+
+
 def _daily_nav(source: dict[str, list[dict]]) -> pd.DataFrame:
     frame = pd.DataFrame(source["balances"])
     if frame.empty:
@@ -730,7 +752,7 @@ def reconstruct(
             "position_match_rate": exact_position_matches / len(positions) if len(positions) else 0.0,
             "endpoint_held_positions": int(len(held_positions)),
             "exact_endpoint_held_position_matches": exact_held_matches,
-            "endpoint_held_position_match_rate": exact_held_matches / len(held_positions) if len(held_positions) else 0.0,
+            "endpoint_held_position_match_rate": _endpoint_held_position_match_rate(positions),
             "phantom_nonzero_replay_positions": phantom_replay_positions,
             "balancing_qty_abs_sum": float(positions["qty_gap_balancing_entry"].abs().sum()),
             "minimum_opening_inventory_abs_sum": float(

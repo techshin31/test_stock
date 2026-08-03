@@ -6,6 +6,7 @@ import pytest
 
 from core.analytics.trading_performance import (
     BASELINE_CONFIRMATION,
+    _build_strategy_change_gate,
     _benchmark_anchor_freshness,
     _markdown_v2,
     _publish_latest_if_not_older,
@@ -18,6 +19,112 @@ from core.analytics.trading_performance import (
     refresh_daily_operations_fields,
     write_end_of_day_report,
 )
+
+
+def _strategy_gate_fixture(tmp_path, *, execution_coverage=1.0, cost_zero_rate=0.0):
+    experiment_path = tmp_path / "experiment.json"
+    experiment_path.write_text(
+        json.dumps(
+            {
+                "metadata": {"period_end": "2026-07-31"},
+                "data_quality": {},
+                "summary": {
+                    "A_CURRENT": {
+                        "total_return": -0.1,
+                        "max_drawdown": -0.2,
+                        "annualized_turnover": 10.0,
+                    },
+                    "R_TREND_REARM": {
+                        "total_return": -0.01,
+                        "max_drawdown": -0.1,
+                        "annualized_turnover": 5.0,
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    stress_path = tmp_path / "stress.json"
+    stress_path.write_text(
+        json.dumps(
+            {
+                "ledger_evidence": {"order_count": 1},
+                "execution_samples": {
+                    "BUY": {"orders": 30},
+                    "SELL": {"orders": 30},
+                },
+                "promotion_gate": {
+                    "sample_ready": True,
+                    "minimum_side_sample": 30,
+                    "all_execution_scenarios_pass": True,
+                },
+                "scenario_checks": [{"passed": True}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    ledger_quality = {
+        "canonical_evidence_refresh": {"status": "READY"},
+        "broker_history_refresh": {"status": "READY", "audit_complete": True},
+        "order_result_replay": {"orders": 1},
+        "reconciliation": {
+            "endpoint_held_positions": 0,
+            "endpoint_held_position_match_rate": 1.0,
+            "phantom_nonzero_replay_positions": 0,
+        },
+        "data_quality": {
+            "auditable_fill_evidence_coverage": 1.0,
+            "execution_table_coverage_of_filled_orders": execution_coverage,
+            "zero_recorded_commission_tax_rate": cost_zero_rate,
+        },
+        "observed_order_result_parity": {
+            "data_quality": {"priced_fill_event_coverage": 1.0},
+            "promotion_gate": {"reconciled_from_500m_within_tolerance": True},
+        },
+    }
+    return experiment_path, stress_path, ledger_quality
+
+
+def test_strategy_gate_requires_complete_execution_and_cost_evidence(tmp_path):
+    experiment_path, stress_path, ledger_quality = _strategy_gate_fixture(
+        tmp_path, execution_coverage=0.75, cost_zero_rate=1.0
+    )
+
+    gate = _build_strategy_change_gate(
+        shadow_state={
+            "completed_observation_sessions": 10,
+            "required_observation_sessions": 10,
+            "observe_only": True,
+            "order_permission": "DENIED_BY_DESIGN",
+        },
+        trading={"open_order_count": 0},
+        ledger_quality=ledger_quality,
+        experiment_path=experiment_path,
+        execution_stress_path=stress_path,
+    )
+
+    assert not gate["ready"]
+    assert any(item["name"] == "execution_table_coverage" and not item["passed"] for item in gate["criteria"])
+    assert any(item["name"] == "recorded_commission_tax_evidence" and not item["passed"] for item in gate["criteria"])
+
+
+def test_strategy_gate_can_pass_empty_account_when_evidence_is_complete(tmp_path):
+    experiment_path, stress_path, ledger_quality = _strategy_gate_fixture(tmp_path)
+
+    gate = _build_strategy_change_gate(
+        shadow_state={
+            "completed_observation_sessions": 10,
+            "required_observation_sessions": 10,
+            "observe_only": True,
+            "order_permission": "DENIED_BY_DESIGN",
+        },
+        trading={"open_order_count": 0},
+        ledger_quality=ledger_quality,
+        experiment_path=experiment_path,
+        execution_stress_path=stress_path,
+    )
+
+    assert gate["ready"]
 
 
 def test_historical_backfill_never_regresses_canonical_latest(tmp_path):
