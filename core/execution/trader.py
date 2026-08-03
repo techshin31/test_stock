@@ -27,7 +27,13 @@ from core.execution.inverse_hedge import InverseHedgeConfig, evaluate_inverse_he
 from core.utils.trading_calendar import previous_krx_trading_day
 
 class LiveTrader:
-    def __init__(self, mock=True, simulate=False, dry_run=False):
+    def __init__(
+        self,
+        mock=True,
+        simulate=False,
+        dry_run=False,
+        force_rebalance=False,
+    ):
         self.broker = LocalSimulationBroker() if simulate else KisBroker(mock=mock)
         db_config = {
             'host': os.getenv('POSTGRES_HOST', 'localhost'),
@@ -73,6 +79,11 @@ class LiveTrader:
         self.execution_venue = (
             "DRY_RUN" if dry_run else "SIMULATE" if simulate else "PAPER" if mock else "REAL"
         )
+        self.force_rebalance = bool(force_rebalance)
+        if self.force_rebalance and self.execution_venue != "PAPER":
+            raise PermissionError(
+                "force_rebalance is permitted only for one-shot PAPER execution"
+            )
         self.fa_model_version = self._fa_model_for_venue(self.execution_venue)
         # The hedge policy is deliberately unavailable outside PAPER. It must
         # earn its own evidence before any future REAL-mode approval.
@@ -1659,7 +1670,13 @@ class LiveTrader:
                 })
                 return False
             urgent_exit = side == "SELL" and reason in urgent_exit_reasons
-            if key in filled_keys and not urgent_exit:
+            forced_transition_topup = (
+                getattr(self, "force_rebalance", False)
+                and self.execution_venue == "PAPER"
+                and side == "BUY"
+                and str(reason or "").startswith("TRANSITION_ENTRY_TOPUP")
+            )
+            if key in filled_keys and not urgent_exit and not forced_transition_topup:
                 logging.info(f"[{ticker}] 오늘 체결된 {side} 주문이 존재하여 스킵합니다.")
                 self.last_order_suppressions.append({
                     "ticker": ticker, "side": side, "reason": "FILLED_ORDER_TODAY"
@@ -1774,7 +1791,11 @@ class LiveTrader:
                             "expected_price": float(current_price),
                             "reason": (
                                 hedge_buy_reason
-                                or f"REBALANCE_WEIGHT_INCREASE_TO_{int(weight*100)}%"
+                                or (
+                                    f"TRANSITION_ENTRY_TOPUP_TO_{int(weight * 100)}%"
+                                    if signal_reason == "TRANSITION_ENTRY_TOPUP"
+                                    else f"REBALANCE_WEIGHT_INCREASE_TO_{int(weight*100)}%"
+                                )
                             ),
                         }
             else:

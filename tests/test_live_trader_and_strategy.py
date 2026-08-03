@@ -390,6 +390,37 @@ def test_normal_sell_is_blocked_after_earlier_filled_sell():
     assert trader.last_order_suppressions[0]["reason"] == "FILLED_ORDER_TODAY"
 
 
+def test_force_rebalance_allows_only_transition_topup_after_same_day_buy():
+    trader = object.__new__(LiveTrader)
+    trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.force_rebalance = True
+    trader.broker = type("Broker", (), {"masked_account": "***1234-01"})()
+    trader.max_order_attempts = 2
+    trader.db = type("DB", (), {
+        "fetch_all": lambda *a, **k: [{
+            "symbol": "005930",
+            "order_side_code": "BUY",
+            "order_status_code": "FILLED",
+            "had_unknown_result": False,
+        }]
+    })()
+    trader._price_guard_blocked = lambda *args: False
+
+    orders = trader._calculate_orders(
+        1_000_000,
+        {"005930.KS": {"qty": 40, "current_price": 1_000}},
+        {"005930.KS": 0.10},
+        {},
+        {"005930.KS": {"signal_reason": "TRANSITION_ENTRY_TOPUP"}},
+    )
+
+    assert len(orders) == 1
+    assert orders[0]["type"] == "BUY"
+    assert orders[0]["reason"] == "TRANSITION_ENTRY_TOPUP_TO_10%"
+    assert trader.last_order_suppressions == []
+
+
 def test_result_message_distinguishes_candidate_suppression_from_global_stop():
     message = build_result_message([], [], [{
         "ticker": "021240.KS",

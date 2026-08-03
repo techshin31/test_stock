@@ -160,6 +160,11 @@ def main():
     mode_group.add_argument("--mock", action="store_true", help="모의투자 계좌 사용(기본값)")
     mode_group.add_argument("--simulate", action="store_true", help="로컬 가상 계좌와 즉시 체결 엔진 사용")
     parser.add_argument("--dry-run", action="store_true", help="주문 실행 없이 시그널만 계산")
+    parser.add_argument(
+        "--force-rebalance",
+        action="store_true",
+        help="PAPER 1회 실행에서 전환구간 보충 매수의 당일 중복 방지를 한시적으로 우회",
+    )
     action_group = parser.add_mutually_exclusive_group()
     action_group.add_argument(
         "--premarket", action="store_true",
@@ -182,6 +187,11 @@ def main():
         parser.error("--live and --dry-run cannot be combined; DRY_RUN always uses mock")
     if args.liquidate and args.dry_run:
         parser.error("--liquidate and --dry-run cannot be combined")
+    if args.force_rebalance and (args.live or args.simulate or args.dry_run):
+        parser.error(
+            "--force-rebalance is PAPER-only and cannot be combined with "
+            "--live, --simulate, or --dry-run"
+        )
     requested_mode = (
         "DRY_RUN" if args.dry_run
         else "SIMULATE" if args.simulate
@@ -226,6 +236,7 @@ def main():
             mock=args.dry_run or not args.live,
             simulate=args.simulate,
             dry_run=args.dry_run,
+            force_rebalance=args.force_rebalance,
         )
         runtime_mode = (
             "DRY_RUN" if args.dry_run
