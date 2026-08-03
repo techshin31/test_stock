@@ -35,6 +35,14 @@ def _fixture(tmp_path, *, complete=False):
             "last_error": None,
             "daily_orders": {"open": 0},
             "actual_orders": {"open": 0},
+            "execution_sample_progress": {
+                "buy": 30 if complete else 5,
+                "sell": 30 if complete else 4,
+                "required_per_side": 30,
+                "observed_order_count": 60 if complete else 9,
+                "sample_ready": complete,
+                "status": "READY" if complete else "PROVISIONAL_SMALL_SAMPLE",
+            },
             "data_health": {
                 "expected_count": 2,
                 "fresh_count": 2,
@@ -621,6 +629,29 @@ def test_execution_stress_summary_must_match_counts_and_ledger(tmp_path):
     assert any(
         "execution_stress_evidence_integrity" in row
         for row in result["blockers"]
+    )
+
+
+def test_dashboard_execution_sample_must_match_stress_evidence(tmp_path):
+    _fixture(tmp_path, complete=True)
+    path = tmp_path / "logs/paper/dashboard_state.json"
+    dashboard = json.loads(path.read_text(encoding="utf-8"))
+    dashboard["execution_sample_progress"]["sell"] = 29
+    dashboard["execution_sample_progress"]["observed_order_count"] = 59
+    dashboard["execution_sample_progress"]["sample_ready"] = False
+    dashboard["execution_sample_progress"]["status"] = "PROVISIONAL_SMALL_SAMPLE"
+    _write(path, dashboard)
+
+    result = audit_system_readiness(
+        tmp_path,
+        now=dt.datetime(2026, 7, 22, 10, 2, tzinfo=KST),
+        environ={},
+    )
+
+    assert result["full_system_complete"] is False
+    assert any(
+        "dashboard_execution_sample_integrity" in blocker
+        for blocker in result["blockers"]
     )
 
 

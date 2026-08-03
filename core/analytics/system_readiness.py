@@ -554,6 +554,56 @@ def audit_system_readiness(
             f"declared_ready={stress_gate.get('sample_ready')}"
         ),
     )
+    dashboard_sample = dashboard.get("execution_sample_progress")
+    dashboard_sample_errors: list[str] = []
+    dashboard_buy = dashboard_sell = dashboard_observed = -1
+    dashboard_required = -1
+    dashboard_ready = None
+    dashboard_status = "unavailable"
+    if not isinstance(dashboard_sample, dict):
+        dashboard_sample_errors.append("execution_sample_progress is not an object")
+    else:
+        try:
+            dashboard_buy = int(dashboard_sample.get("buy"))
+            dashboard_sell = int(dashboard_sample.get("sell"))
+            dashboard_observed = int(dashboard_sample.get("observed_order_count"))
+            dashboard_required = int(dashboard_sample.get("required_per_side"))
+        except (TypeError, ValueError):
+            dashboard_sample_errors.append("sample counts are not integers")
+        dashboard_ready = dashboard_sample.get("sample_ready")
+        dashboard_status = str(dashboard_sample.get("status") or "unavailable")
+        if dashboard_buy < 0 or dashboard_sell < 0:
+            dashboard_sample_errors.append("sample counts are negative")
+        if dashboard_observed != dashboard_buy + dashboard_sell:
+            dashboard_sample_errors.append(
+                "observed_order_count does not equal buy+sell"
+            )
+        expected_dashboard_status = (
+            "READY" if dashboard_buy >= minimum_side_sample and dashboard_sell >= minimum_side_sample
+            else "PROVISIONAL_SMALL_SAMPLE"
+        )
+        if dashboard_status != expected_dashboard_status:
+            dashboard_sample_errors.append(
+                f"status={dashboard_status} != expected={expected_dashboard_status}"
+            )
+    dashboard_sample_integrity = (
+        not dashboard_sample_errors
+        and dashboard_buy == buy_sample
+        and dashboard_sell == sell_sample
+        and dashboard_required == minimum_side_sample
+        and dashboard_ready is derived_sample_ready
+    )
+    add(
+        evidence_checks,
+        "dashboard_execution_sample_integrity",
+        dashboard_sample_integrity,
+        (
+            f"dashboard={dashboard_buy}/{dashboard_sell}, "
+            f"stress={buy_sample}/{sell_sample}, "
+            f"required={dashboard_required}/{minimum_side_sample}, "
+            f"declared_ready={dashboard_ready}, errors={dashboard_sample_errors}"
+        ),
+    )
     add(
         evidence_checks,
         "execution_stress_robustness",

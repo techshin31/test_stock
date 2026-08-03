@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-03T14:13:22+09:00",
+  "generated_at": "2026-08-03T14:18:46+09:00",
   "scope": "PAPER_AUTOMATED_TRADING_SYSTEM",
   "paper_runtime_safe": true,
   "full_system_complete": false,
@@ -24,8 +24,8 @@
       "required": 60
     },
     "evidence_checks": {
-      "passed": 7,
-      "total": 14
+      "passed": 8,
+      "total": 15
     },
     "safety_checks": {
       "passed": 13,
@@ -86,7 +86,7 @@
     {
       "name": "dashboard_freshness",
       "passed": true,
-      "detail": "age_seconds=9, limit=300"
+      "detail": "age_seconds=2, limit=300"
     },
     {
       "name": "real_environment_disabled",
@@ -144,6 +144,11 @@
       "name": "execution_stress_evidence_integrity",
       "passed": true,
       "detail": "ledger_orders=575, stress_orders=575, BUY=20/30, SELL=17/30, declared_ready=False"
+    },
+    {
+      "name": "dashboard_execution_sample_integrity",
+      "passed": true,
+      "detail": "dashboard=20/17, stress=20/17, required=30/30, declared_ready=False, errors=[]"
     },
     {
       "name": "execution_stress_robustness",
