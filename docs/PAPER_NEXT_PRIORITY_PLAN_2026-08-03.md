@@ -1,6 +1,6 @@
 # PAPER 자동매매 다음 우선순위 계획
 
-기준 시각: 2026-08-03 13:45 KST
+기준 시각: 2026-08-03 15:37 KST
 운영 모드: `PAPER`
 현재 결정: `REAL` 실행 및 자동 승격은 계속 차단
 
@@ -12,11 +12,11 @@
 - 오늘 주문·체결 수량 대사: 100%
 - 실행 표본: BUY 20/30, SELL 17/30
 - shadow 관측 세션: 9/10
-- PAPER 운영 세션: 9/60
-- FINAL/READY 일일 리포트: 3/60
+- PAPER 운영 세션: 10/60
+- FINAL/READY 일일 리포트: 4/60
 - 현재 보유 주식 노출: 약 30%, 현금만 보유하는 상태가 아님
 
-오늘 세션은 장 마감 전이므로 FINAL EOD로 판정하지 않는다. 주문·체결 표본은 자연 발생 결과만 사용하며, 강제 리밸런싱이나 합성 체결로 표본을 채우지 않는다.
+장 마감 전에는 FINAL EOD로 판정하지 않으며, 현재는 장 마감 후 EOD 검증을 완료했다. 주문·체결 표본은 자연 발생 결과만 사용하며, 강제 리밸런싱이나 합성 체결로 표본을 채우지 않는다.
 
 ## 장중 주문량 진단 결과 (2026-08-03 13:44 KST)
 
@@ -105,3 +105,13 @@
 - 실행 스트레스의 `R_TREND_REARM`은 `IDEAL_FULL_FILL`·`STABILIZED_POSTERIOR_MEAN`에서 기준 전략보다 수익·MDD·회전율을 모두 개선했지만, `STABILIZED_WILSON_LOWER`에서는 수익이 기준 전략보다 낮아 모든 시나리오 통과 조건은 아직 충족하지 않음
 - `C_CAP10`/`C_CAP08`은 위험 fallback 후보로 계속 표시되며 관측 전용·주문 권한 `DENIED_BY_DESIGN`을 유지함. BUY·SELL 각 30건 전까지 `PROVISIONAL_SMALL_SAMPLE` 및 수동 검토를 유지함
 - 위 결과는 14:43 KST 증거 산출물과 동일하며, 전략·위험 한도·주문 권한을 변경하지 않음
+
+## PAPER 세션 완주 및 다음 단계 확인 (2026-08-03 15:37 KST)
+
+- EOD 상태: `PAPER` / `READY` / return code 0
+- 일일 리포트: `2026-08-03`, `FINAL` / validation `READY`, validation error 0건
+- 운영 지표: scan 3,226건, risk check 7,110건, 제출 주문 37건, 대사 주문 37건, 미체결 0건
+- 당일 대시보드·PostgreSQL 대조: BUY FILLED 6건, SELL FILLED 3건, 미체결 0건으로 일치
+- 안전성: `paper_runtime_safe=true`, safety checks 13/13; `full_system_complete=false`, `real_execution_authorized=false`
+- 남은 핵심 조건: BUY 20/30·SELL 17/30, shadow 9/10, PAPER 세션 10/60, FINAL/READY 리포트 4/60
+- 결론: 1번 세션 완주 조건은 충족했으며, 다음은 자연 발생 BUY 10건·SELL 13건을 추가 관측하는 단계다. 강제 주문·합성 체결·정책 완화는 적용하지 않는다.
