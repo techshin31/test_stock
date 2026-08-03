@@ -71,6 +71,19 @@ def test_live_ta_uses_actual_position_and_latest_regime_only():
     assert target == 0.0
     assert metadata["signal_reason"] == "MARKET_DOWNTREND"
 
+    target, metadata = strategy.evaluate_latest(
+        frame, "TRANSITION", current_position=0.17
+    )
+    assert target == pytest.approx(0.068)
+    assert metadata["signal_reason"] == "MARKET_TRANSITION_KEEP_HOLD"
+    assert metadata["transition_keep_ratio"] == pytest.approx(0.40)
+
+    target, metadata = strategy.evaluate_latest(
+        frame, "TRANSITION", current_position=0.0
+    )
+    assert target == 0.0
+    assert metadata["signal_reason"] == "MARKET_TRANSITION"
+
 
 def test_live_ta_rejects_missing_or_low_confidence_fundamentals():
     strategy = FaTaMomentumStrategy({"ma_window": 20, "ma_window_fast": 5})
@@ -87,6 +100,19 @@ def test_live_strategy_hard_stop_precedes_hold_signal():
     )
     assert target == 0.0
     assert metadata["signal_reason"] == "HARD_STOP_LOSS"
+
+
+def test_transition_keep_does_not_override_fundamental_exit():
+    strategy = FaTaMomentumStrategy({"ma_window": 20, "ma_window_fast": 5})
+    frame = _strategy_frame()
+    frame.loc[frame.index[-1], "fa_score"] = 35.0
+
+    target, metadata = strategy.evaluate_latest(
+        frame, "TRANSITION", current_position=0.12
+    )
+
+    assert target == 0.0
+    assert metadata["signal_reason"] == "FA_SCORE_DETERIORATED"
 
 
 def test_live_strategy_trailing_stop_protects_gains():

@@ -51,12 +51,18 @@ class FaTaMomentumStrategy(AbstractStrategy):
         self.MIN_SCORE_CONFIDENCE = params.get("min_score_confidence", 0.70)
         self.STOP_LOSS_PCT = params.get("stop_loss_pct", 0.10)
         self.TRAILING_STOP_PCT = params.get("trailing_stop_pct", 0.08)
+        # Keep a controlled fraction of an existing long position while the
+        # market is transitioning.  New entries remain blocked in TRANSITION;
+        # this only prevents an otherwise all-or-nothing liquidation.
+        self.TRANSITION_KEEP_RATIO = params.get("transition_keep_ratio", 0.40)
         self.MA_WINDOW = params.get("ma_window", 60)
         self.MA_WINDOW_FAST = params.get("ma_window_fast", 20)
         if not 0 < self.MIN_SCORE_CONFIDENCE <= 1:
             raise ValueError("min_score_confidence must be in (0, 1]")
         if not 0 < self.STOP_LOSS_PCT < 1 or not 0 < self.TRAILING_STOP_PCT < 1:
             raise ValueError("stop-loss settings must be in (0, 1)")
+        if not 0 < self.TRANSITION_KEEP_RATIO <= 1:
+            raise ValueError("transition_keep_ratio must be in (0, 1]")
 
     def evaluate_position_risk(
         self,
@@ -159,15 +165,27 @@ class FaTaMomentumStrategy(AbstractStrategy):
         average_price = float(average_price or 0.0)
         peak_price = float(peak_price or 0.0)
 
-        if regime in (MarketRegime.DOWNTREND.name, MarketRegime.TRANSITION.name):
-            target, reason = 0.0, f"MARKET_{regime}"
+        if regime == MarketRegime.DOWNTREND.name:
+            target, reason = 0.0, "MARKET_DOWNTREND"
         elif current_position > 0:
+            # Fundamental and trend exits still take precedence over the
+            # transition carry rule.
             if pd.notnull(fa_score) and float(fa_score) < self.FA_SCORE_EXIT:
                 target, reason = 0.0, "FA_SCORE_DETERIORATED"
             elif pd.notnull(debt_ratio) and float(debt_ratio) > self.DEBT_RATIO_MAX:
                 target, reason = 0.0, "FA_DEBT_LIMIT"
             elif curr_ma_fast < curr_ma:
                 target, reason = 0.0, "TA_MOMENTUM_LOSS"
+            elif regime == MarketRegime.TRANSITION.name:
+                target = round(
+                    current_position * self.TRANSITION_KEEP_RATIO,
+                    4,
+                )
+                reason = "MARKET_TRANSITION_KEEP_HOLD"
+        elif regime == MarketRegime.TRANSITION.name:
+            # TRANSITION remains entry-blocked; only an existing position can
+            # carry a reduced target through the regime change.
+            target, reason = 0.0, "MARKET_TRANSITION"
         else:
             valid_fa = (
                 is_eligible
@@ -209,6 +227,7 @@ class FaTaMomentumStrategy(AbstractStrategy):
             "peak_price": peak_price or None,
             "stop_loss_pct": self.STOP_LOSS_PCT,
             "trailing_stop_pct": self.TRAILING_STOP_PCT,
+            "transition_keep_ratio": self.TRANSITION_KEEP_RATIO,
             "risk_price_source": "BROKER_BALANCE" if current_price else "DAILY_CLOSE",
         }
         return target, metadata

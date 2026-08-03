@@ -104,6 +104,9 @@ class LiveTrader:
             "min_score_confidence": FA_CONTRACT.minimum_score_confidence,
             "stop_loss_pct": float(os.getenv("STOP_LOSS_PCT", "0.10")),
             "trailing_stop_pct": float(os.getenv("TRAILING_STOP_PCT", "0.08")),
+            "transition_keep_ratio": float(
+                os.getenv("TRANSITION_KEEP_RATIO", "0.40")
+            ),
         }
         self.strategy = FaTaMomentumStrategy(strategy_params)
         self.strategy_name = self.strategy.INVESTMENT_TYPE.name.lower()
