@@ -1496,6 +1496,22 @@ def write_end_of_day_report(
             _atomic_json(promotion_dir / "real_readiness.json", readiness)
         project_root = promotion_dir.resolve().parents[1]
         dashboard_path = project_root / "logs" / "paper" / "dashboard_state.json"
+        from core.analytics.operational_data_quality import (
+            build_report as build_operational_data_quality_report,
+            write_report as write_operational_data_quality_report,
+        )
+
+        data_quality_report = build_operational_data_quality_report(
+            project_root / "logs" / "paper" / "operational_health.jsonl"
+        )
+        write_operational_data_quality_report(
+            data_quality_report,
+            project_root
+            / "reports"
+            / "analysis"
+            / "paper_data_quality_gaps"
+            / "latest.json",
+        )
         if dashboard_path.exists():
             audit_output = (
                 project_root

@@ -483,6 +483,9 @@ def test_paper_report_writes_flat_real_readiness_snapshot(tmp_path):
     assert readiness["validation_status"] == "READY"
     assert readiness["net_return"] == pytest.approx(0.02)
     assert (paper_dir / "daily" / "2026-07-20.md").exists()
+    assert (
+        tmp_path / "reports" / "analysis" / "paper_data_quality_gaps" / "latest.json"
+    ).exists()
 
 
 def test_paper_eod_failure_retries_when_readiness_audit_fails(
