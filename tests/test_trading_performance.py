@@ -486,6 +486,9 @@ def test_paper_report_writes_flat_real_readiness_snapshot(tmp_path):
     assert (
         tmp_path / "reports" / "analysis" / "paper_data_quality_gaps" / "latest.json"
     ).exists()
+    assert (
+        tmp_path / "reports" / "analysis" / "paper_incident_evidence" / "latest.json"
+    ).exists()
 
 
 def test_paper_eod_failure_retries_when_readiness_audit_fails(

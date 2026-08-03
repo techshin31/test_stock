@@ -1,0 +1,218 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-03T11:40:42+09:00",
+  "mode": "PAPER",
+  "source": "logs\\paper\\operational_health.jsonl",
+  "through_date": null,
+  "grain": "one extracted incident episode",
+  "summary": {
+    "episode_count": 65,
+    "safety_control_episode_count": 53,
+    "non_safety_episode_count": 12,
+    "active_episode_count": 0,
+    "event_class_counts": {
+      "SAFETY_CONTROL": 53,
+      "DATA_DEPENDENCY": 4,
+      "EXTERNAL_DEPENDENCY": 7,
+      "INFRASTRUCTURE": 1
+    },
+    "policy": "This is explanatory evidence only. It does not reclassify or relax the existing readiness gate."
+  },
+  "daily": [
+    {
+      "date": "2026-07-21",
+      "episode_count": 3,
+      "safety_control_episode_count": 2,
+      "non_safety_episode_count": 1,
+      "active_episode_count": 0,
+      "event_class_counts": {
+        "SAFETY_CONTROL": 2,
+        "DATA_DEPENDENCY": 1
+      },
+      "status_counts": {
+        "ORDER_RECONCILIATION": 1,
+        "ENTRY_CIRCUIT_BREAKER": 1,
+        "ORDER_SUPPRESSION": 1
+      },
+      "top_summaries": {
+        "KOSPI 시장국면 오류: KOSPI 데이터가 오래됨(last=2026-07-16, expected=2026-07-20)": 1,
+        "KOSPI 시장국면 오류: KOSPI 데이터가 오래됨(last=2026-07-16, expected=2026-07-20) | 서킷브레이커 (DEPENDENCY_ERROR_ENTRY_BLOCK)": 1,
+        "차단사유 (AMBIGUOUS_RESULT_SAME_DAY: 1건)": 1
+      }
+    },
+    {
+      "date": "2026-07-22",
+      "episode_count": 6,
+      "safety_control_episode_count": 6,
+      "non_safety_episode_count": 0,
+      "active_episode_count": 0,
+      "event_class_counts": {
+        "SAFETY_CONTROL": 6
+      },
+      "status_counts": {
+        "ORDER_RECONCILIATION": 3,
+        "ORDER_SUPPRESSION": 3
+      },
+      "top_summaries": {
+        "주문 정산 대기": 3,
+        "차단사유 (AMBIGUOUS_RESULT_SAME_DAY: 1건)": 3
+      }
+    },
+    {
+      "date": "2026-07-23",
+      "episode_count": 10,
+      "safety_control_episode_count": 7,
+      "non_safety_episode_count": 3,
+      "active_episode_count": 0,
+      "event_class_counts": {
+        "SAFETY_CONTROL": 7,
+        "EXTERNAL_DEPENDENCY": 3
+      },
+      "status_counts": {
+        "ORDER_RECONCILIATION": 2,
+        "ORDER_SUPPRESSION": 5,
+        "ERROR": 3
+      },
+      "top_summaries": {
+        "차단사유 (PRICE_GUARD_COOLDOWN: 1건, AMBIGUOUS_RESULT_SAME_DAY: 1건)": 4,
+        "BROKER_TIMEOUT | 차단사유 (PRICE_GUARD_COOLDOWN: 1건, AMBIGUOUS_RESULT_SAME_DAY: 1건)": 3,
+        "차단사유 (AMBIGUOUS_RESULT_SAME_DAY: 1건)": 2,
+        "주문 정산 대기": 1
+      }
+    },
+    {
+      "date": "2026-07-24",
+      "episode_count": 3,
+      "safety_control_episode_count": 2,
+      "non_safety_episode_count": 1,
+      "active_episode_count": 0,
+      "event_class_counts": {
+        "SAFETY_CONTROL": 2,
+        "DATA_DEPENDENCY": 1
+      },
+      "status_counts": {
+        "ORDER_RECONCILIATION": 1,
+        "ENTRY_CIRCUIT_BREAKER": 1,
+        "ORDER_SUPPRESSION": 1
+      },
+      "top_summaries": {
+        "주문 정산 대기": 1,
+        "KOSPI 시장국면 오류: KOSPI 지수 데이터를 가져올 수 없습니다. (티커: ^KS11) | 서킷브레이커 (DEPENDENCY_ERROR_ENTRY_BLOCK)": 1,
+        "차단사유 (AMBIGUOUS_RESULT_SAME_DAY: 2건)": 1
+      }
+    },
+    {
+      "date": "2026-07-27",
+      "episode_count": 1,
+      "safety_control_episode_count": 1,
+      "non_safety_episode_count": 0,
+      "active_episode_count": 0,
+      "event_class_counts": {
+        "SAFETY_CONTROL": 1
+      },
+      "status_counts": {
+        "ORDER_RECONCILIATION": 1
+      },
+      "top_summaries": {
+        "주문 정산 대기": 1
+      }
+    },
+    {
+      "date": "2026-07-28",
+      "episode_count": 2,
+      "safety_control_episode_count": 2,
+      "non_safety_episode_count": 0,
+      "active_episode_count": 0,
+      "event_class_counts": {
+        "SAFETY_CONTROL": 2
+      },
+      "status_counts": {
+        "ORDER_RECONCILIATION": 1,
+        "ENTRY_CIRCUIT_BREAKER": 1
+      },
+      "top_summaries": {
+        "서킷브레이커 (DAILY_LOSS_LIMIT)": 2
+      }
+    },
+    {
+      "date": "2026-07-29",
+      "episode_count": 6,
+      "safety_control_episode_count": 6,
+      "non_safety_episode_count": 0,
+      "active_episode_count": 0,
+      "event_class_counts": {
+        "SAFETY_CONTROL": 6
+      },
+      "status_counts": {
+        "ORDER_RECONCILIATION": 3,
+        "ORDER_SUPPRESSION": 3
+      },
+      "top_summaries": {
+        "차단사유 (AMBIGUOUS_RESULT_SAME_DAY: 1건) | broker incident code (BROKER_HTTP_500: 1)": 4,
+        "주문 정산 대기": 1,
+        "차단사유 (AMBIGUOUS_RESULT_SAME_DAY: 1건)": 1
+      }
+    },
+    {
+      "date": "2026-07-30",
+      "episode_count": 5,
+      "safety_control_episode_count": 0,
+      "non_safety_episode_count": 5,
+      "active_episode_count": 0,
+      "event_class_counts": {
+        "INFRASTRUCTURE": 1,
+        "EXTERNAL_DEPENDENCY": 3,
+        "DATA_DEPENDENCY": 1
+      },
+      "status_counts": {
+        "ERROR": 4,
+        "ENTRY_CIRCUIT_BREAKER": 1
+      },
+      "top_summaries": {
+        "balance_history 기록 실패: connection failed: connection to server at \"172.20.0.6\", port 5432 failed: FATAL:  the database system is starting up": 1,
+        "BROKER_TRANSPORT_ERROR": 1,
+        "BROKER_TIMEOUT": 1,
+        "KOSPI 시장국면 오류: KOSPI 지수 데이터를 가져올 수 없습니다. (티커: ^KS11) | 서킷브레이커 (DEPENDENCY_ERROR_ENTRY_BLOCK)": 1,
+        "BROKER_TRANSPORT_ERROR | 차단사유 (FILLED_ORDER_TODAY: 1건)": 1
+      }
+    },
+    {
+      "date": "2026-07-31",
+      "episode_count": 27,
+      "safety_control_episode_count": 25,
+      "non_safety_episode_count": 2,
+      "active_episode_count": 0,
+      "event_class_counts": {
+        "DATA_DEPENDENCY": 1,
+        "EXTERNAL_DEPENDENCY": 1,
+        "SAFETY_CONTROL": 25
+      },
+      "status_counts": {
+        "ENTRY_CIRCUIT_BREAKER": 1,
+        "ERROR": 1,
+        "ORDER_SUPPRESSION": 25
+      },
+      "top_summaries": {
+        "차단사유 (PRICE_GUARD_COOLDOWN: 1건)": 25,
+        "KOSPI 시장국면 오류: KOSPI 지수 데이터를 가져올 수 없습니다. (티커: ^KS11) | 서킷브레이커 (DEPENDENCY_ERROR_ENTRY_BLOCK)": 1,
+        "BROKER_TRANSPORT_ERROR | 서킷브레이커 (DEPENDENCY_ERROR_ENTRY_BLOCK)": 1
+      }
+    },
+    {
+      "date": "2026-08-03",
+      "episode_count": 2,
+      "safety_control_episode_count": 2,
+      "non_safety_episode_count": 0,
+      "active_episode_count": 0,
+      "event_class_counts": {
+        "SAFETY_CONTROL": 2
+      },
+      "status_counts": {
+        "ORDER_RECONCILIATION": 2
+      },
+      "top_summaries": {
+        "주문 정산 대기": 2
+      }
+    }
+  ]
+}

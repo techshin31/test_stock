@@ -1500,6 +1500,10 @@ def write_end_of_day_report(
             build_report as build_operational_data_quality_report,
             write_report as write_operational_data_quality_report,
         )
+        from core.analytics.operational_incident_evidence import (
+            build_report as build_operational_incident_report,
+            write_report as write_operational_incident_report,
+        )
 
         data_quality_report = build_operational_data_quality_report(
             project_root / "logs" / "paper" / "operational_health.jsonl"
@@ -1510,6 +1514,18 @@ def write_end_of_day_report(
             / "reports"
             / "analysis"
             / "paper_data_quality_gaps"
+            / "latest.json",
+        )
+        incident_report = build_operational_incident_report(
+            project_root / "logs" / "paper" / "operational_health.jsonl",
+            through_date=report_date,
+        )
+        write_operational_incident_report(
+            incident_report,
+            project_root
+            / "reports"
+            / "analysis"
+            / "paper_incident_evidence"
             / "latest.json",
         )
         if dashboard_path.exists():
