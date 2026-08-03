@@ -418,7 +418,8 @@ def audit_system_readiness(
         (
             f"covered={len(covered_report_dates)}/{len(completed_dates)}, "
             f"missing={[item.isoformat() for item in missing_report_dates[:5]]}, "
-            f"invalid={len(relevant_daily_report_issues)}"
+            f"invalid={len(relevant_daily_report_issues)}, "
+            f"invalid_details={relevant_daily_report_issues[:5]}"
             if operational_error is None
             else operational_error
         ),
@@ -712,6 +713,12 @@ def audit_system_readiness(
                 "passed": sum(item["passed"] for item in safety_checks),
                 "total": len(safety_checks),
             },
+        },
+        "daily_report_audit": {
+            "completed_dates": [item.isoformat() for item in completed_dates],
+            "covered_dates": [item.isoformat() for item in sorted(covered_report_dates)],
+            "missing_dates": [item.isoformat() for item in missing_report_dates],
+            "invalid_reports": list(relevant_daily_report_issues),
         },
         "safety_checks": safety_checks,
         "completion_evidence_checks": evidence_checks,

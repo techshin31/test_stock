@@ -396,6 +396,10 @@ def test_daily_report_requires_operational_rates_and_zero_open_orders(tmp_path):
         item.startswith("daily_final_report_coverage:")
         for item in result["blockers"]
     )
+    assert any(
+        item.startswith("2026-07-21.json: operational rates are not complete")
+        for item in result["daily_report_audit"]["invalid_reports"]
+    )
 
 
 def test_no_held_positions_is_complete_risk_coverage(tmp_path):
