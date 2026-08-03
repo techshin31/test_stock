@@ -97,3 +97,11 @@
 - readiness에 dashboard 표본과 스트레스 리포트의 수치·상태 일치 검사를 추가: 8/15 evidence checks 통과, 표본 불일치 시 readiness 차단
 - API 경로 확인: `/api/healthz` 200·DB ready, `/api/dashboard?mode=PAPER`에서 동일 표본 진행률 반환, `/api/system-readiness?mode=PAPER`에서 `paper_runtime_safe=true`·`real_execution_authorized=false` 반환
 - 위 진단은 원인 가시성 보강이며 주문 정책·주문 권한은 변경하지 않음
+
+## 최신 품질·fallback 증거 부록 (2026-08-03 14:43 KST)
+
+- 데이터 품질 요약: 운영 관측 3,189건, 금일 scan 324건, 신호 근거 89/89 유효·0건 무효, 금일 readiness 차단 없음. 과거 품질 차단 날짜 7개는 원본을 수정하지 않고 그대로 보존함
+- 인시던트 요약: 총 66건(안전 제어 53, 비안전 13), 활성 0건. 이 분류는 설명용 증거이며 readiness gate를 완화하지 않음
+- 실행 스트레스의 `R_TREND_REARM`은 `IDEAL_FULL_FILL`·`STABILIZED_POSTERIOR_MEAN`에서 기준 전략보다 수익·MDD·회전율을 모두 개선했지만, `STABILIZED_WILSON_LOWER`에서는 수익이 기준 전략보다 낮아 모든 시나리오 통과 조건은 아직 충족하지 않음
+- `C_CAP10`/`C_CAP08`은 위험 fallback 후보로 계속 표시되며 관측 전용·주문 권한 `DENIED_BY_DESIGN`을 유지함. BUY·SELL 각 30건 전까지 `PROVISIONAL_SMALL_SAMPLE` 및 수동 검토를 유지함
+- 위 결과는 14:43 KST 증거 산출물과 동일하며, 전략·위험 한도·주문 권한을 변경하지 않음
