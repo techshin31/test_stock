@@ -215,6 +215,33 @@ def test_runtime_can_be_safe_while_completion_evidence_is_pending(tmp_path):
     assert result["real_execution_authorized"] is False
 
 
+def test_execution_stress_robustness_requires_side_samples_even_with_fallback(
+    tmp_path,
+):
+    _fixture(tmp_path, complete=False)
+    path = (
+        tmp_path
+        / "reports/analysis/paper_execution_stress_2026-07-22/summary.json"
+    )
+    stress = json.loads(path.read_text(encoding="utf-8"))
+    stress["risk_control_gate"] = {
+        "fallback_available": True,
+        "robust_variants": ["C_CAP10", "C_CAP08"],
+    }
+    _write(path, stress)
+
+    result = audit_system_readiness(
+        tmp_path,
+        now=dt.datetime(2026, 7, 22, 10, 2, tzinfo=KST),
+        environ={},
+    )
+
+    assert result["full_system_complete"] is False
+    assert any(
+        "execution_stress_robustness" in blocker for blocker in result["blockers"]
+    )
+
+
 def test_completion_requires_all_safety_and_evidence_checks(tmp_path):
     _fixture(tmp_path, complete=True)
 
