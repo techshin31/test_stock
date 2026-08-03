@@ -181,11 +181,17 @@ class FaTaMomentumStrategy(AbstractStrategy):
             elif curr_ma_fast < curr_ma:
                 target, reason = 0.0, "TA_MOMENTUM_LOSS"
             elif regime == MarketRegime.TRANSITION.name:
-                target = round(
-                    current_position * self.TRANSITION_KEEP_RATIO,
-                    4,
-                )
-                reason = "MARKET_TRANSITION_KEEP_HOLD"
+                if current_position <= self.TRANSITION_ENTRY_SIZE:
+                    # Do not immediately unwind a starter position created by
+                    # the transition-entry rule on the next scan.
+                    target = current_position
+                    reason = "MARKET_TRANSITION_ENTRY_HOLD"
+                else:
+                    target = round(
+                        current_position * self.TRANSITION_KEEP_RATIO,
+                        4,
+                    )
+                    reason = "MARKET_TRANSITION_KEEP_HOLD"
         elif regime == MarketRegime.TRANSITION.name:
             if self.TRANSITION_ENTRY_ENABLED:
                 valid_fa = (

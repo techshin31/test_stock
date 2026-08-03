@@ -116,6 +116,17 @@ def test_transition_keep_does_not_override_fundamental_exit():
     assert metadata["signal_reason"] == "FA_SCORE_DETERIORATED"
 
 
+def test_transition_entry_hold_does_not_immediately_rebalance():
+    strategy = FaTaMomentumStrategy({"ma_window": 20, "ma_window_fast": 5})
+
+    target, metadata = strategy.evaluate_latest(
+        _strategy_frame(), "TRANSITION", current_position=0.08
+    )
+
+    assert target == pytest.approx(0.08)
+    assert metadata["signal_reason"] == "MARKET_TRANSITION_ENTRY_HOLD"
+
+
 def test_transition_entry_can_be_disabled():
     strategy = FaTaMomentumStrategy({
         "ma_window": 20,
