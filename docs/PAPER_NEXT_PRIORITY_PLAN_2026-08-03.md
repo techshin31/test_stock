@@ -1,7 +1,7 @@
 # PAPER 자동매매 다음 우선순위 계획
 
-기준 시각: 2026-08-03 11:53 KST  
-운영 모드: `PAPER`  
+기준 시각: 2026-08-03 11:53 KST
+운영 모드: `PAPER`
 현재 결정: `REAL` 실행 및 자동 승격은 계속 차단
 
 ## 현재 확인된 상태
@@ -65,4 +65,3 @@
 2. 데이터 공백, broker 오류, 주문 억제는 원인별로 분류하되 readiness gate를 임의로 완화하지 않는다.
 3. 장중 주문 기록은 operational log, trade history, PostgreSQL orders/executions를 서로 대조한다.
 4. 보고서 생성 실패 시 실패 상태를 보존하고 다음 재시도에서만 복구를 시도한다.
-
