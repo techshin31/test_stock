@@ -81,6 +81,88 @@ def _classify_gap(
     return "REPEATED_BATCH_GAP"
 
 
+def _signal_evaluation(row: dict) -> dict | None:
+    """Return the diagnostic signal summary embedded in an observation."""
+    health = row.get("data_health") or {}
+    value = health.get("signal_evaluation")
+    if not isinstance(value, dict):
+        value = row.get("signal_evaluation")
+    return value if isinstance(value, dict) else None
+
+
+def _validate_signal_evaluation(row: dict, signal: dict) -> list[str]:
+    """Validate signal-reason counts without changing trading decisions."""
+    errors: list[str] = []
+    health = row.get("data_health") or {}
+    expected = int(health.get("expected_count") or 0)
+    try:
+        evaluated = int(signal.get("evaluated_count"))
+    except (TypeError, ValueError):
+        evaluated = -1
+        errors.append("evaluated_count is not an integer")
+    if expected > 0 and evaluated != expected:
+        errors.append(f"evaluated_count={evaluated} != expected_count={expected}")
+
+    reason_counts = signal.get("reason_counts")
+    if not isinstance(reason_counts, dict):
+        errors.append("reason_counts is not an object")
+    else:
+        try:
+            reason_total = sum(int(value) for value in reason_counts.values())
+        except (TypeError, ValueError):
+            reason_total = -1
+            errors.append("reason_counts contains a non-integer value")
+        if reason_total != evaluated:
+            errors.append(f"reason_total={reason_total} != evaluated_count={evaluated}")
+
+    try:
+        selected = int(signal.get("selected_count"))
+    except (TypeError, ValueError):
+        selected = -1
+        errors.append("selected_count is not an integer")
+    if selected < 0 or (evaluated >= 0 and selected > evaluated):
+        errors.append(f"selected_count={selected} is outside evaluated range")
+
+    try:
+        target_weight_sum = float(signal.get("target_weight_sum"))
+    except (TypeError, ValueError):
+        target_weight_sum = -1.0
+        errors.append("target_weight_sum is not numeric")
+    if target_weight_sum < 0:
+        errors.append(f"target_weight_sum={target_weight_sum} is negative")
+    return errors
+
+
+def _signal_quality(rows: list[dict]) -> dict:
+    """Profile coverage and internal consistency of signal diagnostics."""
+    observed = 0
+    valid = 0
+    invalid = 0
+    errors: list[str] = []
+    for row in rows:
+        signal = _signal_evaluation(row)
+        if signal is None:
+            continue
+        observed += 1
+        row_errors = _validate_signal_evaluation(row, signal)
+        if row_errors:
+            invalid += 1
+            timestamp = str(row.get("timestamp") or "unknown")
+            errors.extend(f"{timestamp}: {error}" for error in row_errors)
+        else:
+            valid += 1
+    coverage = observed / len(rows) if rows else 0.0
+    validity = valid / observed if observed else 0.0
+    return {
+        "observed_row_count": observed,
+        "valid_row_count": valid,
+        "invalid_row_count": invalid,
+        "coverage_rate": coverage,
+        "validity_rate": validity,
+        "errors": errors[:20],
+    }
+
+
 def build_report(
     log_path: Path,
     *,
@@ -110,6 +192,7 @@ def build_report(
     date_reports: list[dict] = []
     for expected_date in sorted(by_date):
         date_rows = by_date[expected_date]
+        signal_quality = _signal_quality(date_rows)
         expected_dates = sorted(
             {
                 str((row.get("data_health") or {}).get("expected_date") or "").strip()
@@ -194,6 +277,7 @@ def build_report(
                 "last_bad_observation_at": (
                     max(bad_timestamps).isoformat(timespec="seconds") if bad_timestamps else None
                 ),
+                "signal_evaluation": signal_quality,
             }
         )
 
@@ -204,6 +288,7 @@ def build_report(
     issue_dates = [
         row["observation_date"] for row in date_reports if row["quality_issue"]
     ]
+    signal_quality = _signal_quality(rows)
     return {
         "schema_version": 1,
         "generated_at": generated.isoformat(timespec="seconds"),
@@ -234,6 +319,7 @@ def build_report(
                 if any(_parse_timestamp(row.get("timestamp")) for row in rows)
                 else None
             ),
+            "signal_evaluation": signal_quality,
         },
         "date_reports": date_reports,
         "summary": {
@@ -242,6 +328,7 @@ def build_report(
             "quality_issue_date_count": len(issue_dates),
             "quality_issue_dates": issue_dates,
             "clean_date_count": len(date_reports) - len(blocked_dates),
+            "signal_evaluation": signal_quality,
             "evidence_policy": (
                 "Missing or stale observations remain blockers; this artifact never rewrites "
                 "historical scans or upgrades a date to READY."

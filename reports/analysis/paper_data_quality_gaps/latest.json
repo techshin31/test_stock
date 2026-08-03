@@ -1,17 +1,25 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-03T13:18:36+09:00",
+  "generated_at": "2026-08-03T13:27:30+09:00",
   "mode": "PAPER",
   "source": "logs/paper/operational_health.jsonl",
   "grain": "one operational health observation per trader scan",
   "freshness_gate": 0.995,
   "profile": {
-    "row_count": 3110,
+    "row_count": 3119,
     "date_count": 10,
     "parse_error_count": 0,
     "unscoped_row_count": 0,
     "first_observation_at": "2026-07-21T08:31:04+09:00",
-    "last_observation_at": "2026-08-03T13:18:28+09:00"
+    "last_observation_at": "2026-08-03T13:27:09+09:00",
+    "signal_evaluation": {
+      "observed_row_count": 19,
+      "valid_row_count": 19,
+      "invalid_row_count": 0,
+      "coverage_rate": 0.006091696056428343,
+      "validity_rate": 1.0,
+      "errors": []
+    }
   },
   "date_reports": [
     {
@@ -37,7 +45,15 @@
         "KOSPI 시장국면 오류: KOSPI 데이터가 오래됨(last=2026-07-16, expected=2026-07-20)": 37
       },
       "first_bad_observation_at": "2026-07-21T09:14:51+09:00",
-      "last_bad_observation_at": "2026-07-21T09:38:51+09:00"
+      "last_bad_observation_at": "2026-07-21T09:38:51+09:00",
+      "signal_evaluation": {
+        "observed_row_count": 0,
+        "valid_row_count": 0,
+        "invalid_row_count": 0,
+        "coverage_rate": 0.0,
+        "validity_rate": 0.0,
+        "errors": []
+      }
     },
     {
       "observation_date": "2026-07-22",
@@ -60,7 +76,15 @@
       "stale_ticker_counts": {},
       "dependency_error_counts": {},
       "first_bad_observation_at": null,
-      "last_bad_observation_at": null
+      "last_bad_observation_at": null,
+      "signal_evaluation": {
+        "observed_row_count": 0,
+        "valid_row_count": 0,
+        "invalid_row_count": 0,
+        "coverage_rate": 0.0,
+        "validity_rate": 0.0,
+        "errors": []
+      }
     },
     {
       "observation_date": "2026-07-23",
@@ -83,7 +107,15 @@
       "stale_ticker_counts": {},
       "dependency_error_counts": {},
       "first_bad_observation_at": null,
-      "last_bad_observation_at": null
+      "last_bad_observation_at": null,
+      "signal_evaluation": {
+        "observed_row_count": 0,
+        "valid_row_count": 0,
+        "invalid_row_count": 0,
+        "coverage_rate": 0.0,
+        "validity_rate": 0.0,
+        "errors": []
+      }
     },
     {
       "observation_date": "2026-07-24",
@@ -137,7 +169,15 @@
         "KOSPI 시장국면 오류: KOSPI 지수 데이터를 가져올 수 없습니다. (티커: ^KS11)": 1
       },
       "first_bad_observation_at": "2026-07-24T09:11:42+09:00",
-      "last_bad_observation_at": "2026-07-24T10:22:20+09:00"
+      "last_bad_observation_at": "2026-07-24T10:22:20+09:00",
+      "signal_evaluation": {
+        "observed_row_count": 0,
+        "valid_row_count": 0,
+        "invalid_row_count": 0,
+        "coverage_rate": 0.0,
+        "validity_rate": 0.0,
+        "errors": []
+      }
     },
     {
       "observation_date": "2026-07-27",
@@ -189,7 +229,15 @@
       "stale_ticker_counts": {},
       "dependency_error_counts": {},
       "first_bad_observation_at": "2026-07-27T14:22:32+09:00",
-      "last_bad_observation_at": "2026-07-27T14:22:32+09:00"
+      "last_bad_observation_at": "2026-07-27T14:22:32+09:00",
+      "signal_evaluation": {
+        "observed_row_count": 0,
+        "valid_row_count": 0,
+        "invalid_row_count": 0,
+        "coverage_rate": 0.0,
+        "validity_rate": 0.0,
+        "errors": []
+      }
     },
     {
       "observation_date": "2026-07-28",
@@ -228,7 +276,15 @@
       "stale_ticker_counts": {},
       "dependency_error_counts": {},
       "first_bad_observation_at": "2026-07-28T14:15:58+09:00",
-      "last_bad_observation_at": "2026-07-28T14:17:21+09:00"
+      "last_bad_observation_at": "2026-07-28T14:17:21+09:00",
+      "signal_evaluation": {
+        "observed_row_count": 0,
+        "valid_row_count": 0,
+        "invalid_row_count": 0,
+        "coverage_rate": 0.0,
+        "validity_rate": 0.0,
+        "errors": []
+      }
     },
     {
       "observation_date": "2026-07-29",
@@ -253,7 +309,15 @@
       "stale_ticker_counts": {},
       "dependency_error_counts": {},
       "first_bad_observation_at": "2026-07-29T13:29:09+09:00",
-      "last_bad_observation_at": "2026-07-29T13:57:36+09:00"
+      "last_bad_observation_at": "2026-07-29T13:57:36+09:00",
+      "signal_evaluation": {
+        "observed_row_count": 0,
+        "valid_row_count": 0,
+        "invalid_row_count": 0,
+        "coverage_rate": 0.0,
+        "validity_rate": 0.0,
+        "errors": []
+      }
     },
     {
       "observation_date": "2026-07-30",
@@ -282,7 +346,15 @@
         "KOSPI 시장국면 오류: KOSPI 지수 데이터를 가져올 수 없습니다. (티커: ^KS11)": 1
       },
       "first_bad_observation_at": "2026-07-30T12:33:59+09:00",
-      "last_bad_observation_at": "2026-07-30T12:33:59+09:00"
+      "last_bad_observation_at": "2026-07-30T12:33:59+09:00",
+      "signal_evaluation": {
+        "observed_row_count": 0,
+        "valid_row_count": 0,
+        "invalid_row_count": 0,
+        "coverage_rate": 0.0,
+        "validity_rate": 0.0,
+        "errors": []
+      }
     },
     {
       "observation_date": "2026-07-31",
@@ -310,14 +382,22 @@
         "KOSPI 시장국면 오류: KOSPI 지수 데이터를 가져올 수 없습니다. (티커: ^KS11)": 2
       },
       "first_bad_observation_at": "2026-07-31T09:01:08+09:00",
-      "last_bad_observation_at": "2026-07-31T10:13:29+09:00"
+      "last_bad_observation_at": "2026-07-31T10:13:29+09:00",
+      "signal_evaluation": {
+        "observed_row_count": 0,
+        "valid_row_count": 0,
+        "invalid_row_count": 0,
+        "coverage_rate": 0.0,
+        "validity_rate": 0.0,
+        "errors": []
+      }
     },
     {
       "observation_date": "2026-08-03",
       "expected_dates": [
         "2026-07-31"
       ],
-      "scan_count": 245,
+      "scan_count": 254,
       "expected_count_mode": 50,
       "affected_scan_count": 0,
       "affected_scan_rate": 0.0,
@@ -333,7 +413,15 @@
       "stale_ticker_counts": {},
       "dependency_error_counts": {},
       "first_bad_observation_at": null,
-      "last_bad_observation_at": null
+      "last_bad_observation_at": null,
+      "signal_evaluation": {
+        "observed_row_count": 19,
+        "valid_row_count": 19,
+        "invalid_row_count": 0,
+        "coverage_rate": 0.07480314960629922,
+        "validity_rate": 1.0,
+        "errors": []
+      }
     }
   ],
   "summary": {
@@ -358,6 +446,14 @@
       "2026-07-31"
     ],
     "clean_date_count": 3,
+    "signal_evaluation": {
+      "observed_row_count": 19,
+      "valid_row_count": 19,
+      "invalid_row_count": 0,
+      "coverage_rate": 0.006091696056428343,
+      "validity_rate": 1.0,
+      "errors": []
+    },
     "evidence_policy": "Missing or stale observations remain blockers; this artifact never rewrites historical scans or upgrades a date to READY."
   }
 }
