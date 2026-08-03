@@ -958,6 +958,7 @@ class LiveTrader:
             for detail in details.values()
         )
         condition_breakdown = Counter()
+        ta_failure_breakdown = Counter()
         for detail in details.values():
             if str((detail or {}).get("signal_reason")) != "ENTRY_CONDITIONS_NOT_MET":
                 continue
@@ -971,6 +972,23 @@ class LiveTrader:
                 condition_breakdown["FA_PASS_TA_PASS"] += 1
             else:
                 condition_breakdown["UNAVAILABLE"] += 1
+            if ta_met is not False:
+                continue
+            try:
+                if float((detail or {}).get("close")) <= float((detail or {}).get("ma")):
+                    ta_failure_breakdown["CLOSE_NOT_ABOVE_MA"] += 1
+            except (TypeError, ValueError):
+                ta_failure_breakdown["CLOSE_MA_UNAVAILABLE"] += 1
+            try:
+                if float((detail or {}).get("ma_fast")) <= float((detail or {}).get("ma")):
+                    ta_failure_breakdown["FAST_MA_NOT_ABOVE_MA"] += 1
+            except (TypeError, ValueError):
+                ta_failure_breakdown["FAST_MA_UNAVAILABLE"] += 1
+            try:
+                if float((detail or {}).get("momentum")) <= 0:
+                    ta_failure_breakdown["MOMENTUM_NON_POSITIVE"] += 1
+            except (TypeError, ValueError):
+                ta_failure_breakdown["MOMENTUM_UNAVAILABLE"] += 1
         selected_count = sum(
             float(targets.get(ticker, 0.0) or 0.0) > 0.0 for ticker in targets
         )
@@ -982,6 +1000,7 @@ class LiveTrader:
             ),
             "reason_counts": dict(sorted(reason_counts.items())),
             "condition_breakdown": dict(sorted(condition_breakdown.items())),
+            "ta_failure_breakdown": dict(sorted(ta_failure_breakdown.items())),
         }
 
     @staticmethod

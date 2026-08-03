@@ -616,6 +616,10 @@ def test_signal_evaluation_summary_explains_quiet_scans():
                 "signal_reason": "ENTRY_CONDITIONS_NOT_MET",
                 "fa_conditions_met": True,
                 "ta_conditions_met": False,
+                "close": 90,
+                "ma": 100,
+                "ma_fast": 95,
+                "momentum": -0.01,
             },
             "B.KS": {"signal_reason": "MARKET_TRANSITION_KEEP_HOLD"},
             "C.KS": {"signal_reason": "TRANSITION_ENTRY"},
@@ -632,6 +636,11 @@ def test_signal_evaluation_summary_explains_quiet_scans():
         "TRANSITION_ENTRY": 1,
     }
     assert summary["condition_breakdown"] == {"FA_PASS_TA_FAIL": 1}
+    assert summary["ta_failure_breakdown"] == {
+        "CLOSE_NOT_ABOVE_MA": 1,
+        "FAST_MA_NOT_ABOVE_MA": 1,
+        "MOMENTUM_NON_POSITIVE": 1,
+    }
 
 
 def test_aggressive_news_timeline_update_replaces_dashboard_atomically(tmp_path):

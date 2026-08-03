@@ -82,3 +82,11 @@
 2. 데이터 공백, broker 오류, 주문 억제는 원인별로 분류하되 readiness gate를 임의로 완화하지 않는다.
 3. 장중 주문 기록은 operational log, trade history, PostgreSQL orders/executions를 서로 대조한다.
 4. 보고서 생성 실패 시 실패 상태를 보존하고 다음 재시도에서만 복구를 시도한다.
+
+## 최신 장중 진단 증거 부록 (2026-08-03 13:49 KST)
+
+- `FA_PASS_TA_FAIL`: 46건, `FA_FAIL_TA_FAIL`: 1건
+- TA 실패 세부: `CLOSE_NOT_ABOVE_MA` 43건, `FAST_MA_NOT_ABOVE_MA` 42건, `MOMENTUM_NON_POSITIVE` 40건 (조건별 중복 집계)
+- 신호 증거 검증: 37건 관측, 37건 유효, 0건 무효 (`validity_rate=1.0`)
+- 금일 데이터 품질: scan 272건, 신호 증거 37건 유효 (`coverage_rate=0.1360`)
+- 위 진단은 원인 가시성 보강이며 주문 정책·주문 권한은 변경하지 않음
