@@ -300,6 +300,7 @@ class LiveTrader:
         if not getattr(self.broker, "is_simulated", False):
             self._sync_balance_and_positions(balance_info, total_eval)
             self._reconcile_open_orders(positions)
+            self._reconcile_trade_history_with_db()
             try:
                 self._assert_no_unresolved_orders()
             except RuntimeError as exc:
@@ -1435,6 +1436,158 @@ class LiveTrader:
                 }
                 handle.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
 
+    def _append_trade_history_reconciliation(
+        self, broker_order_id, final_status, status_payload=None
+    ):
+        """Append a final broker-status correction without rewriting raw history.
+
+        The first broker poll can return ``PARTIAL`` while a later
+        reconciliation poll proves ``FILLED``. Keeping only the first result
+        makes the intraday log disagree with the database ledger. An
+        append-only correction preserves that raw observation and records the
+        later authoritative status for evidence builders.
+        """
+        broker_id = str(broker_order_id or "").strip()
+        if not broker_id:
+            return False
+        path = self.log_dir / "trade_history.jsonl"
+        if not path.exists():
+            return False
+
+        latest = None
+        try:
+            for raw in path.read_text(encoding="utf-8").splitlines():
+                if not raw.strip():
+                    continue
+                try:
+                    row = json.loads(raw)
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    continue
+                if str(row.get("broker_order_id") or "").strip() == broker_id:
+                    latest = row
+        except OSError as exc:
+            logging.warning("trade history reconciliation read failed: %s", exc)
+            return False
+
+        normalized_status = str(final_status or "").upper()
+        if not latest or str(latest.get("status") or "").upper() == normalized_status:
+            return False
+
+        timestamp = datetime.datetime.now().isoformat(timespec="seconds")
+        correction = {
+            **latest,
+            "timestamp": timestamp,
+            "status": final_status,
+            "previous_status": latest.get("status"),
+            "status_source": "PAPER_ORDER_RECONCILIATION",
+            "reconciliation_event": "ORDER_STATUS_CORRECTION",
+            "reconciled_at": timestamp,
+        }
+        if isinstance(status_payload, dict):
+            for key in (
+                "ordered_qty",
+                "filled_qty",
+                "remaining_qty",
+                "avg_fill_price",
+                "total_fill_amount",
+            ):
+                if key in status_payload:
+                    correction[key] = status_payload[key]
+            raw_payload = status_payload.get("raw") or {}
+            correction["reconciliation_source"] = (
+                raw_payload.get("source", "BROKER_STATUS_RECONCILIATION")
+                if isinstance(raw_payload, dict)
+                else "BROKER_STATUS_RECONCILIATION"
+            )
+
+        try:
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(
+                    json.dumps(correction, ensure_ascii=False, default=str) + "\n"
+                )
+        except OSError as exc:
+            logging.warning("trade history reconciliation write failed: %s", exc)
+            return False
+        return True
+
+    def _reconcile_trade_history_with_db(self):
+        """Backfill terminal statuses for today's raw trade-history events.
+
+        A prior scan may have logged ``PARTIAL`` before a later scan resolved
+        the same order to ``FILLED``. This read-only pass joins those raw log
+        rows to the scoped order table so the correction is recorded even when
+        the database order is already terminal and no longer appears in the
+        open-order reconciliation query.
+        """
+        path = self.log_dir / "trade_history.jsonl"
+        if not path.exists():
+            return 0
+        today = datetime.date.today().isoformat()
+        open_statuses = {"PENDING", "SUBMITTED", "ACCEPTED", "PARTIAL", "UNKNOWN"}
+        pending_ids = set()
+        try:
+            for raw in path.read_text(encoding="utf-8").splitlines():
+                if not raw.strip():
+                    continue
+                try:
+                    row = json.loads(raw)
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    continue
+                if not str(row.get("timestamp") or "").startswith(today):
+                    continue
+                if str(row.get("status") or "").upper() not in open_statuses:
+                    continue
+                broker_id = str(row.get("broker_order_id") or "").strip()
+                if broker_id:
+                    pending_ids.add(broker_id)
+        except OSError as exc:
+            logging.warning("trade history reconciliation scan failed: %s", exc)
+            return 0
+        if not pending_ids:
+            return 0
+
+        try:
+            strategy_name, execution_venue, account_scope = self._order_scope()
+            rows = self.db.fetch_all(
+                """SELECT o.broker_order_id, o.order_status_code, o.qty,
+                          o.filled_qty, o.avg_fill_price
+                   FROM orders o
+                   JOIN strategies s ON s.id = o.strategy_id
+                   WHERE o.created_at::date = CURRENT_DATE
+                     AND o.broker_order_id = ANY(%s)
+                     AND s.name = %s
+                     AND o.execution_venue_code = %s
+                     AND o.account_scope = %s""",
+                (list(pending_ids), strategy_name, execution_venue, account_scope),
+            )
+        except Exception as exc:
+            logging.warning("trade history reconciliation query failed: %s", exc)
+            return 0
+
+        corrections = 0
+        for row in rows:
+            final_status = str(row.get("order_status_code") or "").upper()
+            if final_status not in {"FILLED", "CANCELLED", "REJECTED"}:
+                continue
+            broker_id = str(row.get("broker_order_id") or "").strip()
+            if self._append_trade_history_reconciliation(
+                broker_id,
+                final_status,
+                {
+                    "ordered_qty": row.get("qty"),
+                    "filled_qty": row.get("filled_qty"),
+                    "remaining_qty": max(
+                        float(row.get("qty") or 0)
+                        - float(row.get("filled_qty") or 0),
+                        0.0,
+                    ),
+                    "avg_fill_price": row.get("avg_fill_price"),
+                    "raw": {"source": "PAPER_TRADE_HISTORY_DB_RECONCILIATION"},
+                },
+            ):
+                corrections += 1
+        return corrections
+
     def _apply_portfolio_limits(self, targets, details, positions):
         """Allocate 90% exposure by FA conviction above the entry threshold."""
         result = dict(targets)
@@ -2388,10 +2541,14 @@ class LiveTrader:
                     continue
             try:
                 status = self.broker.get_order_status(row['broker_order_id'])
-                self._record_broker_status(
+                final_status = self._record_broker_status(
                     row['id'], row['symbol'], row['order_side_code'],
                     float(row['price'] or 0), row['broker_order_id'], status,
                 )
+                if final_status in {"FILLED", "CANCELLED", "REJECTED"}:
+                    self._append_trade_history_reconciliation(
+                        row['broker_order_id'], final_status, status
+                    )
             except Exception as e:
                 logging.warning(f"열린 주문 {row['id']} 정산 보류: {e}")
 
@@ -2426,10 +2583,14 @@ class LiveTrader:
                     "total_fill_amount": filled_qty * float(row['price']),
                     "raw": {"source": "PAPER_POSITION_RECONCILIATION"},
                 }
-                self._record_broker_status(
+                final_status = self._record_broker_status(
                     row['id'], ticker, 'SELL', float(row['price']),
                     row['broker_order_id'] or 'BALANCE', synthetic,
                 )
+                if final_status in {"FILLED", "CANCELLED", "REJECTED"}:
+                    self._append_trade_history_reconciliation(
+                        row['broker_order_id'], final_status, synthetic
+                    )
 
     def _unknown_order_grace_elapsed(self, row, now=None):
         created_at = row.get('created_at')

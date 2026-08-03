@@ -591,6 +591,95 @@ def test_json_state_writer_replaces_dashboard_state_without_leaving_temp_file(tm
     assert not path.with_suffix(".json.tmp").exists()
 
 
+def test_trade_history_reconciliation_appends_final_status_once(tmp_path):
+    trader = object.__new__(LiveTrader)
+    trader.execution_venue = "PAPER"
+    trader.strategy_name = "aggressive"
+    trader.log_dir = tmp_path
+
+    trader.append_trade_history([
+        {
+            "type": "BUY",
+            "ticker": "005930.KS",
+            "qty": 10,
+            "reason": "FA+TA ENTRY",
+            "broker_order_id": "0000012345",
+            "status": "PARTIAL",
+        }
+    ])
+    status = {
+        "status": "FILLED",
+        "ordered_qty": 10,
+        "filled_qty": 10,
+        "remaining_qty": 0,
+        "avg_fill_price": 70_000,
+        "total_fill_amount": 700_000,
+        "raw": {"source": "BROKER_STATUS_RECONCILIATION"},
+    }
+
+    assert trader._append_trade_history_reconciliation(
+        "0000012345", "FILLED", status
+    ) is True
+    assert trader._append_trade_history_reconciliation(
+        "0000012345", "FILLED", status
+    ) is False
+
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "trade_history.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert len(rows) == 2
+    assert rows[-1]["status"] == "FILLED"
+    assert rows[-1]["previous_status"] == "PARTIAL"
+    assert rows[-1]["status_source"] == "PAPER_ORDER_RECONCILIATION"
+    assert rows[-1]["reconciliation_event"] == "ORDER_STATUS_CORRECTION"
+    assert rows[-1]["filled_qty"] == 10
+
+
+def test_trade_history_db_reconciliation_repairs_terminal_order(tmp_path):
+    class FakeDB:
+        def fetch_all(self, query, params):
+            return [{
+                "broker_order_id": "0000012345",
+                "order_status_code": "FILLED",
+                "qty": 10,
+                "filled_qty": 10,
+                "avg_fill_price": 70_000,
+            }]
+
+    trader = object.__new__(LiveTrader)
+    trader.execution_venue = "PAPER"
+    trader.strategy_name = "aggressive"
+    trader.log_dir = tmp_path
+    trader.db = FakeDB()
+    trader.broker = type("Broker", (), {"masked_account": "***1234-01"})()
+    trader.append_trade_history([
+        {
+            "type": "BUY",
+            "ticker": "005930.KS",
+            "qty": 10,
+            "reason": "FA+TA ENTRY",
+            "broker_order_id": "0000012345",
+            "status": "PARTIAL",
+        }
+    ])
+
+    assert trader._reconcile_trade_history_with_db() == 1
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "trade_history.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert rows[-1]["status"] == "FILLED"
+    assert rows[-1]["reconciliation_source"] == (
+        "PAPER_TRADE_HISTORY_DB_RECONCILIATION"
+    )
+    assert trader._reconcile_trade_history_with_db() == 0
+
+
 def test_snapshot_only_capture_is_scoped_and_places_no_order(tmp_path):
     class ReadOnlyBroker:
         masked_account = "1234****"
