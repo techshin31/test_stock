@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-03T14:18:46+09:00",
+  "generated_at": "2026-08-03T15:37:33+09:00",
   "scope": "PAPER_AUTOMATED_TRADING_SYSTEM",
   "paper_runtime_safe": true,
   "full_system_complete": false,
@@ -16,11 +16,11 @@
       "required": 10
     },
     "paper_sessions": {
-      "completed": 9,
+      "completed": 10,
       "required": 60
     },
     "final_daily_reports": {
-      "completed": 3,
+      "completed": 4,
       "required": 60
     },
     "evidence_checks": {
@@ -86,7 +86,7 @@
     {
       "name": "dashboard_freshness",
       "passed": true,
-      "detail": "age_seconds=2, limit=300"
+      "detail": "age_seconds=977, limit=86400"
     },
     {
       "name": "real_environment_disabled",
@@ -103,17 +103,17 @@
     {
       "name": "latest_final_report",
       "passed": true,
-      "detail": "date=2026-07-31, expected=2026-07-31, status=FINAL, validation=READY"
+      "detail": "date=2026-08-03, expected=2026-08-03, status=FINAL, validation=READY"
     },
     {
       "name": "daily_final_report_coverage",
       "passed": false,
-      "detail": "covered=3/9, missing=['2026-07-24', '2026-07-27', '2026-07-28', '2026-07-29', '2026-07-30'], invalid=6"
+      "detail": "covered=4/10, missing=['2026-07-24', '2026-07-27', '2026-07-28', '2026-07-29', '2026-07-30'], invalid=6"
     },
     {
       "name": "latest_eod_operational_integrity",
       "passed": false,
-      "detail": "data=0.9972826086956522, risk=1.0, reconciliation=1.0, integrity=0.9972826086956522, open_orders=0, critical_incidents=27"
+      "detail": "data=1.0, risk=1.0, reconciliation=1.0, integrity=1.0, open_orders=0, critical_incidents=3"
     },
     {
       "name": "scheduler_recovery_self_test",
@@ -123,7 +123,7 @@
     {
       "name": "broker_history_audit",
       "passed": true,
-      "detail": "complete=True, unresolved=0, through=2026-07-31"
+      "detail": "complete=True, unresolved=0, through=2026-08-03"
     },
     {
       "name": "historical_fill_evidence",
@@ -168,22 +168,22 @@
     {
       "name": "paper_operating_window",
       "passed": false,
-      "detail": "9/60 completed PAPER sessions"
+      "detail": "10/60 completed PAPER sessions"
     },
     {
       "name": "paper_final_report_window",
       "passed": false,
-      "detail": "3/60 FINAL/READY daily reports"
+      "detail": "4/60 FINAL/READY daily reports"
     }
   ],
   "blockers": [
-    "daily_final_report_coverage: covered=3/9, missing=['2026-07-24', '2026-07-27', '2026-07-28', '2026-07-29', '2026-07-30'], invalid=6",
-    "latest_eod_operational_integrity: data=0.9972826086956522, risk=1.0, reconciliation=1.0, integrity=0.9972826086956522, open_orders=0, critical_incidents=27",
+    "daily_final_report_coverage: covered=4/10, missing=['2026-07-24', '2026-07-27', '2026-07-28', '2026-07-29', '2026-07-30'], invalid=6",
+    "latest_eod_operational_integrity: data=1.0, risk=1.0, reconciliation=1.0, integrity=1.0, open_orders=0, critical_incidents=3",
     "execution_stress_robustness: sample_ready=False, risk_fallbacks=['C_CAP10', 'C_CAP08']",
     "shadow_observation_integrity: declared=9, unique=9, covered_by_operations=9, covered_by_reports=3, errors=[]",
     "shadow_observation_window: 9/10 verified sessions",
-    "paper_operating_window: 9/60 completed PAPER sessions",
-    "paper_final_report_window: 3/60 FINAL/READY daily reports"
+    "paper_operating_window: 10/60 completed PAPER sessions",
+    "paper_final_report_window: 4/60 FINAL/READY daily reports"
   ],
   "sources": [
     "logs/paper/dashboard_state.json",

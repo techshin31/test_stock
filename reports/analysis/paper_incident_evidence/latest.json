@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-03T14:43:28+09:00",
+  "generated_at": "2026-08-03T15:30:59+09:00",
   "mode": "PAPER",
-  "source": "logs/paper/operational_health.jsonl",
-  "through_date": null,
+  "source": "/app/logs/paper/operational_health.jsonl",
+  "through_date": "2026-08-03",
   "grain": "one extracted incident episode",
   "summary": {
     "episode_count": 66,

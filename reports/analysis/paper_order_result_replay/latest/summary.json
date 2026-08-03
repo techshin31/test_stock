@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-03T11:04:05+09:00",
+  "generated_at": "2026-08-03T15:30:38+09:00",
   "mode": "PAPER",
   "observe_only": true,
   "broker_write_permission": "DENIED_BY_DESIGN",
@@ -15,8 +15,8 @@
     }
   },
   "raw_replay": {
-    "ending_cash": 305952485.0754,
-    "cash_difference_vs_endpoint": 424069.07539999485,
+    "ending_cash": 305951955.49050003,
+    "cash_difference_vs_endpoint": 423539.4905000329,
     "ending_positions": {
       "021240": 469.0,
       "078930": 509.0,
@@ -25,8 +25,8 @@
     "position_gaps": []
   },
   "calibration": {
-    "opening_cash_required": 499575930.9246002,
-    "opening_cash_difference_vs_500m": -424069.07539981604,
+    "opening_cash_required": 499576460.5095002,
+    "opening_cash_difference_vs_500m": -423539.4904997945,
     "cash_tolerance": 500000.0,
     "cash_tolerance_ratio": 0.001,
     "reconciled_from_starting_capital_within_tolerance": true,
@@ -35,8 +35,8 @@
     "note": "These are reconciliation balances, not fabricated trades."
   },
   "calibrated_replay": {
-    "ending_cash": 305528416.00000024,
-    "cash_difference_vs_endpoint": 2.384185791015625e-07,
+    "ending_cash": 305528416.0000003,
+    "cash_difference_vs_endpoint": 2.980232238769531e-07,
     "ending_positions": {
       "021240": 469.0,
       "078930": 509.0,
@@ -57,7 +57,7 @@
     "exact_endpoint_parity": true,
     "calibration_free_from_500m": false,
     "reconciled_from_500m_within_tolerance": true,
-    "opening_cash_difference_abs": 424069.07539981604,
+    "opening_cash_difference_abs": 423539.4904997945,
     "opening_cash_tolerance": 500000.0,
     "full_priced_fill_coverage": true,
     "blockers": []

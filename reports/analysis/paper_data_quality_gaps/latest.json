@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-03T14:43:25+09:00",
+  "generated_at": "2026-08-03T15:30:59+09:00",
   "mode": "PAPER",
-  "source": "logs/paper/operational_health.jsonl",
+  "source": "/app/logs/paper/operational_health.jsonl",
   "grain": "one operational health observation per trader scan",
   "freshness_gate": 0.995,
   "profile": {
-    "row_count": 3189,
+    "row_count": 3226,
     "date_count": 10,
     "parse_error_count": 0,
     "unscoped_row_count": 0,
     "first_observation_at": "2026-07-21T08:31:04+09:00",
-    "last_observation_at": "2026-08-03T14:43:02+09:00",
+    "last_observation_at": "2026-08-03T15:21:17+09:00",
     "signal_evaluation": {
-      "observed_row_count": 89,
-      "valid_row_count": 89,
+      "observed_row_count": 126,
+      "valid_row_count": 126,
       "invalid_row_count": 0,
-      "coverage_rate": 0.027908435246158672,
+      "coverage_rate": 0.03905765654060756,
       "validity_rate": 1.0,
       "errors": []
     }
@@ -397,7 +397,7 @@
       "expected_dates": [
         "2026-07-31"
       ],
-      "scan_count": 324,
+      "scan_count": 361,
       "expected_count_mode": 50,
       "affected_scan_count": 0,
       "affected_scan_rate": 0.0,
@@ -415,10 +415,10 @@
       "first_bad_observation_at": null,
       "last_bad_observation_at": null,
       "signal_evaluation": {
-        "observed_row_count": 89,
-        "valid_row_count": 89,
+        "observed_row_count": 126,
+        "valid_row_count": 126,
         "invalid_row_count": 0,
-        "coverage_rate": 0.27469135802469136,
+        "coverage_rate": 0.3490304709141274,
         "validity_rate": 1.0,
         "errors": []
       }
@@ -447,10 +447,10 @@
     ],
     "clean_date_count": 3,
     "signal_evaluation": {
-      "observed_row_count": 89,
-      "valid_row_count": 89,
+      "observed_row_count": 126,
+      "valid_row_count": 126,
       "invalid_row_count": 0,
-      "coverage_rate": 0.027908435246158672,
+      "coverage_rate": 0.03905765654060756,
       "validity_rate": 1.0,
       "errors": []
     },
