@@ -1,19 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-03T11:40:42+09:00",
+  "generated_at": "2026-08-03T12:09:35+09:00",
   "mode": "PAPER",
-  "source": "logs\\paper\\operational_health.jsonl",
+  "source": "logs/paper/operational_health.jsonl",
   "through_date": null,
   "grain": "one extracted incident episode",
   "summary": {
-    "episode_count": 65,
+    "episode_count": 66,
     "safety_control_episode_count": 53,
-    "non_safety_episode_count": 12,
+    "non_safety_episode_count": 13,
     "active_episode_count": 0,
     "event_class_counts": {
       "SAFETY_CONTROL": 53,
       "DATA_DEPENDENCY": 4,
-      "EXTERNAL_DEPENDENCY": 7,
+      "EXTERNAL_DEPENDENCY": 8,
       "INFRASTRUCTURE": 1
     },
     "policy": "This is explanatory evidence only. It does not reclassify or relax the existing readiness gate."
@@ -200,18 +200,21 @@
     },
     {
       "date": "2026-08-03",
-      "episode_count": 2,
+      "episode_count": 3,
       "safety_control_episode_count": 2,
-      "non_safety_episode_count": 0,
+      "non_safety_episode_count": 1,
       "active_episode_count": 0,
       "event_class_counts": {
-        "SAFETY_CONTROL": 2
+        "SAFETY_CONTROL": 2,
+        "EXTERNAL_DEPENDENCY": 1
       },
       "status_counts": {
-        "ORDER_RECONCILIATION": 2
+        "ORDER_RECONCILIATION": 2,
+        "ERROR": 1
       },
       "top_summaries": {
-        "주문 정산 대기": 2
+        "주문 정산 대기": 2,
+        "BROKER_TRANSPORT_ERROR | 차단사유 (FILLED_ORDER_TODAY: 3건)": 1
       }
     }
   ]
