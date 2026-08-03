@@ -369,6 +369,46 @@ def test_price_deviation_blocks_order_before_db_claim(monkeypatch):
     assert broker.place_calls == 0
 
 
+def test_signal_close_reference_does_not_block_fresh_market_order(monkeypatch):
+    broker = SafeBroker(price=110)
+    trader = _bare_trader(broker)
+    captured = {}
+    monkeypatch.setattr(
+        "storage.postgres.repositories.order_repo.create_order",
+        lambda db, data: captured.update(data) or "local-id",
+    )
+    monkeypatch.setattr(
+        "storage.postgres.repositories.order_repo.mark_order_submitted",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "storage.postgres.repositories.order_repo.attach_broker_order_id",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "storage.postgres.repositories.order_repo.update_order_status",
+        lambda *args, **kwargs: None,
+    )
+    trader._record_broker_status = lambda *args: "ACCEPTED"
+
+    result = trader._execute_orders([{
+        "type": "BUY",
+        "ticker": "005930.KS",
+        "qty": 1,
+        "expected_price": 100,
+        "price_reference_source": "SIGNAL_CLOSE",
+        "reason": "test",
+        "idempotency_key": "signal-close-key",
+    }])
+
+    assert result[0]["status"] == "ACCEPTED"
+    assert result[0]["price_guard_status"] == "REFERENCE_ONLY"
+    assert result[0]["signal_reference_price"] == 100
+    assert result[0]["observed_price"] == 110
+    assert captured["price"] == 110
+    assert broker.place_calls == 1
+
+
 def test_price_deviation_does_not_block_risk_sell(monkeypatch):
     broker = SafeBroker(price=90)
     trader = _bare_trader(broker)

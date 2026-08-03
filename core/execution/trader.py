@@ -1652,6 +1652,8 @@ class LiveTrader:
                         "expected_price": float(current_price),
                         "reason": f"REBALANCE_WEIGHT_REDUCTION_FROM_{int(current_value/total_eval*100)}%_TO_{int(target_weight*100)}%"
                     }
+            if candidate:
+                candidate["price_reference_source"] = "BROKER_BALANCE"
             if candidate and can_order(ticker, 'SELL', candidate.get("reason")):
                 orders.append(add_identity(candidate))
                     
@@ -1730,6 +1732,10 @@ class LiveTrader:
                 and hedge_exit_tickers
             ):
                 candidate["requires_prior_sell_fills"] = hedge_exit_tickers
+            if candidate:
+                candidate["price_reference_source"] = (
+                    "BROKER_BALANCE" if ticker in current_positions else "SIGNAL_CLOSE"
+                )
             if candidate and can_order(ticker, 'BUY', candidate.get("reason")):
                 orders.append(add_identity(candidate))
                     
@@ -1802,15 +1808,39 @@ class LiveTrader:
                     ticker,
                     failure_code,
                 )
-                results.append({**order, "status": "SKIPPED", "message": failure_code})
+                results.append({
+                    **order,
+                    "status": "SKIPPED",
+                    "message": failure_code,
+                    "execution_stage": "PRICE_LOOKUP",
+                    "broker_failure_code": failure_code,
+                })
                 continue
 
             expected_price = float(order.get("expected_price") or current_price)
             deviation = abs(current_price - expected_price) / expected_price
+            reference_source = str(
+                order.get("price_reference_source") or "EXPLICIT"
+            )
+            order["price_reference_source"] = reference_source
+            order["signal_reference_price"] = expected_price
+            order["observed_price"] = current_price
+            order["signal_reference_deviation"] = round(deviation, 8)
+            order["price_observed_at"] = datetime.datetime.now(
+                ZoneInfo("Asia/Seoul")
+            ).isoformat(timespec="seconds")
+            # A generated market order carries the previous validated close as a
+            # signal reference, not a limit price.  Use the fresh broker quote
+            # for sizing and fill accounting while retaining the drift in audit.
+            if action == "BUY" and reference_source == "SIGNAL_CLOSE":
+                order["price_guard_status"] = "REFERENCE_ONLY"
+                expected_price = current_price
+                deviation = 0.0
             if action == "BUY" and deviation > self.max_price_deviation:
                 msg = f"가격 편차 {deviation:.2%}가 허용치 {self.max_price_deviation:.2%}를 초과"
                 logging.warning(f"[{ticker}] {msg}")
                 self._record_price_guard(ticker, action, deviation)
+                order["execution_stage"] = "PRICE_GUARD"
                 results.append({**order, "status": "SKIPPED", "message": msg})
                 continue
 
@@ -1843,6 +1873,7 @@ class LiveTrader:
             
             # DB에 주문 의도를 선점하지 못하면 실제 주문을 절대 전송하지 않는다.
             order_id = None
+            order["execution_stage"] = "DB_CLAIM"
             try:
                 order_id = create_order(self.db, {
                     "symbol": normalize_symbol(ticker),
@@ -1872,6 +1903,7 @@ class LiveTrader:
 
             # API 호출
             try:
+                order["execution_stage"] = "BROKER_SUBMIT"
                 if action == "BUY":
                     resp = self.broker.place_market_buy(ticker, qty)
                 else:
@@ -1893,12 +1925,17 @@ class LiveTrader:
                         **order,
                         "status": "REJECTED",
                         "message": failure_code,
+                        "broker_failure_code": failure_code,
                     })
                     continue
 
                 attach_broker_order_id(self.db, order_id, odno, resp)
+                order["execution_stage"] = "BROKER_STATUS"
                 final_status = "ACCEPTED"
+                poll_errors = []
+                poll_attempts = 0
                 for _ in range(max(self.fill_poll_attempts, 1)):
+                    poll_attempts += 1
                     try:
                         status = self.broker.get_order_status(odno)
                         final_status = self._record_broker_status(
@@ -1910,6 +1947,7 @@ class LiveTrader:
                         failure_code = self._safe_broker_failure_code(
                             poll_error, "BROKER_STATUS_LOOKUP_FAILED"
                         )
+                        poll_errors.append(failure_code)
                         logging.warning(
                             "[%s] fill-status lookup deferred: %s",
                             ticker,
@@ -1928,6 +1966,8 @@ class LiveTrader:
 
                 if action == "BUY" and final_status in {"ACCEPTED", "PARTIAL", "FILLED"}:
                     today_cash -= qty * current_price
+                order["broker_status_poll_attempts"] = poll_attempts
+                order["broker_status_poll_errors"] = poll_errors
                 results.append({**order, "status": final_status, "broker_order_id": odno})
             except BrokerResponseError as e:
                 failure_code = self._safe_broker_failure_code(e, "BROKER_REJECTED")
@@ -1943,6 +1983,7 @@ class LiveTrader:
                     **order,
                     "status": "REJECTED",
                     "message": failure_code,
+                    "broker_failure_code": failure_code,
                 })
             except Exception as e:
                 # 네트워크 타임아웃은 주문 성공 여부가 불명확하므로 REJECTED로 단정하지 않는다.
@@ -1979,6 +2020,7 @@ class LiveTrader:
                     **order,
                     "status": "UNKNOWN",
                     "message": failure_code,
+                    "broker_failure_code": failure_code,
                 })
 
         return results
