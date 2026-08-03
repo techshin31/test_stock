@@ -223,7 +223,7 @@ def write_audit(payload: dict, path: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Audit PAPER KIS order history without writes.")
     parser.add_argument("--start", default=DEFAULT_START_DATE.isoformat())
-    parser.add_argument("--end", default=dt.date.today().isoformat())
+    parser.add_argument("--end", default=dt.datetime.now(KST).date().isoformat())
     parser.add_argument(
         "--output", default="reports/analysis/paper_broker_history/latest.json"
     )

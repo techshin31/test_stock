@@ -16,6 +16,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 from typing import Callable, Iterable
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -34,6 +35,7 @@ from storage.postgres.connection import PostgreDB
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+KST = ZoneInfo("Asia/Seoul")
 BASELINE_CONFIRMATION = "CLEAN_PAPER_BASELINE"
 REAL_BASELINE_CONFIRMATION = "CLEAN_REAL_BASELINE"
 RESET_CONFIRMATION = "RESET_CLEAN_BASELINE"
@@ -1793,7 +1795,7 @@ def check_baseline(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate trading EOD KPI reports")
     parser.add_argument("--mode", required=True, choices=["DRY_RUN", "PAPER", "REAL"])
-    parser.add_argument("--date", default=dt.date.today().isoformat())
+    parser.add_argument("--date", default=dt.datetime.now(KST).date().isoformat())
     parser.add_argument("--log-dir")
     parser.add_argument("--promotion-dir", default=str(PROJECT_ROOT / "reports" / "promotion"))
     parser.add_argument("--initialize-baseline", action="store_true")
