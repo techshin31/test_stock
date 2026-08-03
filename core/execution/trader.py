@@ -26,6 +26,19 @@ from core.constant.types import Tickers
 from core.execution.inverse_hedge import InverseHedgeConfig, evaluate_inverse_hedge
 from core.utils.trading_calendar import previous_krx_trading_day
 
+KST = ZoneInfo("Asia/Seoul")
+
+
+def _now_kst() -> datetime.datetime:
+    """Return the current timestamp in the exchange's operating timezone."""
+    return datetime.datetime.now(KST)
+
+
+def _today_kst() -> datetime.date:
+    """Return today's KRX operating date, independent of host/DB timezone."""
+    return _now_kst().date()
+
+
 class LiveTrader:
     def __init__(
         self,
@@ -154,7 +167,7 @@ class LiveTrader:
 
     def run_premarket_batch(self):
         logging.info(f"[{datetime.datetime.now()}] 프리마켓 FA 필터링 시작")
-        signal_date = previous_krx_trading_day(datetime.date.today())
+        signal_date = previous_krx_trading_day(_today_kst())
         published_run, published_candidates = self._load_published_fa_candidates(signal_date)
         tickers = [f"{row['stock_code']}.KS" for row in published_candidates]
         end_date = (signal_date + datetime.timedelta(days=1)).isoformat()
@@ -177,7 +190,7 @@ class LiveTrader:
         # 기업 위험 상태(매수 차단 종목) 조회
         from storage.postgres.repositories.company_risk_repo import fetch_buy_blocked_stock_codes
         try:
-            blocked_codes = fetch_buy_blocked_stock_codes(self.db, datetime.date.today())
+            blocked_codes = fetch_buy_blocked_stock_codes(self.db, _today_kst())
         except Exception as e:
             raise RuntimeError(f"기업 위험 상태 조회 실패로 프리마켓을 중단합니다: {e}") from e
 
@@ -422,7 +435,7 @@ class LiveTrader:
         
         # 2. 데이터 로드. 데이터/의존성 장애는 신규 진입만 차단하며, 보유
         # 포지션의 가격 기반 손절은 아래 독립 위험 계층에서 계속 평가한다.
-        signal_date = previous_krx_trading_day(datetime.date.today())
+        signal_date = previous_krx_trading_day(_today_kst())
         end_date = (signal_date + datetime.timedelta(days=1)).isoformat()
         start_date = (signal_date - datetime.timedelta(days=200)).isoformat()
         dependency_errors = []
@@ -551,7 +564,7 @@ class LiveTrader:
         from storage.postgres.repositories.company_risk_repo import fetch_buy_blocked_stock_codes
         blocked_codes = None
         try:
-            blocked_codes = fetch_buy_blocked_stock_codes(self.db, datetime.date.today())
+            blocked_codes = fetch_buy_blocked_stock_codes(self.db, _today_kst())
         except Exception as exc:
             message = f"기업 위험상태 오류: {exc}"
             logging.error(f"{message}; 신규 매수를 차단합니다")
@@ -1074,7 +1087,8 @@ class LiveTrader:
                 """SELECT o.order_side_code, o.order_status_code, COUNT(*) AS count
                    FROM orders o
                    JOIN strategies s ON s.id = o.strategy_id
-                   WHERE o.created_at::date = CURRENT_DATE
+                   WHERE (o.created_at AT TIME ZONE 'Asia/Seoul')::date =
+                         (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Seoul')::date
                      AND s.name = %s
                      AND o.execution_venue_code = %s
                      AND o.account_scope = %s
@@ -1522,7 +1536,7 @@ class LiveTrader:
         path = self.log_dir / "trade_history.jsonl"
         if not path.exists():
             return 0
-        today = datetime.date.today().isoformat()
+        today = _today_kst().isoformat()
         open_statuses = {"PENDING", "SUBMITTED", "ACCEPTED", "PARTIAL", "UNKNOWN"}
         pending_ids = set()
         try:
@@ -1553,7 +1567,8 @@ class LiveTrader:
                           o.filled_qty, o.avg_fill_price
                    FROM orders o
                    JOIN strategies s ON s.id = o.strategy_id
-                   WHERE o.created_at::date = CURRENT_DATE
+                   WHERE (o.created_at AT TIME ZONE 'Asia/Seoul')::date =
+                         (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Seoul')::date
                      AND o.broker_order_id = ANY(%s)
                      AND s.name = %s
                      AND o.execution_venue_code = %s
@@ -1719,7 +1734,7 @@ class LiveTrader:
         target_details = target_details or {}
         
         # 상태 기반 중복 방지. 거부 주문은 제한 횟수 내에서만 재시도한다.
-        today_str = datetime.datetime.now().strftime('%Y-%m-%d')
+        today_str = _today_kst().isoformat()
         strategy_name, execution_venue, account_scope = self._order_scope()
         if getattr(getattr(self, "broker", None), "is_simulated", False):
             rows = []
@@ -1741,7 +1756,7 @@ class LiveTrader:
                               ) AS unknown_result_message
                        FROM orders o
                        JOIN strategies s ON s.id = o.strategy_id
-                       WHERE o.created_at::date = %s::date
+                       WHERE (o.created_at AT TIME ZONE 'Asia/Seoul')::date = %s::date
                          AND s.name = %s
                          AND o.execution_venue_code = %s
                          AND o.account_scope = %s""",
@@ -2315,7 +2330,7 @@ class LiveTrader:
     def _idempotency_key(self, order):
         strategy_name, execution_venue, account_scope = self._order_scope()
         raw = ":".join([
-            datetime.date.today().isoformat(), strategy_name,
+            _today_kst().isoformat(), strategy_name,
             execution_venue, account_scope,
             normalize_symbol(order['ticker']), order['type'], str(order.get('reason', 'manual')),
         ])
@@ -2395,7 +2410,8 @@ class LiveTrader:
             """SELECT COUNT(*) AS count
                FROM orders o
                JOIN strategies s ON s.id = o.strategy_id
-               WHERE o.created_at::date = CURRENT_DATE
+               WHERE (o.created_at AT TIME ZONE 'Asia/Seoul')::date =
+                     (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Seoul')::date
                  AND o.order_status_code IN ('PENDING','SUBMITTED','ACCEPTED','PARTIAL')
                  AND s.name = %s
                  AND o.execution_venue_code = %s
@@ -2422,7 +2438,8 @@ class LiveTrader:
                 SELECT o.id, o.filled_qty
                 FROM orders o
                 JOIN strategies s ON s.id = o.strategy_id
-                WHERE o.created_at::date = CURRENT_DATE
+                WHERE (o.created_at AT TIME ZONE 'Asia/Seoul')::date =
+                      (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Seoul')::date
                   AND o.order_status_code = 'FILLED'
                   AND COALESCE(o.filled_qty, 0) > 0
                   AND s.name = %s
@@ -2479,7 +2496,8 @@ class LiveTrader:
                    FROM orders o
                    JOIN strategies s ON s.id = o.strategy_id
                    WHERE o.order_status_code IN ('SUBMITTED', 'ACCEPTED', 'PARTIAL')
-                     AND o.created_at::date = CURRENT_DATE
+                     AND (o.created_at AT TIME ZONE 'Asia/Seoul')::date =
+                         (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Seoul')::date
                      AND s.name = %s
                      AND o.execution_venue_code = %s
                      AND o.account_scope = %s""",
@@ -2489,7 +2507,8 @@ class LiveTrader:
                 """SELECT o.broker_order_id
                    FROM orders o
                    JOIN strategies s ON s.id = o.strategy_id
-                   WHERE o.created_at::date = CURRENT_DATE
+                   WHERE (o.created_at AT TIME ZONE 'Asia/Seoul')::date =
+                         (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Seoul')::date
                      AND o.broker_order_id IS NOT NULL
                      AND s.name = %s
                      AND o.execution_venue_code = %s
@@ -2559,7 +2578,8 @@ class LiveTrader:
                    FROM orders o
                    JOIN strategies s ON s.id = o.strategy_id
                    WHERE o.order_status_code IN ('SUBMITTED', 'ACCEPTED', 'PARTIAL')
-                     AND o.created_at::date = CURRENT_DATE
+                     AND (o.created_at AT TIME ZONE 'Asia/Seoul')::date =
+                         (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Seoul')::date
                      AND s.name = %s
                      AND o.execution_venue_code = %s
                      AND o.account_scope = %s""",
@@ -2703,7 +2723,7 @@ class LiveTrader:
 
     def _load_published_fa_candidates(self, cutoff_date, as_of_date=None):
         """검증·발행된 최신 월간 FA 결과만 라이브 후보로 반환한다."""
-        as_of_date = as_of_date or datetime.date.today()
+        as_of_date = as_of_date or _today_kst()
         model_version = getattr(self, "fa_model_version", REAL_TRADING_MODEL_VERSION)
         quality_condition = ""
         if not self.allow_warning_fa_run:
@@ -2778,7 +2798,7 @@ class LiveTrader:
                     (strategy_id,),
                 ).fetchall()
                 active_symbols = {r["symbol"] for r in current_rows}
-                today = datetime.date.today()
+                today = _today_kst()
 
                 for ticker in fa_candidates:
                     symbol = ticker.split('.')[0]

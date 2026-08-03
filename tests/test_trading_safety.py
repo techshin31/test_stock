@@ -1073,7 +1073,34 @@ def test_open_order_reconciliation_queries_are_scoped():
     for query, params in calls:
         assert "execution_venue_code = %s" in query
         assert "account_scope = %s" in query
+        assert "AT TIME ZONE 'Asia/Seoul'" in query
         assert params == ("aggressive", "PAPER", "***1234-01")
+
+
+def test_daily_order_summary_uses_kst_operating_date():
+    calls = []
+
+    class DB:
+        def fetch_all(self, query, params):
+            calls.append((query, params))
+            return []
+
+    broker = SafeBroker()
+    broker.is_simulated = False
+    trader = object.__new__(LiveTrader)
+    trader.strategy_name = "aggressive"
+    trader.execution_venue = "PAPER"
+    trader.broker = broker
+    trader.db = DB()
+
+    assert trader._daily_order_summary() == {
+        "buy_filled": 0,
+        "sell_filled": 0,
+        "open": 0,
+        "rejected": 0,
+    }
+    assert len(calls) == 1
+    assert "AT TIME ZONE 'Asia/Seoul'" in calls[0][0]
 
 
 def test_paper_fill_can_be_inferred_from_balance_change():
