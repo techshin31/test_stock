@@ -8,6 +8,7 @@ import time
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from core.broker.kis_api import redact_sensitive_text
 from core.utils.io import write_json
@@ -20,6 +21,12 @@ from core.utils.process_lock import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+KST = ZoneInfo("Asia/Seoul")
+
+
+def _now_kst() -> datetime.datetime:
+    """Return the scheduler clock in the KRX operating timezone."""
+    return datetime.datetime.now(KST)
 
 SUPPRESSION_REASON_LABELS = {
     "AMBIGUOUS_RESULT_SAME_DAY": "브로커 응답 불확실·당일 재시도 금지",
@@ -72,7 +79,7 @@ def log_error(message: str, mode: str) -> None:
     scheduler_log = PROJECT_ROOT / "logs" / mode.lower() / "scheduler.log"
     scheduler_log.parent.mkdir(parents=True, exist_ok=True)
     with scheduler_log.open("a", encoding="utf-8") as log_file:
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = _now_kst().strftime("%Y-%m-%d %H:%M:%S")
         log_file.write(f"[{timestamp}] {message}\n")
         log_file.write(traceback.format_exc())
         log_file.write("\n")
@@ -202,7 +209,7 @@ def draw_dashboard(last_mode, next_run_time, execution_mode):
     for event in state.get("timeline", []) or ["(아직 기록된 타임라인이 없습니다)"]:
         print(f"    {event}")
 
-    now = datetime.datetime.now()
+    now = _now_kst()
     print(f"\n ⏳ 현재 시간: {now:%Y-%m-%d %H:%M:%S}")
     if not is_trading_day(now):
         print(" 🛑 오늘은 KRX 휴장일입니다.")
@@ -270,7 +277,7 @@ class ColdStartRetryState:
     def payload(self, mode: str) -> dict:
         return {
             "schema_version": 1,
-            "updated_at": datetime.datetime.now().astimezone().isoformat(
+            "updated_at": _now_kst().isoformat(
                 timespec="seconds"
             ),
             "mode": mode,
@@ -381,7 +388,7 @@ def due_end_of_day_report_date(
 
 
 def run_command(mode="intraday", live=False, dry_run=True, simulate=False):
-    print(f"\n[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] 작업 시작 ({mode})")
+    print(f"\n[{_now_kst():%Y-%m-%d %H:%M:%S}] 작업 시작 ({mode})")
     broker_flag = "--live" if live else "--simulate" if simulate else "--mock"
     cmd = ["uv", "run", "python", "run_live_trader.py", broker_flag]
     if dry_run:
@@ -439,7 +446,7 @@ def run_end_of_day_report(report_date, execution_mode):
     stderr = redact_sensitive_text(getattr(result, "stderr", "") or "")
     status = {
         "schema_version": 1,
-        "updated_at": datetime.datetime.now().astimezone().isoformat(
+        "updated_at": _now_kst().isoformat(
             timespec="seconds"
         ),
         "mode": execution_mode,
@@ -468,13 +475,13 @@ def run_end_of_day_report(report_date, execution_mode):
 
 
 def check_and_run_cold_start(live=False, dry_run=True, simulate=False, now=None):
-    now = now or datetime.datetime.now()
+    now = now or _now_kst()
     if not is_trading_day(now):
         return None
     state_file = PROJECT_ROOT / "logs" / "fa_candidates.json"
     after_premarket = now.hour > 8 or (now.hour == 8 and now.minute >= 30)
     is_fresh = state_file.exists() and datetime.datetime.fromtimestamp(
-        state_file.stat().st_mtime
+        state_file.stat().st_mtime, tz=KST
     ).date() == now.date()
     if after_premarket and not is_fresh:
         run_command(mode="premarket", live=live, dry_run=dry_run, simulate=simulate)
@@ -523,14 +530,14 @@ def main():
         write_cold_start_retry_state(cold_start_retry, execution_mode)
     except Exception as exc:
         log_error(f"cold-start premarket failed: {exc}", execution_mode)
-        delay = cold_start_retry.record_failure(datetime.datetime.now(), exc)
+        delay = cold_start_retry.record_failure(_now_kst(), exc)
         write_cold_start_retry_state(cold_start_retry, execution_mode)
         last_run_mark = None
         last_run_mode = f"ERROR: {exc} (10초 후 재시도)"
         cold_start_pending = True
         last_run_mode = f"ERROR: {exc} ({delay}s retry backoff)"
     while True:
-        now = datetime.datetime.now()
+        now = _now_kst()
         try:
             if cold_start_pending and cold_start_retry.due(now):
                 try:

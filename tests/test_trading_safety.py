@@ -881,6 +881,12 @@ def test_scheduler_retries_failed_eod_after_bounded_delay():
     ) is False
 
 
+def test_scheduler_default_clock_is_kst():
+    now = scheduler._now_kst()
+    assert now.tzinfo is not None
+    assert now.utcoffset() == datetime.timedelta(hours=9)
+
+
 def test_clear_screen_skips_non_interactive_posix_runtime(monkeypatch):
     calls = []
     monkeypatch.setattr(scheduler.os, "name", "posix")
