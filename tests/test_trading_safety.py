@@ -254,6 +254,40 @@ def test_daily_order_query_follows_mock_f_continuation_pages():
     assert calls[1]["params"]["CTX_AREA_NK100"] == "next-nk"
 
 
+def test_daily_order_query_default_date_uses_kst(monkeypatch):
+    broker = object.__new__(KisBroker)
+    broker.key = "app-key"
+    broker.secret = "app-secret"
+    broker.is_mock = True
+    broker.broker = type("Client", (), {
+        "base_url": "https://example.test",
+        "access_token": "access-token",
+        "acc_no_prefix": "12345678",
+        "acc_no_postfix": "01",
+    })()
+    captured = {}
+
+    class Response:
+        headers = {"tr_cont": ""}
+
+        def json(self):
+            return {"rt_cd": "0", "output1": []}
+
+    def request(*args, **kwargs):
+        captured["params"] = dict(kwargs["params"])
+        return Response()
+
+    monkeypatch.setattr(
+        "core.broker.kis_api._today_kst",
+        lambda: datetime.date(2026, 7, 9),
+    )
+    broker._safe_request = request
+
+    assert broker.fetch_daily_orders() == []
+    assert captured["params"]["INQR_STRT_DT"] == "20260709"
+    assert captured["params"]["INQR_END_DT"] == "20260709"
+
+
 def test_balance_failure_is_not_converted_to_empty_account():
     wrapper = object.__new__(KisBroker)
     wrapper._fetch_balance_page = lambda *_: {

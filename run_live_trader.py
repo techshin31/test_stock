@@ -8,6 +8,7 @@ import os
 import traceback
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from core.execution.trader import LiveTrader
 from core.utils.telegram_bot import TelegramBot
@@ -15,6 +16,7 @@ from core.utils.process_lock import ProcessAlreadyRunning, ProcessInstanceLock
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+KST = ZoneInfo("Asia/Seoul")
 
 
 def _assert_real_system_ready(project_root: Path = PROJECT_ROOT) -> dict:
@@ -126,7 +128,7 @@ def send_intraday_notification_once(
         json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()
     ).hexdigest()
     path = Path(state_path)
-    day = (today or datetime.date.today()).isoformat()
+    day = (today or datetime.datetime.now(KST).date()).isoformat()
     try:
         state = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):

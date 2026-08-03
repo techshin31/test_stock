@@ -3,8 +3,11 @@ import json
 import os
 import uuid
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from core.broker.kis_api import normalize_symbol
+
+KST = ZoneInfo("Asia/Seoul")
 
 
 class LocalSimulationBroker:
@@ -178,5 +181,5 @@ class LocalSimulationBroker:
                 "ord_tmd": row["created_at"][11:19].replace(":", ""),
             }
             for order_id, row in self._state["orders"].items()
-            if row["created_at"][:10] == datetime.date.today().isoformat()
+            if row["created_at"][:10] == datetime.datetime.now(KST).date().isoformat()
         ]

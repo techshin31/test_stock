@@ -4,10 +4,18 @@ import re
 import threading
 import time
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import mojito
 import requests
 from dotenv import load_dotenv
+
+KST = ZoneInfo("Asia/Seoul")
+
+
+def _today_kst() -> dt.date:
+    """Return the KRX operating date independent of the container timezone."""
+    return dt.datetime.now(KST).date()
 
 
 class BrokerResponseError(RuntimeError):
@@ -339,7 +347,7 @@ class KisBroker:
 
     def fetch_daily_orders(self, target_date: dt.date | None = None) -> list[dict]:
         """KIS 일별 주문/체결 조회 원문 행을 반환한다."""
-        target_date = target_date or dt.date.today()
+        target_date = target_date or _today_kst()
         path = "uapi/domestic-stock/v1/trading/inquire-daily-ccld"
         url = f"{self.broker.base_url}/{path}"
         headers = {
