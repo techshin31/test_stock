@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-30T16:35:57+09:00",
+  "generated_at": "2026-07-31T15:30:33+09:00",
   "mode": "PAPER",
   "account_scope": "***9904-01",
   "start_date": "2026-07-03",
-  "end_date": "2026-07-30",
+  "end_date": "2026-07-31",
   "strategy_lineage": [
     "risk_neutral",
     "aggressive"
@@ -30,7 +30,8 @@
     "2026-07-27": 3,
     "2026-07-28": 1,
     "2026-07-29": 3,
-    "2026-07-30": 2
+    "2026-07-30": 2,
+    "2026-07-31": 0
   },
   "db_order_rows": 219,
   "broker_order_rows": 230,

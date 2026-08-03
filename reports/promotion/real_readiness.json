@@ -1,14 +1,14 @@
 {
   "baseline_date": "2026-07-20",
-  "through_date": "2026-07-30",
-  "performance_days": 9,
+  "through_date": "2026-07-31",
+  "performance_days": 10,
   "baseline_total_asset": 463025590.0,
   "ending_total_asset": 436545704.0,
   "net_return": -0.05718881757701566,
-  "benchmark_return": -0.14160094013474833,
-  "excess_return": 0.08441212255773267,
+  "benchmark_return": 0.016710501006307776,
+  "excess_return": -0.07389931858332344,
   "max_drawdown": -0.07936800503536179,
-  "annualized_volatility": 0.2717482352852644,
+  "annualized_volatility": 0.25820723546083163,
   "total_costs": -4135063.5855,
   "cost_drag": -0.008930529272690954,
   "benchmark_symbol": "^KS11",
@@ -20,18 +20,19 @@
   "effective_benchmark_date": "2026-07-20",
   "benchmark_anchor_adjusted": true,
   "validation_status": "READY",
-  "as_of": "2026-07-30",
-  "generated_at": "2026-07-30T16:34:15+09:00",
+  "as_of": "2026-07-31",
+  "generated_at": "2026-07-31T15:30:07+09:00",
   "mode": "PAPER",
   "promotion": {
     "target_mode": "REAL",
     "ready": false,
     "manual_approval_required": true,
     "blockers": [
-      "observed_trading_days 8 < 60",
-      "data_freshness_rate 0.9876 < 0.9950",
-      "critical_incidents 36 > 0"
+      "observed_trading_days 9 < 60",
+      "data_freshness_rate 0.9888 < 0.9950",
+      "critical_incidents 63 > 0",
+      "excess_return -0.0739 <= 0.0000"
     ]
   },
-  "source_report": "C:\\dev\\project\\Service_Stock_Analysis\\reports\\promotion\\paper\\daily\\2026-07-30.json"
+  "source_report": "/app/reports/promotion/paper/daily/2026-07-31.json"
 }

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-30T16:37:12+09:00",
+  "generated_at": "2026-07-31T15:30:52+09:00",
   "mode": "PAPER",
   "observe_only": true,
   "production_rule_changed": false,
@@ -297,7 +297,7 @@
     ]
   },
   "sources": [
-    "C:\\dev\\project\\Service_Stock_Analysis\\reports\\analysis\\paper_ledger_latest\\order_lifecycle.csv",
-    "C:\\dev\\project\\Service_Stock_Analysis\\reports\\analysis\\paper_reentry_experiments\\pass_only\\metrics.json"
+    "/app/reports/analysis/paper_ledger_latest/order_lifecycle.csv",
+    "/app/reports/analysis/paper_reentry_experiments/pass_only/metrics.json"
   ]
 }
