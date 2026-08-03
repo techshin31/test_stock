@@ -52,9 +52,11 @@ class FaTaMomentumStrategy(AbstractStrategy):
         self.STOP_LOSS_PCT = params.get("stop_loss_pct", 0.10)
         self.TRAILING_STOP_PCT = params.get("trailing_stop_pct", 0.08)
         # Keep a controlled fraction of an existing long position while the
-        # market is transitioning.  New entries remain blocked in TRANSITION;
-        # this only prevents an otherwise all-or-nothing liquidation.
+        # market is transitioning. New entries can be enabled separately with
+        # a small target size; the trader applies a portfolio-wide cap.
         self.TRANSITION_KEEP_RATIO = params.get("transition_keep_ratio", 0.40)
+        self.TRANSITION_ENTRY_ENABLED = params.get("transition_entry_enabled", True)
+        self.TRANSITION_ENTRY_SIZE = params.get("transition_entry_size", 0.10)
         self.MA_WINDOW = params.get("ma_window", 60)
         self.MA_WINDOW_FAST = params.get("ma_window_fast", 20)
         if not 0 < self.MIN_SCORE_CONFIDENCE <= 1:
@@ -63,6 +65,8 @@ class FaTaMomentumStrategy(AbstractStrategy):
             raise ValueError("stop-loss settings must be in (0, 1)")
         if not 0 < self.TRANSITION_KEEP_RATIO <= 1:
             raise ValueError("transition_keep_ratio must be in (0, 1]")
+        if not 0 < self.TRANSITION_ENTRY_SIZE <= 1:
+            raise ValueError("transition_entry_size must be in (0, 1]")
 
     def evaluate_position_risk(
         self,
@@ -183,9 +187,27 @@ class FaTaMomentumStrategy(AbstractStrategy):
                 )
                 reason = "MARKET_TRANSITION_KEEP_HOLD"
         elif regime == MarketRegime.TRANSITION.name:
-            # TRANSITION remains entry-blocked; only an existing position can
-            # carry a reduced target through the regime change.
-            target, reason = 0.0, "MARKET_TRANSITION"
+            if self.TRANSITION_ENTRY_ENABLED:
+                valid_fa = (
+                    is_eligible
+                    and pd.notnull(fa_score)
+                    and float(fa_score) >= self.FA_SCORE_MIN
+                    and pd.notnull(debt_ratio)
+                    and float(debt_ratio) <= self.DEBT_RATIO_MAX
+                    and pd.notnull(score_confidence)
+                    and float(score_confidence) >= self.MIN_SCORE_CONFIDENCE
+                )
+                valid_ta = (
+                    curr_close > curr_ma
+                    and curr_ma_fast > curr_ma
+                    and curr_momentum > 0
+                )
+                if valid_fa and valid_ta:
+                    target, reason = self.TRANSITION_ENTRY_SIZE, "TRANSITION_ENTRY"
+                else:
+                    target, reason = 0.0, "ENTRY_CONDITIONS_NOT_MET"
+            else:
+                target, reason = 0.0, "MARKET_TRANSITION"
         else:
             valid_fa = (
                 is_eligible
@@ -228,6 +250,8 @@ class FaTaMomentumStrategy(AbstractStrategy):
             "stop_loss_pct": self.STOP_LOSS_PCT,
             "trailing_stop_pct": self.TRAILING_STOP_PCT,
             "transition_keep_ratio": self.TRANSITION_KEEP_RATIO,
+            "transition_entry_enabled": self.TRANSITION_ENTRY_ENABLED,
+            "transition_entry_size": self.TRANSITION_ENTRY_SIZE,
             "risk_price_source": "BROKER_BALANCE" if current_price else "DAILY_CLOSE",
         }
         return target, metadata

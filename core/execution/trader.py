@@ -50,6 +50,9 @@ class LiveTrader:
         self.allow_warning_fa_run = os.getenv("ALLOW_WARNING_FA_RUN", "false").lower() == "true"
         self.price_guard_cooldown_seconds = int(os.getenv("PRICE_GUARD_COOLDOWN_SECONDS", "900"))
         self.max_position_weight = float(os.getenv("MAX_POSITION_WEIGHT", "0.15"))
+        self.transition_max_gross_exposure = float(
+            os.getenv("TRANSITION_MAX_GROSS_EXPOSURE", "0.30")
+        )
         self.max_daily_loss_rate = float(os.getenv("MAX_DAILY_LOSS_RATE", "0.03"))
         self.manual_entry_pause = os.getenv("TRADING_KILL_SWITCH", "false").lower() == "true"
         if not 0 <= self.max_price_deviation <= 0.20:
@@ -62,6 +65,8 @@ class LiveTrader:
             raise ValueError("KIS_FILL_POLL_INTERVAL은 0 이상이어야 합니다.")
         if not 0 < self.max_position_weight <= 0.30:
             raise ValueError("MAX_POSITION_WEIGHT must be in (0, 0.30]")
+        if not 0 < self.transition_max_gross_exposure <= 0.90:
+            raise ValueError("TRANSITION_MAX_GROSS_EXPOSURE must be in (0, 0.90]")
         if not 0 < self.max_daily_loss_rate <= 0.20:
             raise ValueError("MAX_DAILY_LOSS_RATE must be in (0, 0.20]")
 
@@ -106,6 +111,12 @@ class LiveTrader:
             "trailing_stop_pct": float(os.getenv("TRAILING_STOP_PCT", "0.08")),
             "transition_keep_ratio": float(
                 os.getenv("TRANSITION_KEEP_RATIO", "0.40")
+            ),
+            "transition_entry_enabled": os.getenv(
+                "TRANSITION_ENTRY_ENABLED", "true"
+            ).lower() == "true" and self.execution_venue != "REAL",
+            "transition_entry_size": float(
+                os.getenv("TRANSITION_ENTRY_SIZE", "0.10")
             ),
         }
         self.strategy = FaTaMomentumStrategy(strategy_params)
@@ -697,6 +708,11 @@ class LiveTrader:
         target_positions = self._apply_portfolio_limits(
             target_positions, target_details, positions
         )
+        target_positions = self._apply_transition_exposure_cap(
+            target_positions,
+            target_details,
+            market_regime,
+        )
         if dependency_entry_blocker:
             target_positions = self._apply_entry_circuit_breaker(
                 target_positions,
@@ -1236,6 +1252,9 @@ class LiveTrader:
                 "signal_reason": detail.get("signal_reason", "UNKNOWN"),
                 "fa_score": detail.get("fa_score"),
                 "momentum": detail.get("momentum"),
+                "transition_exposure_scale": detail.get(
+                    "transition_exposure_scale"
+                ),
                 "selected": float(target_positions.get(ticker, 0.0)) > 0.0,
             })
         payload = {
@@ -1248,6 +1267,32 @@ class LiveTrader:
             ),
             "target_count": sum(row["selected"] for row in rows),
             "decisions": rows,
+            "transition_policy": {
+                "entry_enabled": bool(
+                    getattr(
+                        getattr(self, "strategy", None),
+                        "TRANSITION_ENTRY_ENABLED",
+                        False,
+                    )
+                ),
+                "entry_size": float(
+                    getattr(
+                        getattr(self, "strategy", None),
+                        "TRANSITION_ENTRY_SIZE",
+                        0.10,
+                    )
+                ),
+                "keep_ratio": float(
+                    getattr(
+                        getattr(self, "strategy", None),
+                        "TRANSITION_KEEP_RATIO",
+                        0.40,
+                    )
+                ),
+                "max_gross_exposure": float(
+                    getattr(self, "transition_max_gross_exposure", 0.30)
+                ),
+            },
         }
         if isinstance(inverse_hedge, dict):
             payload["inverse_hedge"] = inverse_hedge
@@ -1430,6 +1475,27 @@ class LiveTrader:
                     remaining_budget -= max_weight
             for ticker in allocatable:
                 result[ticker] = round(raw_weights.get(ticker, 0.0), 4)
+        return result
+
+    def _apply_transition_exposure_cap(self, targets, details, market_regime):
+        """Cap total PAPER/strategy exposure while the market is transitioning."""
+        if market_regime != "TRANSITION":
+            return dict(targets)
+
+        cap = float(getattr(self, "transition_max_gross_exposure", 0.30))
+        result = dict(targets)
+        active = [ticker for ticker, weight in result.items() if weight > 0]
+        total = sum(float(result[ticker]) for ticker in active)
+        if not active or total <= cap:
+            return result
+
+        scale = cap / total
+        for ticker in active:
+            result[ticker] = round(float(result[ticker]) * scale, 4)
+            details.setdefault(ticker, {})["transition_exposure_scale"] = round(
+                scale, 6
+            )
+            details[ticker]["target_position"] = result[ticker]
         return result
 
     @staticmethod

@@ -81,8 +81,9 @@ def test_live_ta_uses_actual_position_and_latest_regime_only():
     target, metadata = strategy.evaluate_latest(
         frame, "TRANSITION", current_position=0.0
     )
-    assert target == 0.0
-    assert metadata["signal_reason"] == "MARKET_TRANSITION"
+    assert target == pytest.approx(0.10)
+    assert metadata["signal_reason"] == "TRANSITION_ENTRY"
+    assert metadata["transition_entry_enabled"] is True
 
 
 def test_live_ta_rejects_missing_or_low_confidence_fundamentals():
@@ -113,6 +114,21 @@ def test_transition_keep_does_not_override_fundamental_exit():
 
     assert target == 0.0
     assert metadata["signal_reason"] == "FA_SCORE_DETERIORATED"
+
+
+def test_transition_entry_can_be_disabled():
+    strategy = FaTaMomentumStrategy({
+        "ma_window": 20,
+        "ma_window_fast": 5,
+        "transition_entry_enabled": False,
+    })
+
+    target, metadata = strategy.evaluate_latest(
+        _strategy_frame(), "TRANSITION", current_position=0.0
+    )
+
+    assert target == 0.0
+    assert metadata["signal_reason"] == "MARKET_TRANSITION"
 
 
 def test_live_strategy_trailing_stop_protects_gains():

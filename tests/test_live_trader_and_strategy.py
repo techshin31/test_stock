@@ -168,6 +168,35 @@ def test_portfolio_limit_preserves_position_when_data_is_unavailable():
     assert result["NO_DATA"] == 0.15
 
 
+def test_transition_exposure_cap_limits_total_target_weight():
+    trader = object.__new__(LiveTrader)
+    trader.transition_max_gross_exposure = 0.30
+    targets = {"A": 0.15, "B": 0.15, "C": 0.15}
+    details = {
+        "A": {"signal_reason": "TRANSITION_ENTRY"},
+        "B": {"signal_reason": "TRANSITION_ENTRY"},
+        "C": {"signal_reason": "MARKET_TRANSITION_KEEP_HOLD"},
+    }
+
+    result = trader._apply_transition_exposure_cap(
+        targets, details, "TRANSITION"
+    )
+
+    assert sum(result.values()) == pytest.approx(0.30)
+    assert all(weight == pytest.approx(0.10) for weight in result.values())
+    assert details["A"]["transition_exposure_scale"] == pytest.approx(2 / 3)
+
+
+def test_transition_exposure_cap_is_inactive_outside_transition():
+    trader = object.__new__(LiveTrader)
+    trader.transition_max_gross_exposure = 0.30
+    targets = {"A": 0.15, "B": 0.15, "C": 0.15}
+
+    result = trader._apply_transition_exposure_cap(targets, {}, "UPTREND")
+
+    assert result == targets
+
+
 def test_cancelled_order_uses_next_idempotency_attempt(monkeypatch):
     trader = object.__new__(LiveTrader)
     trader.strategy_name = "aggressive"
