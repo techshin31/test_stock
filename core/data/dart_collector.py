@@ -2,6 +2,9 @@ import os
 import requests
 import datetime
 from typing import List, Dict
+from zoneinfo import ZoneInfo
+
+KST = ZoneInfo("Asia/Seoul")
 
 class DartRealtimeCollector:
     """Fetches real-time DART filings for the current day across the market."""
@@ -21,7 +24,8 @@ class DartRealtimeCollector:
         if not self.api_key:
             return {}
             
-        today_str = datetime.date.today().strftime("%Y%m%d")
+        # DART dates and the trading system's operating day are Korean local time.
+        today_str = datetime.datetime.now(KST).date().strftime("%Y%m%d")
         
         params = {
             "crtfc_key": self.api_key,

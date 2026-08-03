@@ -4,6 +4,7 @@ import numpy as np
 import json
 import pytest
 from core.strategy.fa_ta_momentum import FaTaMomentumStrategy
+from core.strategy.aggressive import AggressiveStrategy
 from core.execution.trader import LiveTrader
 from apps.worker.fa_contract import DEFAULT_CONFIG as FA_CONTRACT
 from run_live_trader import build_result_message, send_intraday_notification_once
@@ -588,6 +589,19 @@ def test_json_state_writer_replaces_dashboard_state_without_leaving_temp_file(tm
     assert json.loads(path.read_text(encoding="utf-8")) == {
         "operational_status": "NORMAL"
     }
+    assert not path.with_suffix(".json.tmp").exists()
+
+
+def test_aggressive_news_timeline_update_replaces_dashboard_atomically(tmp_path):
+    path = tmp_path / "dashboard_state.json"
+    path.write_text(json.dumps({"timeline": []}), encoding="utf-8")
+    strategy = object.__new__(AggressiveStrategy)
+    strategy.news_cache_dir = tmp_path
+
+    strategy._append_to_dashboard("news timeline")
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["timeline"][-1].endswith("news timeline")
     assert not path.with_suffix(".json.tmp").exists()
 
 

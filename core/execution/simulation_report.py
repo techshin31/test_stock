@@ -7,6 +7,9 @@ import json
 import os
 from collections import Counter
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+KST = ZoneInfo("Asia/Seoul")
 
 
 def _read_json(path: Path) -> dict:
@@ -93,7 +96,7 @@ def build_simulation_report(
     health = "PASS" if all(check["passed"] for check in checks) else "FAIL"
     return {
         "report_date": report_date.isoformat(),
-        "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
+        "generated_at": dt.datetime.now(KST).isoformat(timespec="seconds"),
         "mode": "SIMULATE",
         "health": health,
         "checks": checks,
@@ -180,7 +183,7 @@ def write_simulation_report(log_dir: Path, report_date: dt.date) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--date", default=dt.date.today().isoformat())
+    parser.add_argument("--date", default=dt.datetime.now(KST).date().isoformat())
     parser.add_argument("--log-dir", default="logs/simulate")
     args = parser.parse_args()
     report = write_simulation_report(Path(args.log_dir), dt.date.fromisoformat(args.date))

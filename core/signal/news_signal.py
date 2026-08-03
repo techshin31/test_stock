@@ -4,9 +4,12 @@ import os
 import psycopg
 from pathlib import Path
 from typing import Dict
+from zoneinfo import ZoneInfo
 from core.data.news_collector import NaverNewsCollector
 from core.data.dart_collector import DartRealtimeCollector
 from core.analytics.sentiment import KeywordSentimentAnalyzer
+
+KST = ZoneInfo("Asia/Seoul")
 
 class NewsSignalGenerator:
     """Fetches news and calculates sentiment scores for a list of tickers, with caching."""
@@ -57,7 +60,8 @@ class NewsSignalGenerator:
         Generates sentiment scores (-1.0 to 1.0) for the given tickers.
         Uses cached scores if available for today.
         """
-        today = datetime.date.today()
+        # Cache boundaries must follow the Korean market operating day.
+        today = datetime.datetime.now(KST).date()
         cache_file = self._get_cache_file(today)
         
         cache_data = {}

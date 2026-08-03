@@ -61,6 +61,7 @@
 """
 import os
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -79,6 +80,8 @@ from ..signal.exit.regime    import check_downtrend_exit
 from ..signal.exit.bollinger import check_bb_upper_breakdown
 from ..signal.exit.deadcross import check_deadcross
 from ..signal.exit.transition import check_transition_exit
+
+KST = ZoneInfo("Asia/Seoul")
 
 
 class AggressiveStrategy(AbstractStrategy):
@@ -156,12 +159,16 @@ class AggressiveStrategy(AbstractStrategy):
                 data = json.load(f)
 
             timeline = data.setdefault("timeline", [])
-            now = datetime.datetime.now().strftime("%H:%M")
+            now = datetime.datetime.now(KST).strftime("%H:%M")
             timeline.append(f"[{now}] {message}")
             data["timeline"] = timeline[-10:] # 최근 10개 유지
 
-            with open(dashboard_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            # Keep readers from observing a partially written dashboard state.
+            temp_path = dashboard_path.with_suffix(dashboard_path.suffix + ".tmp")
+            temp_path.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            temp_path.replace(dashboard_path)
         except Exception:
             pass
 

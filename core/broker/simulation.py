@@ -37,7 +37,7 @@ class LocalSimulationBroker:
             "cash": self.initial_cash,
             "positions": {},
             "orders": {},
-            "updated_at": datetime.datetime.now().isoformat(timespec="seconds"),
+            "updated_at": datetime.datetime.now(KST).isoformat(timespec="seconds"),
         }
         self._save(state)
         return state
@@ -45,7 +45,7 @@ class LocalSimulationBroker:
     def _save(self, state: dict | None = None) -> None:
         if state is not None:
             self._state = state
-        self._state["updated_at"] = datetime.datetime.now().isoformat(timespec="seconds")
+        self._state["updated_at"] = datetime.datetime.now(KST).isoformat(timespec="seconds")
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         temp = self.state_path.with_suffix(self.state_path.suffix + ".tmp")
         temp.write_text(json.dumps(self._state, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -150,7 +150,7 @@ class LocalSimulationBroker:
             "commission": commission,
             "tax": tax,
             "status": "FILLED",
-            "created_at": datetime.datetime.now().isoformat(timespec="seconds"),
+            "created_at": datetime.datetime.now(KST).isoformat(timespec="seconds"),
         }
         self._save()
         return {"rt_cd": "0", "output": {"ODNO": order_id}, "msg1": "LOCAL_SIM_FILLED"}
