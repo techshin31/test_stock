@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-03T13:27:30+09:00",
+  "generated_at": "2026-08-03T13:29:27+09:00",
   "mode": "PAPER",
   "source": "logs/paper/operational_health.jsonl",
   "grain": "one operational health observation per trader scan",
   "freshness_gate": 0.995,
   "profile": {
-    "row_count": 3119,
+    "row_count": 3120,
     "date_count": 10,
     "parse_error_count": 0,
     "unscoped_row_count": 0,
     "first_observation_at": "2026-07-21T08:31:04+09:00",
-    "last_observation_at": "2026-08-03T13:27:09+09:00",
+    "last_observation_at": "2026-08-03T13:28:34+09:00",
     "signal_evaluation": {
-      "observed_row_count": 19,
-      "valid_row_count": 19,
+      "observed_row_count": 20,
+      "valid_row_count": 20,
       "invalid_row_count": 0,
-      "coverage_rate": 0.006091696056428343,
+      "coverage_rate": 0.00641025641025641,
       "validity_rate": 1.0,
       "errors": []
     }
@@ -397,7 +397,7 @@
       "expected_dates": [
         "2026-07-31"
       ],
-      "scan_count": 254,
+      "scan_count": 255,
       "expected_count_mode": 50,
       "affected_scan_count": 0,
       "affected_scan_rate": 0.0,
@@ -415,10 +415,10 @@
       "first_bad_observation_at": null,
       "last_bad_observation_at": null,
       "signal_evaluation": {
-        "observed_row_count": 19,
-        "valid_row_count": 19,
+        "observed_row_count": 20,
+        "valid_row_count": 20,
         "invalid_row_count": 0,
-        "coverage_rate": 0.07480314960629922,
+        "coverage_rate": 0.0784313725490196,
         "validity_rate": 1.0,
         "errors": []
       }
@@ -447,10 +447,10 @@
     ],
     "clean_date_count": 3,
     "signal_evaluation": {
-      "observed_row_count": 19,
-      "valid_row_count": 19,
+      "observed_row_count": 20,
+      "valid_row_count": 20,
       "invalid_row_count": 0,
-      "coverage_rate": 0.006091696056428343,
+      "coverage_rate": 0.00641025641025641,
       "validity_rate": 1.0,
       "errors": []
     },
