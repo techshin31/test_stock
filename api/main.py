@@ -14,12 +14,29 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.database import connect_database, connection_kwargs
+from api.reports import (
+    _read_json,
+    _report_summary,
+    _expected_report_date,
+    _report_freshness,
+)
+
+from api.market_data import (
+    _finite_float,
+    _latest_volume,
+    _index_history_points,
+    _close_history_points,
+    _frame_observation_date,
+    _market_observation_status,
+    _completed_market_frame,
+    _annualized_realized_volatility,
+    _expected_completed_krx_date,
+)
+
+
 from core.analytics.trading_kpis import sanitize_incident_error
 from core.execution.strategy_policy import resolve_strategy_policy
-from core.utils.trading_calendar import (
-    is_krx_trading_day,
-    previous_krx_trading_day,
-)
 from core.utils.wics_sector_refresh import (
     REQUIRED_INDUSTRY_COUNT,
     required_wics_session_date,
@@ -35,7 +52,7 @@ REPORT_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 ReportMode = Literal["DRY_RUN", "PAPER", "REAL"]
 STOCK_NAME_CACHE_SECONDS = 60 * 60
 _stock_name_cache: dict[str, str] = {}
-_stock_name_cache_loaded_at = 0.0
+_stock_name_cache_loaded_at: float | None = None
 _stock_name_cache_lock = threading.Lock()
 READINESS_CACHE_SECONDS = 30
 _readiness_cache: tuple[float, Path, dict] | None = None
@@ -60,18 +77,6 @@ app.add_middleware(
 
 def _mode_key(mode: ReportMode) -> str:
     return mode.lower()
-
-
-def _read_json(path: Path) -> dict:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=f"Not found: {path.name}") from exc
-    except (OSError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=500, detail=f"Invalid JSON: {path.name}") from exc
-    if not isinstance(payload, dict):
-        raise HTTPException(status_code=500, detail=f"Invalid object: {path.name}")
-    return payload
 
 
 def _normalize_position(item: object) -> dict:
@@ -109,25 +114,17 @@ def _load_stock_names() -> dict[str, str]:
     """Load company names from local PostgreSQL without making the API depend on it."""
     global _stock_name_cache_loaded_at
     now = time.monotonic()
-    if _stock_name_cache and now - _stock_name_cache_loaded_at < STOCK_NAME_CACHE_SECONDS:
+    if _stock_name_cache_loaded_at is not None and now - _stock_name_cache_loaded_at < STOCK_NAME_CACHE_SECONDS:
         return _stock_name_cache
     with _stock_name_cache_lock:
         now = time.monotonic()
-        if _stock_name_cache and now - _stock_name_cache_loaded_at < STOCK_NAME_CACHE_SECONDS:
+        if _stock_name_cache_loaded_at is not None and now - _stock_name_cache_loaded_at < STOCK_NAME_CACHE_SECONDS:
             return _stock_name_cache
-        load_dotenv(PROJECT_ROOT / ".env", override=False)
-        password = os.getenv("POSTGRES_PASSWORD")
-        if not password:
+        params = connection_kwargs(PROJECT_ROOT, dotenv_loader=load_dotenv)
+        if params is None:
             return _stock_name_cache
         try:
-            with psycopg.connect(
-                host=os.getenv("POSTGRES_HOST", "localhost"),
-                port=int(os.getenv("POSTGRES_PORT", "5433")),
-                dbname=os.getenv("POSTGRES_DB", "quantpilot_db"),
-                user=os.getenv("POSTGRES_USER", "admin"),
-                password=password,
-                connect_timeout=2,
-            ) as connection:
+            with psycopg.connect(**params) as connection:
                 with connection.cursor() as cursor:
                     cursor.execute(
                         "SELECT stock_code, company_name FROM companies "
@@ -212,82 +209,6 @@ def _health(mode: ReportMode, limit: int) -> list[dict]:
     return rows
 
 
-def _report_summary(payload: dict, *, filename: str | None = None) -> dict:
-    validation = payload.get("validation") or {}
-    promotion = payload.get("promotion") or {}
-    performance = payload.get("performance") or {}
-    operations = payload.get("operations") or {}
-    incidents = (
-        payload.get("critical_incidents_detail")
-        or operations.get("critical_incidents_detail")
-        or []
-    )
-    incident_summary = {
-        "total": len(incidents),
-        "active": sum(
-            incident.get("resolution_status") == "ACTIVE"
-            for incident in incidents
-            if isinstance(incident, dict)
-        ),
-        "resolved": sum(
-            incident.get("resolution_status") == "RESOLVED"
-            for incident in incidents
-            if isinstance(incident, dict)
-        ),
-        "protective": sum(
-            incident.get("event_class") == "SAFETY_CONTROL"
-            for incident in incidents
-            if isinstance(incident, dict)
-        ),
-        "historical_unclassified": sum(
-            not incident.get("resolution_status")
-            for incident in incidents
-            if isinstance(incident, dict)
-        ),
-    }
-    report_date = str(payload.get("report_date", ""))
-    return {
-        "filename": filename or f"{report_date}.md",
-        "date": report_date,
-        "generated_at": payload.get("generated_at"),
-        "report_status": payload.get("report_status", "UNKNOWN"),
-        "mode": payload.get("mode", "UNKNOWN"),
-        "executive_summary": payload.get("executive_summary", ""),
-        "validation_status": validation.get(
-            "status", performance.get("validation_status", "UNKNOWN")
-        ),
-        "promotion_target": promotion.get("target_mode"),
-        "promotion_ready": bool(promotion.get("ready", False)),
-        "blocker_count": len(promotion.get("blockers") or []),
-        "incident_summary": incident_summary,
-        "performance": {
-            "ending_total_asset": performance.get("ending_total_asset"),
-            "starting_capital_reference": performance.get(
-                "starting_capital_reference"
-            ),
-            "pnl_vs_starting_capital": performance.get(
-                "pnl_vs_starting_capital"
-            ),
-            "return_vs_starting_capital": performance.get(
-                "return_vs_starting_capital"
-            ),
-            "baseline_date": performance.get("baseline_date"),
-            "post_baseline_pnl": performance.get("post_baseline_pnl"),
-            "net_return": performance.get("net_return"),
-            "benchmark_return": performance.get("benchmark_return"),
-            "excess_return": performance.get("excess_return"),
-            "max_drawdown": performance.get("max_drawdown"),
-        },
-        "operations": {
-            "scan_count": operations.get("scan_count"),
-            "data_freshness_rate": operations.get("data_freshness_rate"),
-            "risk_check_coverage": operations.get("risk_check_coverage"),
-            "order_reconciliation_rate": operations.get("order_reconciliation_rate"),
-            "critical_incidents": operations.get("critical_incidents"),
-        },
-    }
-
-
 def _latest_report(mode: ReportMode) -> tuple[dict | None, dict | None]:
     path = REPORT_ROOT / _mode_key(mode) / "latest.json"
     if not path.exists():
@@ -351,84 +272,6 @@ def _eod_report_status(mode: ReportMode) -> dict | None:
     return _read_json(path)
 
 
-def _expected_report_date(now: dt.datetime) -> dt.date:
-    today = now.date()
-    if is_krx_trading_day(today.isoformat()) and now.time() >= dt.time(15, 30):
-        return today
-    return previous_krx_trading_day(today)
-
-
-def _report_freshness(
-    mode: ReportMode,
-    now: dt.datetime,
-    latest: dict | None,
-    eod_status: dict | None = None,
-) -> dict:
-    expected = _expected_report_date(now)
-    latest_date = None
-    if latest and latest.get("report_date"):
-        try:
-            latest_date = dt.date.fromisoformat(str(latest["report_date"]))
-        except ValueError:
-            latest_date = None
-
-    due_at = dt.datetime.combine(expected, dt.time(15, 30), tzinfo=SEOUL)
-    grace_ends_at = due_at + dt.timedelta(minutes=10)
-    is_valid_report = bool(
-        latest
-        and latest.get("report_status") == "FINAL"
-        and (latest.get("validation") or {}).get("status") == "READY"
-    )
-    if (
-        eod_status
-        and eod_status.get("status") == "FAILED"
-        and (
-            eod_status.get("report_date") == expected.isoformat()
-            or (latest_date is not None and latest_date >= expected)
-        )
-    ):
-        state = "FAILED"
-        diagnostic = next(
-            (
-                sanitize_incident_error(line.strip()) or "unspecified EOD failure"
-                for line in reversed(
-                    str(
-                        eod_status.get("stderr_tail")
-                        or eod_status.get("stdout_tail")
-                        or ""
-                    ).splitlines()
-                )
-                if line.strip()
-            ),
-            "상세 원인은 scheduler 로그를 확인하세요.",
-        )
-        message = f"공식 EOD 리포트 생성에 실패했습니다: {diagnostic}"
-    elif latest_date is not None and latest_date >= expected and is_valid_report:
-        state = "CURRENT"
-        message = "공식 EOD 리포트가 최신 완료 거래일까지 갱신되었습니다."
-    elif latest_date is not None and latest_date >= expected and not is_valid_report:
-        state = "FAILED"
-        errors = (latest.get("validation") or {}).get("errors") or []
-        if errors:
-            message = f"공식 EOD 리포트가 차단되었습니다 (BLOCKED): {'; '.join(errors)}"
-        else:
-            message = "공식 EOD 리포트 검증이 완료되지 않았습니다 (BLOCKED)."
-    elif expected == now.date() and now < grace_ends_at:
-        state = "GENERATING"
-        message = "오늘 공식 EOD 리포트 생성 시간입니다. 15:40까지 자동 갱신을 기다립니다."
-    else:
-        state = "OVERDUE" if latest_date else "MISSING"
-        message = "공식 EOD 리포트가 예정 거래일까지 갱신되지 않았습니다."
-    return {
-        "state": state,
-        "expected_report_date": expected.isoformat(),
-        "latest_report_date": latest_date.isoformat() if latest_date else None,
-        "due_at": due_at.isoformat(),
-        "message": message,
-        "mode": mode,
-    }
-
-
 @app.get("/api/dashboard")
 def get_dashboard_state(mode: ReportMode = "PAPER"):
     return _dashboard(mode)
@@ -465,11 +308,29 @@ def get_overview(mode: ReportMode = "PAPER"):
     now = dt.datetime.now(SEOUL)
     latest_payload, latest_summary = _latest_report(mode)
     eod_status = _eod_report_status(mode)
+    health = _health(mode, 30)
+    try:
+        dashboard = _dashboard(mode)
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
+        dashboard = None
+    runtime_state = (
+        "AVAILABLE" if dashboard is not None else "DATA_PENDING" if health else "NOT_STARTED"
+    )
     return {
         "mode": mode,
         "server_time": now.isoformat(),
-        "dashboard": _dashboard(mode),
-        "health": _health(mode, 30),
+        "dashboard": dashboard,
+        "runtime": {
+            "state": runtime_state,
+            "message": {
+                "AVAILABLE": "운영 상태 데이터가 준비되었습니다.",
+                "DATA_PENDING": "운영 기록은 있으나 상태 데이터가 아직 준비되지 않았습니다.",
+                "NOT_STARTED": "아직 운영 상태가 생성되지 않았습니다. 데이터와 계좌 설정을 확인한 뒤 점검 모드로 운영을 시작하세요.",
+            }[runtime_state],
+        },
+        "health": health,
         "latest_report": latest_summary,
         "report_freshness": _report_freshness(
             mode, now, latest_payload, eod_status
@@ -533,23 +394,8 @@ def get_report(report_date: str, mode: ReportMode = "PAPER"):
 
 
 def _db_connect():
-    """Create a short-lived DB connection for dashboard queries. Returns None on failure."""
-    load_dotenv(PROJECT_ROOT / ".env", override=False)
-    password = os.getenv("POSTGRES_PASSWORD")
-    if not password:
-        return None
-    try:
-        return psycopg.connect(
-            host=os.getenv("POSTGRES_HOST", "localhost"),
-            port=int(os.getenv("POSTGRES_PORT", "5433")),
-            dbname=os.getenv("POSTGRES_DB", "quantpilot_db"),
-            user=os.getenv("POSTGRES_USER", "admin"),
-            password=password,
-            connect_timeout=2,
-            row_factory=psycopg.rows.dict_row,
-        )
-    except (OSError, psycopg.Error):
-        return None
+    """Connection boundary retained for route callers and dependency injection."""
+    return connect_database(PROJECT_ROOT)
 
 
 # In-memory caches for externally fetched market data.  Values are always
@@ -559,153 +405,6 @@ _BREADTH_CACHE = {"timestamp": 0, "payload": None, "last_attempt": 0}
 _BREADTH_CACHE_SECONDS = 300
 _BREADTH_FAILURE_CACHE_SECONDS = 60
 _BREADTH_YFINANCE_TIMEOUT_SECONDS = 8
-
-
-def _finite_float(value: object) -> float | None:
-    """Return a finite numeric value without coercing missing data to zero."""
-    try:
-        result = float(value)
-    except (TypeError, ValueError):
-        return None
-    return result if math.isfinite(result) else None
-
-
-def _latest_volume(frame: object) -> int | None:
-    """Read the latest reported volume, preserving unavailable values as None."""
-    try:
-        if "Volume" not in frame:
-            return None
-        value = _finite_float(frame["Volume"].iloc[-1])
-    except (AttributeError, IndexError, KeyError, TypeError):
-        return None
-    return int(value) if value is not None and value >= 0 else None
-
-
-def _index_history_points(
-    kospi: object, kosdaq: object, limit: int = 60
-) -> list[dict]:
-    """Build only overlapping, observed KOSPI/KOSDAQ closes for the UI chart."""
-    try:
-        if "Close" not in kospi or "Close" not in kosdaq:
-            return []
-        common_dates = kospi.index.intersection(kosdaq.index)
-    except (AttributeError, TypeError):
-        return []
-
-    history: list[dict] = []
-    for value_date in common_dates[-limit:]:
-        try:
-            kospi_close = _finite_float(kospi.loc[value_date, "Close"])
-            kosdaq_close = _finite_float(kosdaq.loc[value_date, "Close"])
-        except (KeyError, TypeError):
-            continue
-        if kospi_close is None or kosdaq_close is None:
-            continue
-        date_text = (
-            value_date.strftime("%Y-%m-%d")
-            if hasattr(value_date, "strftime")
-            else str(value_date)[:10]
-        )
-        history.append(
-            {
-                "date": date_text,
-                "KOSPI": round(kospi_close, 2),
-                "KOSDAQ": round(kosdaq_close, 2),
-            }
-        )
-    return history
-
-
-def _close_history_points(frame: object, limit: int = 60) -> list[dict]:
-    """Return observed close-only points without filling missing market sessions."""
-    try:
-        closes = frame["Close"].dropna().tail(limit)
-    except (AttributeError, KeyError, TypeError):
-        return []
-
-    history: list[dict] = []
-    for value_date, close in closes.items():
-        close_value = _finite_float(close)
-        if close_value is None:
-            continue
-        date_text = (
-            value_date.strftime("%Y-%m-%d")
-            if hasattr(value_date, "strftime")
-            else str(value_date)[:10]
-        )
-        history.append({"date": date_text, "close": round(close_value, 2)})
-    return history
-
-
-def _frame_observation_date(frame: object) -> dt.date | None:
-    """Return the date of the last observed daily bar without inventing one."""
-    try:
-        value = frame.index[-1]
-    except (AttributeError, IndexError, TypeError):
-        return None
-    if isinstance(value, dt.datetime):
-        return value.date()
-    if isinstance(value, dt.date):
-        return value
-    try:
-        return dt.date.fromisoformat(str(value)[:10])
-    except (TypeError, ValueError):
-        return None
-
-
-def _market_observation_status(
-    observation_date: dt.date | None,
-    now: dt.datetime,
-) -> str:
-    """Classify a live quote without calling an in-progress day a final close."""
-    if observation_date is None:
-        return "UNAVAILABLE"
-    current = now.astimezone(SEOUL)
-    if (
-        observation_date == current.date()
-        and is_krx_trading_day(current.date().isoformat())
-        and current.time() < dt.time(15, 30)
-    ):
-        return "INTRADAY"
-    if observation_date == _expected_completed_krx_date(current):
-        return "COMPLETED"
-    return "STALE"
-
-
-def _completed_market_frame(frame: object, now: dt.datetime) -> object:
-    """Exclude the still-open KRX session from close-based charts and volatility."""
-    observation_date = _frame_observation_date(frame)
-    if _market_observation_status(observation_date, now) != "INTRADAY":
-        return frame
-    try:
-        return frame.iloc[:-1]
-    except (AttributeError, IndexError, TypeError):
-        return frame
-
-
-def _annualized_realized_volatility(
-    frame: object, window: int = 20
-) -> float | None:
-    """Calculate observed close-to-close volatility, annualised over 252 sessions."""
-    if window < 2:
-        raise ValueError("window must be at least 2")
-    points = _close_history_points(frame, limit=window + 1)
-    if len(points) < window + 1:
-        return None
-
-    returns: list[float] = []
-    for previous, current in zip(points, points[1:]):
-        previous_close = previous["close"]
-        current_close = current["close"]
-        if previous_close <= 0:
-            return None
-        returns.append((current_close / previous_close) - 1)
-    if len(returns) < 2:
-        return None
-
-    average = sum(returns) / len(returns)
-    variance = sum((value - average) ** 2 for value in returns) / (len(returns) - 1)
-    return round(math.sqrt(variance) * math.sqrt(252) * 100, 2)
 
 
 def _latest_paper_decision() -> dict | None:
@@ -1068,15 +767,6 @@ def get_market_breadth():
         coverage=None,
         coverage_rate=None,
     )
-
-
-def _expected_completed_krx_date(now: dt.datetime | None = None) -> dt.date:
-    """Return the latest KRX session expected to have a completed close."""
-    current = (now or dt.datetime.now(SEOUL)).astimezone(SEOUL)
-    today = current.date()
-    if is_krx_trading_day(today.isoformat()) and current.time() >= dt.time(15, 30):
-        return today
-    return previous_krx_trading_day(today)
 
 
 def _expected_completed_sector_date(now: dt.datetime | None = None) -> dt.date:

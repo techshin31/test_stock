@@ -1493,3 +1493,18 @@ td strong {
     transition-duration: 0.01ms !important;
   }
 }
+
+.resource-status {
+  margin-bottom: 20px;
+  padding: 16px 20px;
+  border: 1px solid var(--gray-700);
+  border-radius: 12px;
+  background: var(--gray-850);
+}
+.resource-status h2 { margin: 0 0 12px; font-size: 14px; }
+.resource-status ul { margin: 0; padding: 0; list-style: none; }
+.resource-status li { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 8px 0; font-size: 13px; }
+.resource-status li strong { min-width: 80px; }
+.resource-status small, .resource-status p { color: var(--gray-400); font-size: 12px; }
+.resource-status p { margin-bottom: 0; }
+.resource-status__error { color: var(--red); }

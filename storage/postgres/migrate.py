@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import psycopg
+from psycopg.conninfo import make_conninfo
 from dotenv import load_dotenv
 
 
@@ -43,7 +44,9 @@ def _connection_uri() -> str:
     database = os.getenv("POSTGRES_DB", "quantpilot_db")
     if not password:
         raise ValueError("POSTGRES_PASSWORD is required to apply database migrations")
-    return f"postgresql://{user}:{password}@{host}:{port}/{database}"
+    return make_conninfo(
+        host=host, port=port, user=user, password=password, dbname=database
+    )
 
 
 def apply_migrations(schema_dir: Path = SCHEMA_DIR) -> list[str]:

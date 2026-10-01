@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from api import main as dashboard_api
+from api import market_data as dashboard_market_data
 
 
 def _write_json(path, payload):
@@ -563,7 +564,7 @@ def test_intraday_market_bar_is_excluded_from_close_based_series(monkeypatch):
     dates = pd.to_datetime(["2026-07-28", "2026-07-29", "2026-07-30"])
     frame = pd.DataFrame({"Close": [100.0, 101.0, 106.0]}, index=dates)
 
-    monkeypatch.setattr(dashboard_api, "is_krx_trading_day", lambda _date: True)
+    monkeypatch.setattr(dashboard_market_data, "is_krx_trading_day", lambda _date: True)
     monkeypatch.setattr(
         dashboard_api,
         "_expected_completed_krx_date",
@@ -641,3 +642,78 @@ def test_journal_reads_the_mode_scoped_certified_report(monkeypatch, tmp_path):
     assert journal["source"] == "CERTIFIED_EOD_REPORT"
     assert journal["summary"]["observed_sessions"] == 2
     assert journal["benchmark_history"][-1]["benchmark_return"] == 1.0
+
+
+def test_empty_stock_names_are_cached_and_refreshed_after_expiry(monkeypatch):
+    now = [0.0]
+    queries = []
+    rows = []
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, query):
+            queries.append(query)
+
+        def fetchall(self):
+            return list(rows)
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def cursor(self):
+            return Cursor()
+
+    monkeypatch.setattr(dashboard_api, "_stock_name_cache", {})
+    monkeypatch.setattr(dashboard_api, "_stock_name_cache_loaded_at", None)
+    monkeypatch.setattr(dashboard_api.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(dashboard_api, "load_dotenv", lambda *a, **kw: None)
+    monkeypatch.setenv("POSTGRES_PASSWORD", "test-only")
+    monkeypatch.setattr(dashboard_api.psycopg, "connect", lambda **kw: Connection())
+
+    assert dashboard_api._load_stock_names() == {}
+    now[0] = 1.0
+    assert dashboard_api._load_stock_names() == {}
+    assert len(queries) == 1
+
+    rows.append(("005930", "삼성전자"))
+    now[0] = dashboard_api.STOCK_NAME_CACHE_SECONDS
+    assert dashboard_api._load_stock_names() == {"005930": "삼성전자"}
+    assert len(queries) == 2
+
+
+@pytest.mark.parametrize('has_health,expected', [(False, 'NOT_STARTED'), (True, 'DATA_PENDING')])
+def test_overview_represents_missing_runtime_without_fabricating_account_data(monkeypatch, tmp_path, has_health, expected):
+    log_root = tmp_path / 'logs'
+    if has_health:
+        path = log_root / 'paper' / 'operational_health.jsonl'
+        path.parent.mkdir(parents=True)
+        path.write_text('{"status": "STARTING"}\n', encoding='utf-8')
+    monkeypatch.setattr(dashboard_api, 'LOG_ROOT', log_root)
+    monkeypatch.setattr(dashboard_api, 'REPORT_ROOT', tmp_path / 'reports')
+    monkeypatch.setattr(dashboard_api, 'ANALYSIS_ROOT', tmp_path / 'analysis')
+    response = dashboard_api.get_overview('PAPER')
+    assert response['runtime']['state'] == expected
+    assert response['dashboard'] is None
+    assert response['latest_report'] is None
+    assert bool(response['health']) == has_health
+
+
+def test_overview_does_not_treat_corrupt_runtime_as_not_started(monkeypatch, tmp_path):
+    path = tmp_path / 'logs' / 'paper' / 'dashboard_state.json'
+    path.parent.mkdir(parents=True)
+    path.write_text('{broken', encoding='utf-8')
+    monkeypatch.setattr(dashboard_api, 'LOG_ROOT', tmp_path / 'logs')
+    monkeypatch.setattr(dashboard_api, 'REPORT_ROOT', tmp_path / 'reports')
+    monkeypatch.setattr(dashboard_api, 'ANALYSIS_ROOT', tmp_path / 'analysis')
+    with pytest.raises(HTTPException) as error:
+        dashboard_api.get_overview('PAPER')
+    assert error.value.status_code == 500

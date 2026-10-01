@@ -392,10 +392,10 @@ def calc_equity_stats(
     return {
         "final_value": float(curve.iloc[-1]),
         "total_return": float(curve.iloc[-1] / curve.iloc[0] - 1.0) if curve.iloc[0] else 0.0,
-        "cagr": calc_cagr(curve, trading_days),
+        "cagr": calc_cagr(equity, trading_days),
         "mdd": calc_mdd(curve),
         "mdd_months": float(mdd_duration / 21.0),
-        "calmar": calc_calmar(curve, trading_days),
+        "calmar": calc_calmar(equity, trading_days),
         "sharpe": float((annual_return - risk_free_rate) / annual_vol) if annual_vol else 0.0,
         "sortino": float((annual_return - risk_free_rate) / downside_vol) if downside_vol else 0.0,
         "volatility": annual_vol,

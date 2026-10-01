@@ -252,6 +252,39 @@ uv run pytest tests/test_trading_safety.py tests/test_live_trader_and_strategy.p
 uv run pytest tests/test_fa_ta_integrity.py tests/test_23_fa_published_backtest.py
 ```
 
+## 개발 검증과 CI
+
+외부 API 인증정보 없이 실행하는 Python 검사와 PostgreSQL 연동 검사를 분리합니다.
+
+```bash
+uv sync --frozen --dev
+uv run --frozen pytest tests -q
+
+cd dashboard
+npm ci
+npm run lint
+npm run build
+npx playwright install chromium
+npm test
+```
+
+DB 연동 검사는 접속 가능한 개발용 PostgreSQL 16과 DB 생성 권한이 필요합니다.
+저장소 루트에서 실행하며, 고유한 임시 테스트 DB를 생성하고 종료 시 삭제합니다.
+기존 애플리케이션 DB의 스키마와 데이터는 변경하지 않습니다.
+
+```bash
+QUANTPILOT_RUN_DB_INTEGRATION=1 uv run --frozen pytest integration -q
+```
+
+이미 설치된 Chromium을 쓰려면 대시보드 검사에
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium`을 지정할 수 있습니다.
+브라우저 검사는 HTTP 오류·갱신 복구·자동 갱신·응답 시간 초과·초기 데이터 상태를
+모의 API 응답으로 검증합니다. 외부 시장 데이터 서비스나 증권 주문은 호출하지 않습니다.
+
+GitHub Actions의 `.github/workflows/ci.yml`은 PR과 `main` 푸시에서 Python,
+대시보드, PostgreSQL 연동 검사를 각각 실행합니다.
+검토 결과와 변경 범위는 [프로젝트 검토 문서](docs/PROJECT_REVIEW.md)를 참고하세요.
+
 ## 프로젝트 구조
 
 ```text
