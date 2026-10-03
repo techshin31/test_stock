@@ -579,7 +579,7 @@ def select_companies(
     company_risk_rows: list[dict] | None = None,
     as_of_date: date | None = None,
 ) -> list[dict]:
-    """Apply hard filters and select up to the configured count per industry."""
+    """Apply hard filters and rank all eligible companies per industry."""
     risk_by_stock = {
         row["stock_code"]: row for row in (company_risk_rows or [])
     }
@@ -615,6 +615,8 @@ def select_companies(
             < as_of_date - timedelta(days=config.scoring.max_company_fa_age_days)
         ):
             exclusion = "STALE_FA"
+        elif _ranking_number(fa.get("valid_financial_quarters")) < config.scoring.minimum_financial_quarters:
+            exclusion = "INSUFFICIENT_FINANCIAL_HISTORY"
         elif _ranking_number(fa.get("total_equity"), 0.0) <= 0 or fa.get("excluded_reason_code") == "CAPITAL_IMPAIRMENT":
             exclusion = "CAPITAL_IMPAIRMENT"
         elif _ranking_number(fa.get("score_confidence"), -1.0) < config.scoring.minimum_score_confidence:
@@ -652,6 +654,9 @@ def select_companies(
                     else None
                 ),
                 "max_company_fa_age_days": config.scoring.max_company_fa_age_days,
+                "valid_financial_quarters": int(_ranking_number(fa.get("valid_financial_quarters"))) if fa else 0,
+                "minimum_financial_quarters": config.scoring.minimum_financial_quarters,
+                "financial_history_cutoff": as_of_date,
                 "risk_state": {
                     "risk_action_code": risk_state.get("risk_action_code"),
                     "reason_code": risk_state.get("reason_code"),

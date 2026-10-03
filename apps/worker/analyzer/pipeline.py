@@ -298,6 +298,9 @@ def run(
         ),
     )
     pbar.update(1)
+    financial_history_exclusions = [
+        item for row in sector_results for item in row.get("financial_history_exclusions", [])
+    ]
     n_selected = sum(r["is_selected"] for r in sector_results)
     _w(f"  선택 {n_selected}개")
     for r in sorted(sector_results, key=lambda x: x.get("final_rank") or 99):
@@ -323,6 +326,7 @@ def run(
                 "phase": 8, "target": request.target,
                 **macro_quality,
                 "selected_industry_count": selected,
+                "financial_history_exclusions": financial_history_exclusions,
                 "input_quality": context.input_quality,
             },
         )
@@ -368,6 +372,7 @@ def run(
                 "selected_company_count": len(selected_companies),
                 "company_risk_source": "company_risk_states",
                 "unmapped_company_codes": unmapped_companies,
+                "financial_history_exclusions": financial_history_exclusions,
                 "input_quality": context.input_quality,
             },
         )
@@ -400,6 +405,7 @@ def run(
             **macro_quality,
             "input_quality": context.input_quality,
             "unmapped_company_codes": unmapped_companies,
+            "financial_history_exclusions": financial_history_exclusions,
         },
         failure_reason=(
             "RUN_VALIDATION_FAILED"

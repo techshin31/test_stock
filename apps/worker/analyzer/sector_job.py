@@ -257,7 +257,13 @@ def score_and_select_sectors(
         if row.get("industry_code") in SUPPORTED_INDUSTRIES
     ]
     industries = sorted({row["industry_code"] for row in snapshot})
-    fa_by_stock = {row["stock_code"]: row for row in company_fa_rows}
+    all_fa_by_stock = {row["stock_code"]: row for row in company_fa_rows}
+    # Incomplete histories must not contribute to sector quality or eligibility.
+    # Keep the full member list as the coverage denominator.
+    fa_by_stock = {
+        row["stock_code"]: row for row in company_fa_rows
+        if _number(row.get("valid_financial_quarters")) >= config.scoring.minimum_financial_quarters
+    }
     status_by_stock = {row["stock_code"]: row for row in company_status_rows}
     risk_blocked_codes = {
         row["stock_code"] for row in (company_risk_rows or [])
@@ -407,6 +413,17 @@ def score_and_select_sectors(
             "cohort_quality_penalty": cohort_penalty,
             "sector_score": sector_score,
             "eligible_large_count": len(eligible_large),
+            "financial_history_exclusions": [
+                {
+                    "stock_code": member["stock_code"],
+                    "valid_financial_quarters": int(_number(all_fa_by_stock.get(member["stock_code"], {}).get("valid_financial_quarters"))),
+                    "minimum_financial_quarters": config.scoring.minimum_financial_quarters,
+                    "reason_code": "INSUFFICIENT_FINANCIAL_HISTORY",
+                }
+                for member in members
+                if member.get("company_size_code") == config.scoring.allowed_company_size
+                and member["stock_code"] not in fa_by_stock
+            ],
             "company_coverage_rate": coverage,
             "relationship_confidence": rel_confidence,
             "macro_contributions": stored_contributions,

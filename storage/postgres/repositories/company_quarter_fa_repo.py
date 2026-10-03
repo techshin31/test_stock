@@ -5,6 +5,7 @@ import json
 from datetime import date
 
 from ..connection import PostgreDB
+from .financial_coverage import VALID_FINANCIAL_QUARTERS_CTE
 
 
 _VALUE_COLUMNS = (
@@ -58,6 +59,7 @@ def fetch_latest_company_fa_as_of(
     model_version: str,
     stock_codes: list[str] | None = None,
 ) -> list[dict]:
+    """Return latest scores enriched with validated raw quarters at this cutoff."""
     conditions = ["available_date <= %s", "model_version = %s"]
     params: list[object] = [cutoff_date, model_version]
     if stock_codes:
@@ -65,10 +67,15 @@ def fetch_latest_company_fa_as_of(
         params.append(stock_codes)
     return db.fetch_all(
         f"""
-        SELECT DISTINCT ON (stock_code) *
-        FROM company_quarter_fa
-        WHERE {' AND '.join(conditions)}
-        ORDER BY stock_code, available_date DESC, period_end DESC, id DESC
+        WITH {VALID_FINANCIAL_QUARTERS_CTE}, latest_fa AS (
+            SELECT DISTINCT ON (stock_code) *
+            FROM company_quarter_fa
+            WHERE {' AND '.join(conditions)}
+            ORDER BY stock_code, available_date DESC, period_end DESC, id DESC
+        )
+        SELECT q.*, COALESCE(r.report_count, 0) AS valid_financial_quarters
+        FROM latest_fa q LEFT JOIN report_counts r USING (stock_code)
+        ORDER BY q.stock_code
         """,
-        tuple(params),
+        (cutoff_date, *params),
     )

@@ -122,6 +122,7 @@ class FaV1Config:
     minimum_abs_correlation: float = 0.15
     minimum_relationship_confidence: float = 0.50
     allowed_company_size: str = "LARGE"
+    minimum_financial_quarters: int = 8
     minimum_company_fa_score: float = 50.0
     minimum_scoring_cohort_size: int = 10
     minimum_score_confidence: float = 0.70
@@ -152,6 +153,8 @@ class FaV1Config:
             raise ValueError("cohort_quality_penalty_rate must be non-negative")
         if self.maximum_cohort_quality_penalty < 0:
             raise ValueError("maximum_cohort_quality_penalty must be non-negative")
+        if self.minimum_financial_quarters < 8:
+            raise ValueError("minimum_financial_quarters must be at least 8")
         if self.max_company_fa_age_days < 1:
             raise ValueError("max_company_fa_age_days must be positive")
         if set(SUPPORTED_INDUSTRIES) & set(UNSUPPORTED_INDUSTRIES):

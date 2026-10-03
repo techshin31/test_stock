@@ -373,6 +373,26 @@ def test_finance_readiness_counts_complete_as_of_quarters(database, case):
                 upsert_wics_companies(db, [{**wics, 'stock_code': '000660'}])
             upsert_dart_events(db, events)
             upsert_financial_statements(db, records)
+            from storage.postgres.repositories.company_quarter_fa_repo import fetch_latest_company_fa_as_of
+            model = load_config().model_version
+            db.execute("""
+                INSERT INTO company_quarter_fa (stock_code, source_rcept_no,
+                    fiscal_year, fiscal_quarter, reprt_code, fs_div, period_end,
+                    available_date, model_version, level_score, change_score,
+                    risk_penalty, risk_score, fa_score, level_confidence,
+                    change_confidence, score_confidence, score_model_code, is_eligible)
+                VALUES ('005930', %s, 2024, '2024Q2', '11012', 'CFS',
+                    '2024-06-30', '2026-05-15', %s, 40, 20, 0, 10, 70, 1, 1, 1,
+                    'GENERAL_V1', TRUE)
+            """, (events[0]['rcept_no'], model))
+            fa = fetch_latest_company_fa_as_of(db, cutoff, model, ['005930'])
+            expected_quarters = (1 if case == 'same_quarter_corrections' else
+                                 0 if case == 'legacy' else
+                                 8 if case in {'complete', 'future_incomplete_latest', 'comprehensive_income', 'unmapped_company'} else 7)
+            assert len(fa) == 1
+            assert fa[0]['valid_financial_quarters'] == expected_quarters
+            assert fetch_latest_company_fa_as_of(db, date(2026, 5, 14), model, ['005930']) == []
+            assert fetch_latest_company_fa_as_of(db, cutoff, 'unknown-model', ['005930']) == []
             rows = fetch_finance_industry_coverage(db, cutoff)
             eligible = 1 if case in {'complete', 'future_incomplete_latest', 'comprehensive_income', 'unmapped_company'} else 0
             assert rows == [{'industry_code': 'G4530',
