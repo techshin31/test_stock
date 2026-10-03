@@ -91,3 +91,21 @@ def test_company_selection_excludes_stale_fundamental_scores():
     assert rows[0]["is_selected"] is False
     assert rows[0]["exclusion_reason_code"] == "STALE_FA"
     assert rows[0]["selection_detail"]["fa_age_days"] == 182
+
+
+def test_unregistered_member_is_audited_without_inserting_invalid_foreign_key(monkeypatch):
+    from apps.worker.analyzer import company_job as job
+    sectors=[{'id':1,'industry_code':'G4530'}]
+    members=[{'stock_code':'UNKNOWN','industry_code':'G4530','sector_code':'G45','company_size_code':'LARGE'}]
+    monkeypatch.setattr(job,'fetch_sector_results',lambda *a,**k:sectors)
+    monkeypatch.setattr(job,'fetch_latest_wics_snapshot',lambda *a:members)
+    monkeypatch.setattr(job,'fetch_latest_company_fa_as_of',lambda *a,**k:[])
+    monkeypatch.setattr(job,'fetch_company_statuses',lambda *a:[])
+    monkeypatch.setattr(job,'fetch_active_company_risk_states',lambda *a,**k:[])
+    writes=[]
+    monkeypatch.setattr(job,'insert_company_results',lambda db,run_id,rows:writes.append(rows))
+    results=job.run(None,1,date(2026,5,31),load_config())
+    assert writes==[[]]
+    assert results[0]['identity_registered'] is False
+    assert results[0]['exclusion_reason_code']=='MAPPING_ERROR'
+    assert results[0]['is_selected'] is False

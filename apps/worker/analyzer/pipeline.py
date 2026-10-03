@@ -339,6 +339,7 @@ def run(
     )
     pbar.update(1)
     selected_companies = [r for r in company_results if r["is_selected"]]
+    unmapped_companies = sorted(r["stock_code"] for r in company_results if r.get("identity_registered") is False)
     by_industry: dict[str, list[str]] = {}
     for r in selected_companies:
         by_industry.setdefault(r["industry_code"], []).append(r["stock_code"])
@@ -366,6 +367,7 @@ def run(
                 "selected_industry_count": len(by_industry),
                 "selected_company_count": len(selected_companies),
                 "company_risk_source": "company_risk_states",
+                "unmapped_company_codes": unmapped_companies,
                 "input_quality": context.input_quality,
             },
         )
@@ -397,6 +399,7 @@ def run(
             "target": request.target,
             **macro_quality,
             "input_quality": context.input_quality,
+            "unmapped_company_codes": unmapped_companies,
         },
         failure_reason=(
             "RUN_VALIDATION_FAILED"

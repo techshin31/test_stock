@@ -7,7 +7,7 @@ import numpy as np
 from core.portfolio.rotation import RotationPlan
 from data.loaders.kospi_data import KOSPI_LARGE_CAP_POOL
 from storage.postgres.connection import PostgreDB
-from storage.postgres.repositories.fa_analysis_repo import fetch_published_fa_selections
+from storage.postgres.repositories.fa_analysis_repo import fetch_published_fa_selections, fetch_reconstructed_fa_selections
 
 def default_rotation_dates(
     start_date: date,
@@ -142,3 +142,38 @@ def build_fa_published_universe(
         current = set(selected)
         all_tickers |= selected
     return initial_universe, plans, all_tickers
+
+
+def build_fa_reconstructed_universe(db, strategy_name, start_date, end_date, model_version, *, allow_warnings=False):
+    """Reconstruct validated historical decisions for research, without publishing."""
+    rows = fetch_reconstructed_fa_selections(db, strategy_name, end_date)
+    allowed = {"PASS", "WARNING"} if allow_warnings else {"PASS"}
+    if any(row["status_code"] not in allowed for row in rows):
+        raise ValueError("reconstructed FA history requires PASS analyses")
+    if any(row["model_version"] != model_version for row in rows):
+        raise ValueError("reconstructed FA model version differs from OHLCV enrichment")
+    if any(row["cutoff_date"] >= row["effective_date"] or (
+        row["stock_code"] is not None and (row["latest_available_date"] is None
+        or row["latest_available_date"] > row["cutoff_date"])) for row in rows):
+        raise ValueError("reconstructed FA history contains point-in-time violations")
+    selections = {}
+    for row in rows:
+        selected = selections.setdefault(row["effective_date"], set())
+        if row["stock_code"] is not None:
+            selected.add(row["stock_code"] + ".KS")
+    initial_dates = [dt for dt in selections if dt <= start_date]
+    if not initial_dates:
+        raise ValueError("no reconstructed FA history exists before backtest start")
+    initial = sorted(selections[max(initial_dates)])
+    current, tickers, plans = set(initial), set(initial), []
+    for dt in sorted(dt for dt in selections if start_date < dt <= end_date):
+        selected = selections[dt]
+        if current != selected:
+            plans.append(RotationPlan(review_date=dt, exits=sorted(current-selected),
+                entries=sorted(selected-current), force_exit_days=20,
+                reason=f"RESEARCH_RECONSTRUCTED FA rotation ({dt})"))
+        current = set(selected)
+        tickers |= selected
+    if not tickers:
+        raise ValueError("reconstructed FA history contains no selected stocks")
+    return initial, plans, tickers

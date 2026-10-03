@@ -191,6 +191,10 @@ class RiskNeutralStrategy(AbstractStrategy):
 
         for i in range(len(dates)):
             d          = dates[i]
+            if ohlcv.attrs.get("signal_start_date") is not None and d < ohlcv.attrs["signal_start_date"]:
+                if include_metadata:
+                    metadata_rows.append({})
+                continue
             regime     = regime_df.at[d, "REGIME"]
             price      = close.iloc[i]
             new_target: float | None = None

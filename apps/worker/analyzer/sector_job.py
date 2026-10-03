@@ -152,13 +152,17 @@ def refresh_industry_prices(
     price_rows = fetch_wics_constituent_prices(
         db, cutoff_date=cutoff_date, start_date=start_date
     )
-    stock_codes = sorted({row["stock_code"] for row in price_rows})
     wics_rows = fetch_wics_companies(
         db,
-        stock_codes=stock_codes,
         start_date=start_date,
         end_date=cutoff_date,
     )
+    # Keep all known KOSPI members in the coverage denominator, including
+    # members whose price download failed. WICS also contains KOSDAQ listings.
+    identities = {r["stock_code"]: r for r in fetch_company_statuses(
+        db, sorted({r["stock_code"] for r in wics_rows})
+    )}
+    wics_rows = [r for r in wics_rows if identities.get(r["stock_code"], {}).get("market_type_code") == "KOSPI"]
     derived = reconstruct_industry_indices(
         price_rows,
         wics_rows,

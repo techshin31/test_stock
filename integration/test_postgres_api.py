@@ -378,3 +378,23 @@ def test_finance_readiness_counts_complete_as_of_quarters(database, case):
             assert rows == [{'industry_code': 'G4530',
                              'large_company_count': 2 if case == 'unmapped_company' else 1,
                              'eligible_company_count': eligible}]
+
+
+def test_public_filing_transaction_rolls_back_event_and_every_fact(database, monkeypatch):
+    from apps.worker.collector import public_finance
+    from data.collectors.public_dart_xbrl import Filing
+    filing=Filing('005930','00126380','20250814000001',date(2025,8,14),date(2025,6,30),'Semi-annual Report (2025.06)')
+    company=dict(stock_code=filing.stock_code,corp_code=filing.corp_code,company_name='Samsung',market_type_code='KOSPI',status_code='ACTIVE')
+    good=dict(stock_code=filing.stock_code,corp_code=filing.corp_code,bsns_year=2025,reprt_code='11012',fs_div='CFS',sj_div='BS',account_id='ifrs-full_Assets',account_nm='Assets',source_rcept_no=filing.receipt,rcept_dt=filing.received,available_date=filing.received,period_start=None,period_end=filing.period_end,thstrm_amount=1000,thstrm_add_amount=None,revision_no=0)
+    bad={**good,'stock_code':'999999','account_id':'ifrs-full_Equity'}
+    class Client:
+        def company(self,code):return company
+        def filings(self,*args):return [filing]
+        def archive(self,*args):return b'validated archive'
+    monkeypatch.setattr(public_finance,'parse_archive',lambda *args:([good,bad],{}))
+    with psycopg.connect(migrate._connection_uri(),autocommit=True,row_factory=dict_row) as conn:
+        with conn.transaction(force_rollback=True):
+            with pytest.raises(psycopg.errors.ForeignKeyViolation):
+                public_finance.run(RepositoryDB(conn),Client(),start=date(2025,1,1),end=date(2025,9,1),years={2025},stock_codes=['005930'])
+            assert conn.execute('SELECT count(*) AS n FROM dart_events WHERE rcept_no=%s',(filing.receipt,)).fetchone()['n']==0
+            assert conn.execute('SELECT count(*) AS n FROM financial_statements WHERE source_rcept_no=%s',(filing.receipt,)).fetchone()['n']==0
