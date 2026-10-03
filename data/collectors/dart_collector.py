@@ -14,6 +14,100 @@ import requests
 
 _DART_API_BASE = "https://opendart.fss.or.kr/api"
 
+
+class DartAPIError(RuntimeError):
+    """DART failure with safe diagnostics, without credential-bearing URLs."""
+
+    def __init__(
+        self,
+        endpoint: str,
+        kind: str,
+        *,
+        dart_status: str | None = None,
+        http_status: int | None = None,
+    ):
+        self.endpoint = endpoint
+        self.kind = kind
+        self.dart_status = dart_status
+        self.http_status = http_status
+        reasons = {
+            "MISSING_KEY": "DART_API_KEY가 실행 환경에 없습니다",
+            "AUTHENTICATION": "인증키 또는 허용 IP 설정을 확인하세요",
+            "RATE_LIMIT": "요청 한도를 초과했습니다. 호출량·제한 상태 확인 후 재개하세요",
+            "PROXY": "클라우드 프록시의 상위 연결에 실패했습니다",
+            "CONNECTION": "연결 또는 응답 대기 중 실패했습니다",
+            "HTTP": "HTTP 요청이 실패했습니다",
+            "INVALID_RESPONSE": "정상 DART 응답 형식이 아닙니다",
+            "SOURCE_MISMATCH": "재무 응답의 기업·기간·접수번호가 선택한 공시와 다릅니다. 공시와 원천 응답을 확인하세요",
+            "API": "DART API가 오류 상태를 반환했습니다",
+        }
+        details = [kind]
+        if http_status is not None:
+            details.append(f"HTTP {http_status}")
+        if dart_status is not None:
+            details.append(f"status={dart_status}")
+        super().__init__(f"DART {endpoint}: {reasons[kind]} ({', '.join(details)})")
+
+
+def _request(endpoint: str, params: dict, timeout: float) -> requests.Response:
+    # requests exceptions can include crtfc_key in their URL. Never propagate
+    # or chain them, and never include the remote response body in diagnostics.
+    try:
+        response = requests.get(
+            f"{_DART_API_BASE}/{endpoint}", params=params, timeout=timeout,
+        )
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else None
+        if status == 429:
+            kind = "RATE_LIMIT"
+        elif (
+            status == 502
+            and exc.response.text.strip() == "Bad Gateway: upstream proxy failure"
+        ):
+            kind = "PROXY"
+        else:
+            kind = "HTTP"
+        raise DartAPIError(endpoint, kind, http_status=status) from None
+    except requests.RequestException:
+        raise DartAPIError(endpoint, "CONNECTION") from None
+    return response
+
+
+def _check_status(endpoint: str, data: dict) -> str:
+    if not isinstance(data, dict):
+        raise DartAPIError(endpoint, "INVALID_RESPONSE")
+    status = data.get("status")
+    if not isinstance(status, str) or re.fullmatch(r"\d{3}", status) is None:
+        raise DartAPIError(endpoint, "INVALID_RESPONSE")
+    if status in ("000", "013"):
+        return status
+    kind = (
+        "RATE_LIMIT" if status == "020" else
+        "AUTHENTICATION" if status in ("010", "011", "012") else "API"
+    )
+    raise DartAPIError(endpoint, kind, dart_status=status)
+
+
+def _request_json(endpoint: str, params: dict, timeout: float) -> dict:
+    response = _request(endpoint, params, timeout)
+    try:
+        data = response.json()
+    except ValueError:
+        raise DartAPIError(endpoint, "INVALID_RESPONSE") from None
+    _check_status(endpoint, data)
+    return data
+
+
+def _response_rows(endpoint: str, data: dict) -> list[dict]:
+    if data["status"] == "013":
+        return []
+    rows = data.get("list")
+    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        raise DartAPIError(endpoint, "INVALID_RESPONSE")
+    return rows
+
+
 # B타입(주요사항보고서) 분류 규칙
 _EVENT_RULES: list[tuple[str, str, tuple[str, ...]]] = [
     ("SHAREHOLDER_RETURN", "CASH_DIVIDEND",            ("현금배당", "현금ㆍ현물배당", "주식배당")),
@@ -44,7 +138,7 @@ _REGULAR_REPORT_RULES: list[tuple[str, str, tuple[str, ...]]] = [
 def _get_dart_key() -> str:
     key = os.environ.get("DART_API_KEY")
     if not key:
-        raise ValueError("환경변수 DART_API_KEY가 필요합니다.")
+        raise DartAPIError("configuration", "MISSING_KEY")
     return key
 
 
@@ -57,16 +151,23 @@ def fetch_corp_codes() -> dict[str, dict]:
         {stock_code: {"corp_code": str, "company_name": str}}
         stock_code가 없는 비상장사는 제외.
     """
-    r = requests.get(
-        f"{_DART_API_BASE}/corpCode.xml",
-        params={"crtfc_key": _get_dart_key()},
-        timeout=60,
-    )
-    r.raise_for_status()
-
-    with zipfile.ZipFile(io.BytesIO(r.content)) as z:
-        with z.open("CORPCODE.xml") as f:
-            root = ET.parse(f).getroot()
+    r = _request("corpCode.xml", {"crtfc_key": _get_dart_key()}, 60)
+    raw = io.BytesIO(r.content)
+    if not zipfile.is_zipfile(raw):
+        # This download endpoint returns an XML status document for API errors,
+        # including authentication and quota failures, instead of a ZIP file.
+        try:
+            status_root = ET.fromstring(r.content)
+        except ET.ParseError:
+            raise DartAPIError("corpCode.xml", "INVALID_RESPONSE") from None
+        _check_status("corpCode.xml", {"status": status_root.findtext("status")})
+        raise DartAPIError("corpCode.xml", "INVALID_RESPONSE")
+    try:
+        with zipfile.ZipFile(raw) as z:
+            with z.open("CORPCODE.xml") as f:
+                root = ET.parse(f).getroot()
+    except (zipfile.BadZipFile, KeyError, ET.ParseError):
+        raise DartAPIError("corpCode.xml", "INVALID_RESPONSE") from None
 
     result: dict[str, dict] = {}
     for item in root.findall("list"):
@@ -91,16 +192,14 @@ def fetch_company_detail(corp_code: str, *, timeout: float = 30) -> dict | None:
     Returns
     -------
     dict or None
-        {"acc_mt": int, ...} — 조회 실패 시 None
+        {"acc_mt": int, ...} — 데이터 없음·결산월 누락 시 None. API 오류는 예외.
     """
-    r = requests.get(
-        f"{_DART_API_BASE}/company.json",
-        params={"crtfc_key": _get_dart_key(), "corp_code": corp_code},
-        timeout=timeout,
+    data = _request_json(
+        "company.json",
+        {"crtfc_key": _get_dart_key(), "corp_code": corp_code},
+        timeout,
     )
-    r.raise_for_status()
-    data = r.json()
-    if data.get("status") != "000":
+    if data["status"] == "013":
         return None
     acc_mt_raw = data.get("acc_mt")
     if acc_mt_raw is None:
@@ -144,17 +243,11 @@ def fetch_financial_statements(
         "reprt_code": reprt_code,
         "fs_div": fs_div,
     }
-    r = requests.get(
-        f"{_DART_API_BASE}/fnlttSinglAcntAll.json",
-        params=params,
-        timeout=timeout,
+    endpoint = "fnlttSinglAcntAll.json"
+    data = _request_json(
+        endpoint, params, timeout,
     )
-    r.raise_for_status()
-    data = r.json()
-    if data.get("status") != "000":
-        return pd.DataFrame()
-    rows = data.get("list") or []
-    return pd.DataFrame(rows)
+    return pd.DataFrame(_response_rows(endpoint, data))
 
 
 def split_by_statement_type(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
@@ -241,9 +334,9 @@ def fetch_dart_events(
         page_no = 1
         while True:
             time.sleep(sleep_seconds)
-            r = requests.get(
-                f"{_DART_API_BASE}/list.json",
-                params={
+            data = _request_json(
+                "list.json",
+                {
                     "crtfc_key":     _get_dart_key(),
                     "corp_code":     corp_code,
                     "bgn_de":        start_date,
@@ -253,14 +346,17 @@ def fetch_dart_events(
                     "page_no":       page_no,
                     "page_count":    100,
                 },
-                timeout=timeout,
+                timeout,
             )
-            r.raise_for_status()
-            data = r.json()
-            if data.get("status") not in ("000", "013"):
+            if data["status"] == "013":
                 break
-            rows.extend(data.get("list") or [])
-            total_page = int(data.get("total_page") or 1)
+            rows.extend(_response_rows("list.json", data))
+            try:
+                total_page = int(data["total_page"])
+            except (KeyError, ValueError, TypeError):
+                raise DartAPIError("list.json", "INVALID_RESPONSE") from None
+            if total_page < 1:
+                raise DartAPIError("list.json", "INVALID_RESPONSE")
             if page_no >= total_page:
                 break
             page_no += 1

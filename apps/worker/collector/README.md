@@ -109,6 +109,16 @@ python -m apps.worker collect all `
 `PASS`인지 확인한다. 현재 CLI는 readiness가 `FAIL`이어도 보고서를 출력하며
 프로세스 오류로 종료하지는 않는다.
 
+자동 작업의 선행 조건으로 사용할 때는 별도의 읽기 전용 엄격한 검사를 실행한다.
+
+```powershell
+python -m apps.worker readiness --cutoff 2026-05-31 --require-ready
+```
+
+이 명령은 수집·분석·발행·주문 없이 현재 DB를 조회한다. PASS이면 종료 코드 0,
+WARNING/FAIL이면 2를 반환한다. `--require-ready`를 생략하면 보고서만 출력한다.
+`--cutoff` 기본값은 한국 날짜다. 월간 분석과 연결할 때는 같은 기준일을 명시한다.
+
 ## 5. 증분 실행
 
 초기 적재 이후에는 같은 명령을 반복 실행해도 upsert와 최신일 판정으로 중복을

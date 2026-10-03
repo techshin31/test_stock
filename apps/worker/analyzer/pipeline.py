@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -29,6 +30,7 @@ from storage.postgres.repositories.fa_analysis_repo import (
     update_analysis_run_status,
 )
 from storage.postgres.repositories.strategy_repo import fetch_active_strategy
+from storage.postgres.repositories.analysis_input_repo import fetch_analysis_source_fingerprints
 
 KST = ZoneInfo("Asia/Seoul")
 
@@ -102,6 +104,7 @@ def _analysis_input_hash(
     config_fingerprint: str,
     target: str,
     request: AnalysisRequest,
+    source_fingerprints: dict[str, dict],
 ) -> str:
     payload = ":".join((
         readiness_hash,
@@ -111,8 +114,9 @@ def _analysis_input_hash(
         request.cutoff_date.isoformat(),
         request.effective_date.isoformat(),
         str(request.reuse_quarter_scores),
+        json.dumps(source_fingerprints, sort_keys=True, separators=(",", ":")),
     ))
-    return hashlib.sha256(payload.encode("ascii")).hexdigest()
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _macro_quality_summary(macro_results) -> dict:
@@ -164,9 +168,14 @@ def prepare_run(
     config.validate()
     readiness = validate_source_readiness(db, request.cutoff_date)
     strategy = fetch_active_strategy(db, config.strategy_name)
+    source_fingerprints = fetch_analysis_source_fingerprints(
+        db, request.cutoff_date,
+        reuse_quarter_scores=request.reuse_quarter_scores,
+        model_version=config.model_version,
+    )
     fail_stale_analysis_runs(db, strategy["id"], request.analysis_month)
     input_hash = _analysis_input_hash(
-        readiness.input_hash, config.fingerprint, request.target, request
+        readiness.input_hash, config.fingerprint, request.target, request, source_fingerprints
     )
     row, created = get_or_create_analysis_run(
         db,

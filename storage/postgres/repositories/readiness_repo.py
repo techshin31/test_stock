@@ -40,23 +40,56 @@ def fetch_finance_industry_coverage(db: PostgreDB, cutoff_date: date) -> list[di
         WITH snapshot_date AS (
             SELECT MAX(base_date) AS base_date
             FROM wics_companies WHERE base_date <= %s
+        ), report_versions AS (
+            SELECT f.stock_code, f.bsns_year, f.reprt_code, f.source_rcept_no,
+                   f.available_date, f.revision_no,
+                   BOOL_OR(f.sj_div = 'BS') AS has_bs,
+                   BOOL_OR(f.sj_div IN ('IS', 'CIS')) AS has_is,
+                   BOOL_OR(f.sj_div = 'CF') AS has_cf,
+                   BOOL_AND(COALESCE(
+                       d.corp_code = f.corp_code
+                       AND d.rcept_dt = f.rcept_dt
+                       AND d.rcept_dt = f.available_date
+                       AND f.period_end IS NOT NULL
+                       AND f.period_end <= f.available_date,
+                       FALSE
+                   )) AS valid_source
+            FROM financial_statements f
+            LEFT JOIN dart_events d ON d.stock_code = f.stock_code
+              AND d.rcept_no = f.source_rcept_no
+            WHERE f.available_date <= %s
+              AND f.fs_div = 'CFS'
+              AND f.reprt_code IN ('11013', '11012', '11014', '11011')
+              AND f.source_rcept_no NOT LIKE 'LEGACY:%%'
+            GROUP BY f.stock_code, f.bsns_year, f.reprt_code, f.source_rcept_no,
+                     f.available_date, f.revision_no
+        ), latest_quarters AS (
+            SELECT DISTINCT ON (stock_code, bsns_year, reprt_code) *
+            FROM report_versions
+            ORDER BY stock_code, bsns_year, reprt_code, available_date DESC,
+                     revision_no DESC, source_rcept_no DESC
         ), report_counts AS (
-            SELECT stock_code, COUNT(DISTINCT source_rcept_no) AS report_count
-            FROM financial_statements
-            WHERE available_date <= %s
-              AND source_rcept_no NOT LIKE 'LEGACY:%%'
+            SELECT stock_code, COUNT(*) FILTER (
+                WHERE has_bs AND has_is AND has_cf AND valid_source
+            ) AS report_count
+            FROM latest_quarters
             GROUP BY stock_code
         )
         SELECT w.industry_code,
                COUNT(*) AS large_company_count,
-               COUNT(*) FILTER (WHERE COALESCE(r.report_count, 0) >= 8) AS eligible_company_count
+               COUNT(*) FILTER (
+                   WHERE COALESCE(r.report_count, 0) >= 8
+                     AND c.status_code = 'ACTIVE' AND c.market_type_code = 'KOSPI'
+               ) AS eligible_company_count
         FROM wics_companies w
         JOIN snapshot_date s ON s.base_date = w.base_date
-        JOIN companies c ON c.stock_code = w.stock_code
+        LEFT JOIN companies c ON c.stock_code = w.stock_code
         LEFT JOIN report_counts r ON r.stock_code = w.stock_code
         WHERE w.company_size_code = 'LARGE'
-          AND c.status_code = 'ACTIVE'
-          AND c.market_type_code = 'KOSPI'
+          AND (
+              (c.status_code = 'ACTIVE' AND c.market_type_code = 'KOSPI')
+              OR c.stock_code IS NULL OR c.market_type_code IS NULL
+          )
         GROUP BY w.industry_code
         ORDER BY w.industry_code
         """,

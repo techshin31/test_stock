@@ -18,6 +18,7 @@ except ImportError:
     _HAS_TQDM = False
 
 from data.collectors.dart_collector import (
+    DartAPIError,
     fetch_company_detail as _fetch_company_detail,
     fetch_corp_codes as _fetch_corp_codes,
     fetch_dart_events as _fetch_dart_events,
@@ -235,6 +236,39 @@ def _to_int(val) -> int | None:
         return None
 
 
+def _validate_financial_source(
+    df: pd.DataFrame,
+    corp_code: str,
+    bsns_year: int,
+    reprt_code: str,
+    fs_div: str,
+    receipt: dict,
+) -> None:
+    """Reject latest API data that cannot be tied to the selected filing.
+
+    The financial API selects by year/report, not by receipt. Never backdate
+    a later correction by replacing its receipt with a cached older filing.
+    """
+    expected = {
+        "rcept_no": receipt["rcept_no"],
+        "corp_code": corp_code,
+        "bsns_year": str(bsns_year),
+        "reprt_code": reprt_code,
+    }
+    # fnlttSinglAcntAll selects CFS/OFS through its request parameter; response
+    # rows need not repeat fs_div. Verify it if the provider does include it.
+    if "fs_div" in df.columns:
+        expected["fs_div"] = fs_div
+    endpoint = "fnlttSinglAcntAll.json"
+    if any(column not in df.columns for column in expected):
+        raise DartAPIError(endpoint, "INVALID_RESPONSE")
+    if any(
+        not df[column].astype(str).str.strip().eq(str(value)).all()
+        for column, value in expected.items()
+    ):
+        raise DartAPIError(endpoint, "SOURCE_MISMATCH")
+
+
 def collect_financial_statements(
     db: PostgreDB,
     years: list[int],
@@ -319,18 +353,16 @@ def collect_financial_statements(
                 report["period_end"] = report["period_end"].replace(day=1) - timedelta(days=1)
 
                 time.sleep(sleep_seconds)
-                try:
-                    df_all = _fetch_fs(
-                        corp_code, year, reprt_code=reprt_code, fs_div=fs_div
-                    )
-                except Exception as exc:
-                    print(
-                        f"[WARN] {company['company_name']}({stock_code}) "
-                        f"{year}/{reprt_code} 수집 실패: {exc}"
-                    )
-                    continue
+                # A failed request is not an empty report. Stop this run so
+                # quota/authentication/network failures cannot look successful.
+                df_all = _fetch_fs(
+                    corp_code, year, reprt_code=reprt_code, fs_div=fs_div
+                )
                 if df_all.empty:
                     continue
+                _validate_financial_source(
+                    df_all, corp_code, year, reprt_code, fs_div, receipt,
+                )
 
                 tables = split_by_statement_type(df_all)
                 records: list[dict] = []
@@ -416,14 +448,10 @@ def collect_dart_events(
         if effective_start > end_date:
             continue
 
-        try:
-            df = _fetch_dart_events(
-                corp_code, effective_start, end_date,
-                sleep_seconds=sleep_seconds,
-            )
-        except Exception as e:
-            print(f"[WARN] {company['company_name']}({stock_code}) 이벤트 수집 실패: {e}")
-            continue
+        df = _fetch_dart_events(
+            corp_code, effective_start, end_date,
+            sleep_seconds=sleep_seconds,
+        )
 
         if df.empty:
             continue

@@ -1597,7 +1597,7 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
         if not results:
             return
         path = self.log_dir / "trade_history.jsonl"
-        timestamp = datetime.datetime.now().isoformat(timespec="seconds")
+        timestamp = _now_kst().isoformat(timespec="seconds")
         with path.open("a", encoding="utf-8") as handle:
             for result in results:
                 payload = {
@@ -1645,7 +1645,7 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
         if not latest or str(latest.get("status") or "").upper() == normalized_status:
             return False
 
-        timestamp = datetime.datetime.now().isoformat(timespec="seconds")
+        timestamp = _now_kst().isoformat(timespec="seconds")
         correction = {
             **latest,
             "timestamp": timestamp,
@@ -1705,7 +1705,17 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
                     row = json.loads(raw)
                 except (TypeError, ValueError, json.JSONDecodeError):
                     continue
-                if not str(row.get("timestamp") or "").startswith(today):
+                try:
+                    timestamp = datetime.datetime.fromisoformat(
+                        str(row.get("timestamp") or "").replace("Z", "+00:00")
+                    )
+                except ValueError:
+                    continue
+                # New logs include an offset. Preserve the wall date of old
+                # naive logs, whose original host timezone was not recorded.
+                if timestamp.tzinfo is not None:
+                    timestamp = timestamp.astimezone(KST)
+                if timestamp.date().isoformat() != today:
                     continue
                 if str(row.get("status") or "").upper() not in open_statuses:
                     continue

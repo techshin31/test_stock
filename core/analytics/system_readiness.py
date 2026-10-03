@@ -19,7 +19,10 @@ def _load(path: Path, *, required: bool = True) -> dict:
         if required:
             raise FileNotFoundError(str(path))
         return {}
-    return json.loads(path.read_text(encoding="utf-8-sig"))
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"expected a JSON object: {path}")
+    return payload
 
 
 def _load_first(paths: list[Path]) -> tuple[dict, Path | None]:
@@ -767,19 +770,40 @@ def main() -> int:
     )
     args = parser.parse_args()
     root = Path(args.project_root).resolve()
-    result = audit_system_readiness(
-        root,
-        environ={} if args.for_real_activation else None,
-    )
+    try:
+        result = audit_system_readiness(
+            root,
+            environ={} if args.for_real_activation else None,
+        )
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        # An empty/new installation has no PAPER evidence. Persist a failed
+        # audit rather than leaving a previous READY report behind.
+        detail = f"required operational evidence is unavailable or invalid ({type(exc).__name__})"
+        if isinstance(exc, FileNotFoundError):
+            detail = f"required operational evidence is missing: {exc}"
+        result = {
+            "schema_version": 1,
+            "generated_at": dt.datetime.now(KST).isoformat(timespec="seconds"),
+            "scope": "PAPER_AUTOMATED_TRADING_SYSTEM",
+            "audit_status": "BLOCKED",
+            "paper_runtime_safe": False,
+            "full_system_complete": False,
+            "real_execution_authorized": False,
+            "progress": {},
+            "safety_checks": [{"name": "operational_evidence_readable", "passed": False, "detail": detail}],
+            "completion_evidence_checks": [],
+            "blockers": [detail],
+            "sources": [],
+        }
     output = Path(args.output)
     if not output.is_absolute():
         output = root / output
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(
-        json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    from core.utils.io import write_json
+
+    write_json(output, result)
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 2 if args.require_complete and not result["full_system_complete"] else 0
+    blocked = result.get("audit_status") == "BLOCKED"
+    return 2 if blocked or (args.require_complete and not result["full_system_complete"]) else 0
 
 
 if __name__ == "__main__":

@@ -9,6 +9,8 @@ from core.broker.kis_api import BrokerResponseError, normalize_symbol
 
 class OrderExecutionMixin:
     def _execute_orders(self, orders):
+        if getattr(self, "execution_venue", None) == "DRY_RUN":
+            return [{**order, "status": "DRY_RUN", "filled_qty": 0} for order in orders]
         if getattr(self.broker, "is_simulated", False):
             return self._execute_simulation_orders(orders)
         import time
@@ -315,14 +317,20 @@ class OrderExecutionMixin:
                 })
                 continue
             ticker = order["ticker"]
-            qty = int(order["qty"])
-            price = float(order["expected_price"])
             try:
+                if order["type"] not in {"BUY", "SELL"}:
+                    raise ValueError("simulation order side must be BUY or SELL")
+                qty = self.broker.validate_quantity(order["qty"])
+                price = order["expected_price"]
                 self.broker.set_market_price(ticker, price)
                 if order["type"] == "BUY":
-                    response = self.broker.place_market_buy(ticker, qty)
+                    response = self.broker.place_market_buy(
+                        ticker, qty, idempotency_key=order.get("idempotency_key")
+                    )
                 else:
-                    response = self.broker.place_market_sell(ticker, qty)
+                    response = self.broker.place_market_sell(
+                        ticker, qty, idempotency_key=order.get("idempotency_key")
+                    )
                 order_id = response["output"]["ODNO"]
                 status = self.broker.get_order_status(order_id)
                 results.append({

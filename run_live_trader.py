@@ -19,6 +19,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 KST = ZoneInfo("Asia/Seoul")
 
 
+class _SilentNotifier:
+    def send_message(self, message):
+        return False
+
+
 def _assert_real_system_ready(project_root: Path = PROJECT_ROOT) -> dict:
     """Fail closed before any ordinary REAL broker/order path is initialized."""
     from core.analytics.system_readiness import audit_system_readiness
@@ -159,9 +164,10 @@ def main():
     parser = argparse.ArgumentParser(description="FA+TA Momentum Live Trader")
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument("--live", action="store_true", help="실계좌 사용(이중 잠금 필요)")
-    mode_group.add_argument("--mock", action="store_true", help="모의투자 계좌 사용(기본값)")
+    mode_group.add_argument("--mock", action="store_true", help="KIS 모의투자 계좌 주문 실행")
     mode_group.add_argument("--simulate", action="store_true", help="로컬 가상 계좌와 즉시 체결 엔진 사용")
     parser.add_argument("--dry-run", action="store_true", help="주문 실행 없이 시그널만 계산")
+    parser.add_argument("--notify", action="store_true", help="설정된 Telegram 알림 전송 활성화")
     parser.add_argument(
         "--force-rebalance",
         action="store_true",
@@ -185,6 +191,8 @@ def main():
         help="전체 청산 확인 문자열. --liquidate와 함께 LIQUIDATE를 입력해야 함",
     )
     args = parser.parse_args()
+    if not (args.live or args.mock or args.simulate):
+        args.dry_run = True
     if args.live and args.dry_run:
         parser.error("--live and --dry-run cannot be combined; DRY_RUN always uses mock")
     if args.liquidate and args.dry_run:
@@ -217,7 +225,7 @@ def main():
             raise SystemExit(2)
         atexit.register(cycle_lock.release)
     
-    bot = TelegramBot()
+    bot = TelegramBot() if args.notify else _SilentNotifier()
     
     trader = None
     try:
@@ -252,14 +260,6 @@ def main():
             trader.broker.masked_account,
         )
         
-        # 만약 dry_run이면 내부에서 주문이 나가지 않도록 _execute_orders를 패치 (간이 구현)
-        if getattr(args, 'dry_run', False): # argparse는 하이픈을 언더스코어로 바꿈
-            def mock_execute(orders):
-                print("[DRY RUN] 다음 주문들이 실행될 예정입니다:")
-                for o in orders:
-                    print(f" -> {o['type']} {o['ticker']} 수량: {o['qty']}")
-            trader._execute_orders = mock_execute
-            
         if args.liquidate:
             if args.confirm_liquidate != "LIQUIDATE":
                 raise PermissionError(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -85,6 +86,13 @@ def _parse_args() -> argparse.Namespace:
     )
 
     subparsers.add_parser("audit", help="FA 시점 안전성과 운영 상태 감사")
+
+    readiness_p = subparsers.add_parser("readiness", help="주문·수집 없이 현재 데이터 준비도 검사")
+    readiness_p.add_argument("--cutoff", type=date.fromisoformat, metavar="YYYY-MM-DD")
+    readiness_p.add_argument(
+        "--require-ready", action="store_true",
+        help="준비도가 PASS가 아니면 종료 코드 2 반환",
+    )
 
     return parser.parse_args()
 
@@ -298,15 +306,36 @@ def run_audit() -> None:
         db.close()
 
 
+def run_readiness(args: argparse.Namespace) -> None:
+    from apps.worker.collector.readiness import run
+
+    _, db = _init()
+    try:
+        report = run(db, args.cutoff or _today_kst())
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        if args.require_ready and report.status != "PASS":
+            raise SystemExit(2)
+    finally:
+        db.close()
+
+
 def main() -> None:
+    from data.collectors.dart_collector import DartAPIError
+
     args = _parse_args()
 
-    if args.category == "collect":
-        run_collect(args)
-    elif args.category == "analyze":
-        run_analyze(args)
-    elif args.category == "audit":
-        run_audit()
+    try:
+        if args.category == "collect":
+            run_collect(args)
+        elif args.category == "analyze":
+            run_analyze(args)
+        elif args.category == "audit":
+            run_audit()
+        elif args.category == "readiness":
+            run_readiness(args)
+    except DartAPIError as exc:
+        print(f"[COLLECT FAILED] {exc}", file=sys.stderr)
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":

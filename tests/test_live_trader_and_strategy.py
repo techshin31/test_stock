@@ -727,7 +727,12 @@ def test_trade_history_reconciliation_appends_final_status_once(tmp_path):
     assert rows[-1]["filled_qty"] == 10
 
 
-def test_trade_history_db_reconciliation_repairs_terminal_order(tmp_path):
+def test_trade_history_db_reconciliation_repairs_terminal_order(tmp_path, monkeypatch):
+    import core.execution.trader as trader_module
+
+    # UTC is still October 2 while the exchange is already on October 3.
+    now = datetime.datetime.fromisoformat("2026-10-02T16:00:00+00:00").astimezone(trader_module.KST)
+    monkeypatch.setattr(trader_module, "_now_kst", lambda: now)
     class FakeDB:
         def fetch_all(self, query, params):
             return [{
@@ -763,10 +768,47 @@ def test_trade_history_db_reconciliation_repairs_terminal_order(tmp_path):
         .splitlines()
     ]
     assert rows[-1]["status"] == "FILLED"
+    assert rows[0]["timestamp"] == "2026-10-03T01:00:00+09:00"
+    assert rows[-1]["timestamp"] == rows[0]["timestamp"]
     assert rows[-1]["reconciliation_source"] == (
         "PAPER_TRADE_HISTORY_DB_RECONCILIATION"
     )
     assert trader._reconcile_trade_history_with_db() == 0
+
+
+@pytest.mark.parametrize('timestamp,expected', [
+    ('2026-10-02T16:00:00+00:00', 1),
+    ('2026-10-02T16:00:00Z', 1),
+    ('2026-10-03T01:00:00+09:00', 1),
+    ('2026-10-03T01:00:00', 1),
+    ('2026-10-02T14:00:00+00:00', 0),
+    ('2026-10-03-invalid', 0),
+])
+def test_trade_history_reconciliation_uses_exchange_date(tmp_path, monkeypatch, timestamp, expected):
+    import core.execution.trader as trader_module
+
+    now = datetime.datetime.fromisoformat('2026-10-03T01:00:00+09:00')
+    monkeypatch.setattr(trader_module, '_now_kst', lambda: now)
+    calls = []
+
+    class FakeDB:
+        def fetch_all(self, query, params):
+            calls.append(params)
+            return [{'broker_order_id': '0000012345', 'order_status_code': 'FILLED',
+                     'qty': 10, 'filled_qty': 10, 'avg_fill_price': 70000}]
+
+    trader = object.__new__(LiveTrader)
+    trader.execution_venue = 'PAPER'
+    trader.strategy_name = 'aggressive'
+    trader.log_dir = tmp_path
+    trader.db = FakeDB()
+    trader.broker = type('Broker', (), {'masked_account': '***1234-01'})()
+    (tmp_path / 'trade_history.jsonl').write_text(json.dumps({
+        'timestamp': timestamp, 'status': 'PARTIAL', 'broker_order_id': '0000012345',
+        'ticker': '005930.KS',
+    }) + '\n', encoding='utf-8')
+    assert trader._reconcile_trade_history_with_db() == expected
+    assert len(calls) == expected
 
 
 def test_snapshot_only_capture_is_scoped_and_places_no_order(tmp_path):
