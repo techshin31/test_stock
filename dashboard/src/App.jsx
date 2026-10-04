@@ -1,4 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { requestJson } from './dataClient.js'
+import { useRemoteResource } from './useRemoteResource.js'
+import ResourceStatus from './ResourceStatus.jsx'
 import {
   Activity,
   AlertTriangle,
@@ -30,7 +33,6 @@ const MarketOverview = lazy(() => import('./MarketOverview.jsx'))
 const SectorAnalysis = lazy(() => import('./SectorAnalysis.jsx'))
 const TradingJournal = lazy(() => import('./TradingJournal.jsx'))
 
-const MODE = 'PAPER'
 const REFRESH_MS = 30_000
 const INVERSE_HEDGE_TICKER = '114800.KS'
 const INVERSE_HEDGE_POSITION_LABEL = 'KODEX 인버스 · 인버스 1X ETF'
@@ -48,20 +50,6 @@ const SUPPRESSION_REASON_LABELS = {
   FILLED_ORDER_TODAY: '당일 체결 주문 중복 방지',
   PRICE_GUARD_COOLDOWN: '가격 편차 보호 대기',
   RETRY_LIMIT: '당일 재시도 한도 도달',
-}
-
-function apiUrl(path) {
-  const separator = path.includes('?') ? '&' : '?'
-  return `${path}${separator}mode=${MODE}`
-}
-
-async function requestJson(path, signal) {
-  const response = await fetch(apiUrl(path), { signal })
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}))
-    throw new Error(payload.detail || `요청 실패 (${response.status})`)
-  }
-  return response.json()
 }
 
 function formatMoney(value) {
@@ -584,76 +572,26 @@ function Reports({ overview, reports, selectedDate, reportDetail, loading, error
 
 function App() {
   const [activeTab, setActiveTab] = useState('market')
-  const [overview, setOverview] = useState(null)
-  const [overviewError, setOverviewError] = useState('')
-  const [overviewLoading, setOverviewLoading] = useState(true)
+  const overviewResource = useRemoteResource('/api/overview')
+  const { data: overview, error: overviewError, loading: overviewLoading, refresh: loadOverview } = overviewResource
   const [reports, setReports] = useState([])
   const [reportsError, setReportsError] = useState('')
   const [reportsLoading, setReportsLoading] = useState(false)
   const [selectedDate, setSelectedDate] = useState('')
   const [reportDetail, setReportDetail] = useState(null)
 
-  // Market Overview states
-  const [marketIndices, setMarketIndices] = useState(null)
-  const [marketBreadth, setMarketBreadth] = useState(null)
-  const [marketSectors, setMarketSectors] = useState(null)
-  const [exchangeRate, setExchangeRate] = useState(null)
-  const [marketRegime, setMarketRegime] = useState(null)
-  const [marketLoading, setMarketLoading] = useState(true)
-
-  // Sector Analysis states
-  const [sectorData, setSectorData] = useState(null)
-  const [sectorLoading, setSectorLoading] = useState(true)
-
-  // Trading Journal states
-  const [journalData, setJournalData] = useState(null)
-  const [journalLoading, setJournalLoading] = useState(true)
-
-  const loadOverview = useCallback(async (signal) => {
-    try {
-      setOverviewError('')
-      const payload = await requestJson('/api/overview', signal)
-      setOverview(payload)
-    } catch (error) {
-      if (error.name !== 'AbortError') setOverviewError(error.message)
-    } finally {
-      if (!signal?.aborted) setOverviewLoading(false)
-    }
-  }, [])
-
-  const loadMarketData = useCallback(async (signal) => {
-    try {
-      const [indices, breadth, sectors, rate, regime] = await Promise.allSettled([
-        requestJson('/api/market-indices', signal),
-        requestJson('/api/market-breadth', signal),
-        requestJson('/api/sectors', signal),
-        requestJson('/api/exchange-rate', signal),
-        requestJson('/api/market-regime', signal),
-      ])
-      if (indices.status === 'fulfilled') setMarketIndices(indices.value)
-      if (breadth.status === 'fulfilled') setMarketBreadth(breadth.value)
-      if (sectors.status === 'fulfilled') setMarketSectors(sectors.value)
-      if (rate.status === 'fulfilled') setExchangeRate(rate.value)
-      if (regime.status === 'fulfilled') setMarketRegime(regime.value)
-    } catch { /* optional market data is rendered as unavailable */ }
-    finally { if (!signal?.aborted) setMarketLoading(false) }
-  }, [])
-
-  const loadSectorData = useCallback(async (signal) => {
-    try {
-      const payload = await requestJson('/api/sectors', signal)
-      setSectorData(payload)
-    } catch { /* optional sector data is rendered as unavailable */ }
-    finally { if (!signal?.aborted) setSectorLoading(false) }
-  }, [])
-
-  const loadJournalData = useCallback(async (signal) => {
-    try {
-      const payload = await requestJson('/api/journal', signal)
-      setJournalData(payload)
-    } catch { /* optional journal data is rendered as unavailable */ }
-    finally { if (!signal?.aborted) setJournalLoading(false) }
-  }, [])
+  const indicesResource = useRemoteResource('/api/market-indices', { enabled: activeTab === 'market' })
+  const breadthResource = useRemoteResource('/api/market-breadth', { enabled: activeTab === 'market' })
+  const marketSectorsResource = useRemoteResource('/api/sectors', { enabled: activeTab === 'market' })
+  const exchangeResource = useRemoteResource('/api/exchange-rate', { enabled: activeTab === 'market' })
+  const regimeResource = useRemoteResource('/api/market-regime', { enabled: activeTab === 'market' })
+  const sectorResource = useRemoteResource('/api/sectors', { enabled: activeTab === 'sectors' })
+  const journalResource = useRemoteResource('/api/journal', { enabled: activeTab === 'journal' })
+  const marketResources = [['시장 지수', indicesResource], ['시장 폭', breadthResource], ['시장 업종', marketSectorsResource], ['환율', exchangeResource], ['시장 국면', regimeResource]]
+  const marketLoading = marketResources.some(([, resource]) => resource.loading)
+  const activeResources = activeTab === 'market' ? marketResources
+    : activeTab === 'sectors' ? [['업종 분석', sectorResource]]
+      : activeTab === 'journal' ? [['매매 저널', journalResource]] : []
 
   const selectReport = useCallback(async (date, signal) => {
     setReportDetail(null)
@@ -682,43 +620,6 @@ function App() {
     }
   }, [])
 
-  // Load overview on mount (always, for topbar status)
-  useEffect(() => {
-    const controller = new AbortController()
-    loadOverview(controller.signal)
-    const interval = window.setInterval(() => loadOverview(controller.signal), REFRESH_MS)
-    return () => { controller.abort(); window.clearInterval(interval) }
-  }, [loadOverview])
-
-  // Market tab data
-  useEffect(() => {
-    if (activeTab !== 'market') return undefined
-    const controller = new AbortController()
-    setMarketLoading(true)
-    loadMarketData(controller.signal)
-    const interval = window.setInterval(() => loadMarketData(controller.signal), REFRESH_MS)
-    return () => { controller.abort(); window.clearInterval(interval) }
-  }, [activeTab, loadMarketData])
-
-  // Sector tab data
-  useEffect(() => {
-    if (activeTab !== 'sectors') return undefined
-    const controller = new AbortController()
-    setSectorLoading(true)
-    loadSectorData(controller.signal)
-    const interval = window.setInterval(() => loadSectorData(controller.signal), REFRESH_MS)
-    return () => { controller.abort(); window.clearInterval(interval) }
-  }, [activeTab, loadSectorData])
-
-  // Journal tab data
-  useEffect(() => {
-    if (activeTab !== 'journal') return undefined
-    const controller = new AbortController()
-    setJournalLoading(true)
-    loadJournalData(controller.signal)
-    return () => controller.abort()
-  }, [activeTab, loadJournalData])
-
   // Reports tab data
   useEffect(() => {
     if (activeTab !== 'reports') return undefined
@@ -737,7 +638,7 @@ function App() {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const lastUpdated = useMemo(() => overview?.dashboard?.updated_at || '확인 중', [overview])
-  const operationalStatus = overview?.dashboard?.operational_status || 'UNKNOWN'
+  const operationalStatus = overviewError ? 'ERROR' : overview?.runtime?.state === 'NOT_STARTED' ? '미시작' : overview?.runtime?.state === 'DATA_PENDING' ? '데이터 준비 중' : overview?.dashboard?.operational_status || 'UNKNOWN'
 
   return (
     <div className="app-shell">
@@ -816,7 +717,7 @@ function App() {
             <div className="hero-topbar__eyebrow">
               <span className="hero-badge">PAPER</span>
               <span className="hero-divider">/</span>
-              <span>***9904-01</span>
+              <span>{overview?.dashboard?.account_scope || '계좌 상태 미확인'}</span>
               <span className="hero-divider">·</span>
               <span>updated {lastUpdated}</span>
             </div>
@@ -834,7 +735,7 @@ function App() {
             <button
               className="icon-button"
               type="button"
-              onClick={() => loadOverview()}
+              onClick={() => { loadOverview(); activeResources.forEach(([, resource]) => resource.refresh()) }}
               title="새로고침"
             >
               <RefreshCw size={14} />
@@ -843,14 +744,22 @@ function App() {
         </header>
 
         <div className="page-content">
+          {overview?.runtime?.state !== 'AVAILABLE' && overview?.runtime ? (
+            <div className="state-block" role="status">
+              <strong>{overview.runtime.state === 'NOT_STARTED' ? '운영 미시작' : '운영 데이터 준비 중'}</strong>
+              <p>{overview.runtime.message}</p>
+              <p>운영 상태가 준비되면 계좌와 성과 정보를 표시합니다.</p>
+            </div>
+          ) : null}
+          <ResourceStatus resources={[["운영 상태", overviewResource], ...activeResources]} />
           {activeTab === 'market' ? (
             <Suspense fallback={<LoadingState label="시장 개요를 불러오는 중입니다." />}>
               <MarketOverview
-                indices={marketIndices}
-                breadth={marketBreadth}
-                sectors={marketSectors}
-                exchangeRate={exchangeRate}
-                regime={marketRegime}
+                indices={indicesResource.data}
+                breadth={breadthResource.data}
+                sectors={marketSectorsResource.data}
+                exchangeRate={exchangeResource.data}
+                regime={regimeResource.data}
                 loading={marketLoading}
               />
             </Suspense>
@@ -859,20 +768,20 @@ function App() {
           {activeTab === 'overview' ? (
             <>
               {overviewLoading && !overview ? <LoadingState /> : null}
-              {overviewError && !overview ? <ErrorState message={overviewError} onRetry={() => { setOverviewLoading(true); loadOverview() }} /> : null}
-              {overview ? <Overview overview={overview} onOpenReports={() => setActiveTab('reports')} /> : null}
+              {overviewError && !overview ? <ErrorState message={overviewError} onRetry={loadOverview} /> : null}
+              {overview?.dashboard ? <Overview overview={overview} onOpenReports={() => setActiveTab('reports')} /> : null}
             </>
           ) : null}
 
           {activeTab === 'sectors' ? (
             <Suspense fallback={<LoadingState label="섹터 분석을 불러오는 중입니다." />}>
-              <SectorAnalysis sectors={sectorData} loading={sectorLoading} />
+              <SectorAnalysis sectors={sectorResource.data} loading={sectorResource.loading} />
             </Suspense>
           ) : null}
 
           {activeTab === 'journal' ? (
             <Suspense fallback={<LoadingState label="매매 저널을 불러오는 중입니다." />}>
-              <TradingJournal journal={journalData} loading={journalLoading} />
+              <TradingJournal journal={journalResource.data} loading={journalResource.loading} />
             </Suspense>
           ) : null}
 

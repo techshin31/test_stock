@@ -21,7 +21,9 @@ def calc_cagr(prices: pd.Series, trading_days_per_year: int = 252) -> float:
     Parameters
     ----------
     prices : pd.Series
-        1.0 기준 누적 자산 곡선.
+        거래일별 누적 자산 곡선. 첫 값과 마지막 값 사이의 행 간격을 기간으로
+        사용한다. 중간 결측값도 경과한 거래일로 계산하며 양 끝 결측값은 제외한다.
+        인덱스에 없는 날짜는 추정하지 않으므로 거래일 그리드로 입력해야 한다.
     trading_days_per_year : int, optional
         연간 거래일 수, 기본값 252.
 
@@ -30,10 +32,15 @@ def calc_cagr(prices: pd.Series, trading_days_per_year: int = 252) -> float:
     float
         연평균 수익률. 데이터 부족 또는 시작값 0이면 0.0 반환.
     """
-    prices = prices.dropna()
-    if len(prices) < 2 or prices.iloc[0] <= 0:
+    if trading_days_per_year <= 0:
+        raise ValueError("trading_days_per_year must be positive")
+    valid_positions = prices.notna().to_numpy().nonzero()[0]
+    if len(valid_positions) < 2:
         return 0.0
-    n_years = len(prices) / trading_days_per_year
+    prices = prices.iloc[valid_positions[0]:valid_positions[-1] + 1]
+    if prices.iloc[0] <= 0:
+        return 0.0
+    n_years = (len(prices) - 1) / trading_days_per_year
     return float((prices.iloc[-1] / prices.iloc[0]) ** (1.0 / n_years) - 1.0)
 
 

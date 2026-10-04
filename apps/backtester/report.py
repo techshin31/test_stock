@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import koreanize_matplotlib  # Register the bundled font for Korean report labels.
 
 from core.analytics.report import (
     build_investor_commentary,
@@ -28,6 +29,11 @@ def save_report(pipeline_result: BacktestPipelineResult, output_dir: Path, save_
         pipeline_result.result, pipeline_result.performance, pipeline_result.compare_summary,
     )
     report_md = to_markdown(pipeline_result.result, pipeline_result.performance)
+    if pipeline_result.input_manifest.get("research_reconstructed"):
+        report_md = ("연구용 과거 FA 재구성 결과입니다. 실제 과거 발행·주문 실적이 아닙니다.\n\n" + report_md)
+        warning_runs = [r["run_id"] for r in pipeline_result.input_manifest.get("analysis_runs", []) if r["status_code"] == "WARNING"]
+        if warning_runs:
+            report_md = f"입력 데이터 품질 경고가 있는 분석을 포함합니다: {warning_runs}. 개별 경고는 분석 원장에서 확인하세요.\n\n" + report_md
     if commentary:
         report_md += "\n## 해석\n\n" + "\n".join(f"- {line}" for line in commentary) + "\n"
     (output_dir / "report.md").write_text(report_md, encoding="utf-8")
@@ -35,6 +41,7 @@ def save_report(pipeline_result: BacktestPipelineResult, output_dir: Path, save_
     metrics = to_dict(pipeline_result.performance)
     metrics["compare_summary"] = pipeline_result.compare_summary.to_dict(orient="records")
     metrics["initial_universe"] = pipeline_result.initial_universe
+    metrics["input_manifest"] = pipeline_result.input_manifest
     (output_dir / "metrics.json").write_text(
         json.dumps(metrics, ensure_ascii=False, indent=2, default=str), encoding="utf-8",
     )

@@ -19,8 +19,8 @@ def _parse_args() -> argparse.Namespace:
         help="fa-published 유니버스를 제공하는 분석 전략 이름",
     )
     run_p.add_argument(
-        "--universe-source", choices=["random", "fa-published"], default="random",
-        help="유니버스 원천: 랜덤 데모 또는 PUBLISHED FA 실행",
+        "--universe-source", choices=["random", "fa-published", "fa-reconstructed"], default="random",
+        help="유니버스 원천: 랜덤 데모, PUBLISHED FA 또는 PASS 분석의 연구용 재구성",
     )
     run_p.add_argument("--start", default="2018-01-01", help="백테스트 시작일 (YYYY-MM-DD)")
     run_p.add_argument("--end", default="2025-12-31", help="백테스트 종료일 (YYYY-MM-DD)")
@@ -32,6 +32,10 @@ def _parse_args() -> argparse.Namespace:
     run_p.add_argument("--seed", type=int, default=42, help="랜덤 유니버스 생성 시드")
     run_p.add_argument("--output-dir", default=None, help="결과 저장 경로 (기본: reports/backtester/<timestamp>)")
     run_p.add_argument("--no-charts", action="store_true", help="차트 PNG 저장을 건너뛴다")
+    from apps.worker.fa_contract import MODEL_VERSION
+    run_p.add_argument("--fa-model-version", default=MODEL_VERSION, help="FA 점수 원장의 모델 버전")
+    run_p.add_argument("--allow-research-warnings", action="store_true", help="재구성 연구에서 WARNING 분석 포함 (보고서에 기록)")
+    run_p.add_argument("--min-history-days", type=int, default=252, help="첫 편입 시 최소 가격 이력 (FA는 120일 이상)")
 
     return parser.parse_args()
 
@@ -65,6 +69,9 @@ def run_backtest_command(args: argparse.Namespace) -> None:
         output_dir=output_dir,
         save_charts=not args.no_charts,
         fa_source_strategy=args.fa_source_strategy,
+        fa_model_version=args.fa_model_version,
+        allow_research_warnings=args.allow_research_warnings,
+        min_history_days=args.min_history_days,
     )
 
     print(

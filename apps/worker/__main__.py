@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+from pathlib import Path
+import sys
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -57,6 +60,12 @@ def _parse_args() -> argparse.Namespace:
         help="기수집 WICS 스냅샷도 다시 조회해 교정 (wics 전용)",
     )
 
+    collect_p.add_argument("--company-source", choices=["public", "api"],
+                           default=os.getenv("COMPANY_DATA_SOURCE", "public"),
+                           help="재무·공시 출처 (기본 public: API 키 없는 공식 공개 자료)")
+    collect_p.add_argument("--public-cache-dir", type=Path, default=Path("logs/public-dart-xbrl"))
+    collect_p.add_argument("--company-report", type=Path, default=Path("reports/public-company-collection.json"))
+
     # ── analyze ────────────────────────────────────────────────────────────
     analyze_p = subparsers.add_parser("analyze", help="FA 분석")
     analyze_p.add_argument(
@@ -85,6 +94,13 @@ def _parse_args() -> argparse.Namespace:
     )
 
     subparsers.add_parser("audit", help="FA 시점 안전성과 운영 상태 감사")
+
+    readiness_p = subparsers.add_parser("readiness", help="주문·수집 없이 현재 데이터 준비도 검사")
+    readiness_p.add_argument("--cutoff", type=date.fromisoformat, metavar="YYYY-MM-DD")
+    readiness_p.add_argument(
+        "--require-ready", action="store_true",
+        help="준비도가 PASS가 아니면 종료 코드 2 반환",
+    )
 
     return parser.parse_args()
 
@@ -174,6 +190,7 @@ def run_collect(args: argparse.Namespace) -> None:
     collect_start = _resolve_collect_start(args.target, args.start, args.end)
     collect_end = _resolve_collect_end(args.target, args.end)
 
+    company_report = None
     try:
         if args.target in ("macro", "all"):
             macro_job.run(
@@ -217,14 +234,18 @@ def run_collect(args: argparse.Namespace) -> None:
             dart_start = collect_start.replace("-", "") if collect_start else cfg.dart_start_date
             dart_end = collect_end.replace("-", "") if collect_end else None
 
-            company_job.run(
+            company_report = company_job.run(
                 db,
                 years=effective_years,
                 dart_start_date=dart_start,
                 dart_end_date=dart_end,
                 show_progress=show,
                 company_size_codes=args.company_size,
+                source=getattr(args, "company_source", "public"),
+                cache_dir=getattr(args, "public_cache_dir", Path("logs/public-dart-xbrl")),
+                output=getattr(args, "company_report", Path("reports/public-company-collection.json")),
             )
+            print(json.dumps(company_report, ensure_ascii=False, default=str))
 
         if args.target == "all":
             from apps.worker.collector import wics_industry_job
@@ -245,6 +266,8 @@ def run_collect(args: argparse.Namespace) -> None:
             cutoff_date = date.fromisoformat(collect_end) if collect_end else date.today()
             report = run_readiness(db, cutoff_date)
             print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        if company_report and company_report.get("status") == "PARTIAL":
+            raise SystemExit(2)
     finally:
         db.close()
 
@@ -298,15 +321,37 @@ def run_audit() -> None:
         db.close()
 
 
+def run_readiness(args: argparse.Namespace) -> None:
+    from apps.worker.collector.readiness import run
+
+    _, db = _init()
+    try:
+        report = run(db, args.cutoff or _today_kst())
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        if args.require_ready and report.status != "PASS":
+            raise SystemExit(2)
+    finally:
+        db.close()
+
+
 def main() -> None:
+    from data.collectors.dart_collector import DartAPIError
+    from data.collectors.public_dart_xbrl import PublicDartError
+
     args = _parse_args()
 
-    if args.category == "collect":
-        run_collect(args)
-    elif args.category == "analyze":
-        run_analyze(args)
-    elif args.category == "audit":
-        run_audit()
+    try:
+        if args.category == "collect":
+            run_collect(args)
+        elif args.category == "analyze":
+            run_analyze(args)
+        elif args.category == "audit":
+            run_audit()
+        elif args.category == "readiness":
+            run_readiness(args)
+    except (DartAPIError, PublicDartError) as exc:
+        print(f"[COLLECT FAILED] {exc}", file=sys.stderr)
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":

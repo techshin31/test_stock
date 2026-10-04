@@ -43,7 +43,7 @@ def _inputs():
             })
             fa.append({
                 "stock_code": stock, "fa_score": 70, "score_confidence": 1.0,
-                "is_eligible": True, "revenue_growth_yoy": 1,
+                "is_eligible": True, "valid_financial_quarters": 8, "revenue_growth_yoy": 1,
                 "operating_income_growth_yoy": 1,
                 "operating_margin_change_yoy": 1,
                 "operating_cashflow_change_yoy": 1,
@@ -73,6 +73,7 @@ def _single_industry_inputs():
             "fa_score": 70,
             "score_confidence": 1.0,
             "is_eligible": True,
+            "valid_financial_quarters": 8,
             "revenue_growth_yoy": 1,
             "operating_income_growth_yoy": 1,
             "operating_margin_change_yoy": 1,
@@ -202,3 +203,16 @@ def test_low_cohort_quality_adds_sector_risk_penalty():
     assert penalized["sector_score"] == pytest.approx(
         baseline["sector_score"] - 2.0
     )
+
+
+def test_incomplete_histories_do_not_inflate_sector_quality_or_selection():
+    snapshot, fa, statuses = _single_industry_inputs()
+    for item in fa:
+        item["valid_financial_quarters"] = 7
+        item["fa_score"] = 100
+    rows = score_and_select_sectors([], snapshot, fa, statuses, load_config())
+    assert rows[0]["eligible_large_count"] == 0
+    assert rows[0]["company_coverage_rate"] == 0
+    assert rows[0]["is_selected"] is False
+    assert rows[0]["reason_code"] == "INSUFFICIENT_LARGE"
+    assert {item["stock_code"] for item in rows[0]["financial_history_exclusions"]} == {"1500", "1501"}

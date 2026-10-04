@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from apps.worker.fa_contract import MODEL_VERSION
 
 DEFAULT_STRATEGY_NAME = "risk_neutral"
 DEFAULT_INITIAL_CAPITAL = 10_000_000.0
@@ -29,6 +30,9 @@ class BacktesterConfig:
     output_dir: Path
     save_charts: bool
     fa_source_strategy: str = "risk_neutral"
+    fa_model_version: str = MODEL_VERSION
+    allow_research_warnings: bool = False
+    min_history_days: int = 252
 
 
 def load_env(env_file: str | None = None) -> None:

@@ -1,16 +1,28 @@
-# React + Vite
+# QuantPilot 대시보드
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+읽기 전용 PAPER 운영·시장·리포트 화면입니다. Node.js 24와 lockfile을 사용합니다.
 
-Currently, two official plugins are available:
+```bash
+cd dashboard
+npm ci
+npm run dev
+```
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+개발 서버는 `127.0.0.1:3000`에서 실행되며 `/api` 요청을
+`127.0.0.1:8000`의 FastAPI로 전달합니다.
 
-## React Compiler
+각 데이터 요청의 마지막 성공 응답 시각과 갱신 오류를 표시합니다. 실패 시 마지막
+응답을 유지하되 최신 요청 실패를 명시합니다. 응답 시각과 실제 시세 관측일은
+구분하며, 운영 미시작·상태 데이터 준비 중에는 계좌·성과 수치를 생성하지 않습니다.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm run lint
+npm run build
+npx playwright install chromium
+npm test
+```
 
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+브라우저 검사는 Playwright Chromium과 모의 API 응답으로 실행하며, 테스트용 Vite
+서버를 `127.0.0.1:3100`에 자동 실행합니다. 기존 Chromium을 사용하려면
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm test`를 실행하세요.
+실제 증권 API 키나 주문 권한은 필요하지 않습니다.

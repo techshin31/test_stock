@@ -1,10 +1,37 @@
 import datetime as dt
 import json
 import os
+import pytest
 
 from core.analytics.system_readiness import KST, audit_system_readiness
 
 _ACTIVE_FIXTURE_LOCKS = {}
+
+
+@pytest.mark.parametrize('evidence', ['missing', 'invalid_json', 'not_an_object'])
+@pytest.mark.parametrize('strict', [False, True])
+def test_readiness_cli_replaces_stale_success_with_blocked_evidence(tmp_path, monkeypatch, capsys, evidence, strict):
+    from core.analytics import system_readiness
+
+    output = tmp_path / 'audit.json'
+    _write(output, {'paper_runtime_safe': True, 'full_system_complete': True})
+    source = tmp_path / 'logs/paper/dashboard_state.json'
+    if evidence != 'missing':
+        source.parent.mkdir(parents=True)
+        source.write_text('{"private":"do-not-echo"' if evidence == 'invalid_json' else '[]', encoding='utf-8')
+    args = ['readiness', '--project-root', str(tmp_path), '--output', str(output)]
+    if strict:
+        args.append('--require-complete')
+    monkeypatch.setattr('sys.argv', args)
+    assert system_readiness.main() == 2
+    result = json.loads(output.read_text(encoding='utf-8'))
+    assert result['audit_status'] == 'BLOCKED'
+    assert result['paper_runtime_safe'] is False
+    assert result['full_system_complete'] is False
+    assert result['real_execution_authorized'] is False
+    assert result['blockers']
+    assert 'do-not-echo' not in capsys.readouterr().out
+    assert not output.with_suffix('.json.tmp').exists()
 
 
 def _write(path, payload):

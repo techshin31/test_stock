@@ -5,7 +5,7 @@
 사용하며 KIS 모의/실전 계좌, 로컬 시뮬레이션, 백테스트를 지원합니다.
 
 > 이 저장소는 투자 시스템 개발과 검증을 위한 프로젝트입니다. 기본 실행은 주문이
-> 발생하지 않는 점검 모드이거나 모의 환경이며, 실전 주문은 별도의 안전 잠금이
+> 발생하지 않는 DRY_RUN이며, 실전 주문은 별도의 안전 잠금이
 > 필요합니다.
 
 ## 전체 흐름
@@ -67,6 +67,30 @@ Worker는 기본적으로 `apps/worker/.env`, Trader는 저장소 루트의 `.en
 Backtester는 `apps/backtester/.env`를 읽습니다. Worker와 Backtester에서 다른
 설정 파일을 쓰려면 `QUANTPILOT_ENV_FILE`에 경로를 지정할 수 있습니다.
 
+### 3. 초기 구축 검증
+
+DB 접속 정보를 설정한 뒤 아래 순서로 개발 기반을 확인합니다. 별도 PostgreSQL을
+사용한다면 빈 애플리케이션 DB와 접속 계정을 먼저 생성해야 합니다.
+
+```powershell
+# 빈 DB에 스키마·시드를 설치하고, 기존 DB에는 미적용 마이그레이션만 적용
+uv run python -m storage.postgres.bootstrap
+
+# 설정 존재 여부와 DB 스키마·데이터 준비도 확인: API 키 값은 출력하지 않음
+uv run python -m apps.system doctor
+
+# DB·KIS·외부 API 없이 임시 가상계좌에서 전략→주문→체결→손절 검증
+uv run python -m apps.system local-check --output reports/local-check.json
+
+# 실제 데이터 준비도가 PASS인지 별도로 확인
+uv run python -m apps.system doctor --require-data
+```
+
+`bootstrap`은 비어 있지 않은 불완전한 DB의 초기화를 거부합니다. `doctor`는
+읽기 전용이며, 개발 환경 준비와 실제 데이터 준비를 구분합니다. `local-check`의
+합성 데이터 검증은 실제 FA 백테스트나 운영 성과를 증명하지 않습니다.
+환경별 실행 순서와 검증 범위는 [초기 구축 가이드](docs/TRADING_SYSTEM_START.md)를 참고하세요.
+
 ## 데이터 수집과 FA 발행
 
 모든 명령은 저장소 루트에서 실행합니다.
@@ -85,7 +109,7 @@ $env:STRATEGY_NAME = "aggressive"
 # 분석과 검증만 수행: 운영 유니버스는 바뀌지 않음
 uv run python -m apps.worker analyze all
 
-# 위와 동일한 입력의 PASS/WARNING 결과를 운영 유니버스에 반영
+# 위와 동일한 입력에서 검증 PASS 결과를 운영 유니버스에 반영
 uv run python -m apps.worker analyze all --publish
 
 # 시점 안전성과 발행본-유니버스 정합성 검사
@@ -97,6 +121,23 @@ uv run python -m apps.worker audit
 발행하고, Trader가 TA 조건·총 투자 한도·종목당 한도를 적용해 실제 목표 비중을
 결정합니다. 날짜 규칙, 부분 실행, 재분석 옵션은
 [Analyzer 가이드](apps/worker/analyzer/README.md)를 참고하세요.
+
+### 자동 실행 전 준비도 검사
+
+현재 DB의 입력 준비도만 확인할 수 있습니다. 이 명령은 데이터 수집·분석·발행·주문을
+실행하지 않으며, `--require-ready`를 지정하면 PASS가 아닐 때 종료 코드 2를 반환합니다.
+월간 실행에서는 분석과 동일한 `--cutoff`를 지정하세요.
+
+```powershell
+uv run python -m apps.worker readiness --cutoff 2026-10-02 --require-ready
+if ($LASTEXITCODE -ne 0) { throw "데이터 준비도 확인 후 재개하세요." }
+
+# PAPER 운영 증거와 기존 완료 조건도 별도로 검사
+uv run python -m core.analytics.system_readiness --require-complete
+```
+
+운영 기록이 없거나 손상된 새 환경은 BLOCKED 보고서를 남기고 종료 코드 2로
+차단합니다. 데이터 준비도 통과만으로 PAPER 운영 완료나 REAL 실행이 승인되지는 않습니다.
 
 ## 매매 실행 모드
 
@@ -116,8 +157,11 @@ uv run python run_live_trader.py --mock
 uv run python run_live_trader.py --mock --premarket
 ```
 
-`run_live_trader.py`에서 모드를 생략하면 KIS 모의투자가 기본값입니다. 로컬
-시뮬레이션 상태와 로그는 `logs/simulate/`에 저장됩니다.
+`run_live_trader.py`에서 모드를 생략하면 주문 없는 DRY_RUN입니다. 이 모드도
+계좌·시장 데이터 조회에는 DB와 KIS 설정이 필요합니다. 인증정보 없는 초기 검증에는
+`apps.system local-check`를 사용하세요. 로컬 시뮬레이션 상태와 로그는
+`logs/simulate/`에 저장되며, 주문 식별 키가 같은 재실행은 기존 체결을 반환합니다.
+직접 실행 CLI의 Telegram 알림은 `--notify`를 지정할 때만 활성화됩니다.
 
 ### 자동 실행
 
@@ -252,13 +296,47 @@ uv run pytest tests/test_trading_safety.py tests/test_live_trader_and_strategy.p
 uv run pytest tests/test_fa_ta_integrity.py tests/test_23_fa_published_backtest.py
 ```
 
+## 개발 검증과 CI
+
+외부 API 인증정보 없이 실행하는 Python 검사와 PostgreSQL 연동 검사를 분리합니다.
+
+```bash
+uv sync --frozen --dev
+uv run --frozen pytest tests -q
+
+cd dashboard
+npm ci
+npm run lint
+npm run build
+npx playwright install chromium
+npm test
+```
+
+DB 연동 검사는 접속 가능한 개발용 PostgreSQL 16과 DB 생성 권한이 필요합니다.
+저장소 루트에서 실행하며, 고유한 임시 테스트 DB를 생성하고 종료 시 삭제합니다.
+기존 애플리케이션 DB의 스키마와 데이터는 변경하지 않습니다.
+
+```bash
+QUANTPILOT_RUN_DB_INTEGRATION=1 uv run --frozen pytest integration -q
+```
+
+이미 설치된 Chromium을 쓰려면 대시보드 검사에
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium`을 지정할 수 있습니다.
+브라우저 검사는 HTTP 오류·갱신 복구·자동 갱신·응답 시간 초과·초기 데이터 상태를
+모의 API 응답으로 검증합니다. 외부 시장 데이터 서비스나 증권 주문은 호출하지 않습니다.
+
+GitHub Actions의 `.github/workflows/ci.yml`은 PR과 `main` 푸시에서 Python,
+대시보드, PostgreSQL 연동 검사를 각각 실행합니다.
+검토 결과와 변경 범위는 [프로젝트 검토 문서](docs/PROJECT_REVIEW.md)를 참고하세요.
+
 ## 프로젝트 구조
 
 ```text
 QuantPilot/
 ├── apps/
 │   ├── worker/                 # 데이터 수집, FA 분석, 발행, 운영 감사
-│   └── backtester/             # 백테스트 CLI와 FA 배분 연구
+│   ├── backtester/             # 백테스트 CLI와 FA 배분 연구
+│   └── system/                 # 초기 환경 진단과 격리 가상매매 검증
 ├── core/
 │   ├── broker/                 # KIS·로컬 시뮬레이션 브로커
 │   ├── execution/              # 주문 실행, 체결 확인, 리포트
@@ -286,8 +364,11 @@ QuantPilot/
 ## 추가 문서
 
 - [Worker 개요](apps/worker/README.md)
+- [초기 구축 가이드](docs/TRADING_SYSTEM_START.md)
 - [Collector 실행 가이드](apps/worker/collector/README.md)
 - [Analyzer 실행 가이드](apps/worker/analyzer/README.md)
 - [Backtester 실행 가이드](apps/backtester/README.md)
 - [FA/TA 운영 전략](docs/FA_TA_STRATEGY.md)
 - [Trader 운영 문서](obsidian/apps_trader/00_Trader_개요.md)
+
+공개 재무·희석 위험 대체 수집 경로와 실데이터 검증은 [API 없는 공식 DART 수집](docs/PUBLIC_DART_ALTERNATIVE_2026-10-04.md)을 참고하세요. 일반 기업 수집의 기본 출처는 `public`이며 DART API 키가 필요하지 않습니다.

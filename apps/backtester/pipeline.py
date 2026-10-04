@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
+from datetime import timedelta
 
 import pandas as pd
 
@@ -18,10 +19,12 @@ from data.loaders.kospi_data import download_kospi_index, download_multiple_stoc
 from data.loaders.fa_ta_loader import enrich_ohlcv_with_fa
 from storage.postgres.connection import PostgreDB
 from storage.postgres.repositories.strategy_repo import fetch_strategy_params
+from storage.postgres.repositories.fa_analysis_repo import fetch_reconstructed_fa_selections
 
 from apps.backtester.config import BacktesterConfig
 from apps.backtester.universe import (
     build_fa_published_universe,
+    build_fa_reconstructed_universe,
     build_random_universe,
     default_rotation_dates,
     drop_failed_tickers,
@@ -29,7 +32,6 @@ from apps.backtester.universe import (
 
 # 지표(MA120, ADX14) 워밍업을 위해 백테스트 시작보다 일찍 데이터를 받는다.
 HISTORY_WARMUP_YEARS = 2
-MIN_HISTORY_DAYS = 252
 
 
 @dataclass
@@ -41,6 +43,7 @@ class BacktestPipelineResult:
     bond_equity: pd.Series
     kospi_equity: pd.Series
     initial_universe: list[str]
+    input_manifest: dict = field(default_factory=dict)
 
 
 def run_backtest_pipeline(cfg: BacktesterConfig, db: PostgreDB) -> BacktestPipelineResult:
@@ -49,6 +52,10 @@ def run_backtest_pipeline(cfg: BacktesterConfig, db: PostgreDB) -> BacktestPipel
     notebooks/위험중립형_전략_백테스팅.ipynb의 0~6장(환경설정 ~ 비교자산 계산)을
     재사용 가능한 파이프라인으로 옮긴 것이다. 시각화(7장 이후)는 report.py가 담당한다.
     """
+    if cfg.allow_research_warnings and cfg.universe_source != "fa-reconstructed":
+        raise ValueError("research warnings may only be allowed for fa-reconstructed")
+    if cfg.min_history_days < 1 or (cfg.universe_source != "random" and cfg.min_history_days < 120):
+        raise ValueError("FA price history must cover the longest 120-day indicator")
     if cfg.strategy_name == "fa_ta_momentum":
         strategy = FaTaMomentumStrategy({
             "entry_size": 0.18, "ma_window": 60, "ma_window_fast": 20,
@@ -60,7 +67,8 @@ def run_backtest_pipeline(cfg: BacktesterConfig, db: PostgreDB) -> BacktestPipel
         strategy = RiskNeutralStrategy(params)
 
     download_start = convert_to_str(get_date_n_years_before(cfg.start_date, HISTORY_WARMUP_YEARS))
-    download_end = convert_to_str(cfg.end_date)
+    # Yahoo's end boundary is exclusive; the CLI end is inclusive.
+    download_end = convert_to_str(cfg.end_date + timedelta(days=1))
 
     print(f"[BACKTESTER] KOSPI 지수 다운로드 중... ({download_start} ~ {download_end})")
     kospi_index = download_kospi_index(download_start, download_end)
@@ -69,7 +77,18 @@ def run_backtest_pipeline(cfg: BacktesterConfig, db: PostgreDB) -> BacktestPipel
         initial_universe, rotation_plans, all_tickers = build_fa_published_universe(
             db, cfg.fa_source_strategy, cfg.start_date, cfg.end_date
         )
-    else:
+        # Published ledgers store stock codes; quote providers require tickers.
+        ticker = lambda symbol: symbol if "." in symbol else symbol + ".KS"
+        initial_universe = [ticker(symbol) for symbol in initial_universe]
+        rotation_plans = [replace(p, exits=[ticker(s) for s in p.exits],
+                                 entries=[ticker(s) for s in p.entries]) for p in rotation_plans]
+        all_tickers = {ticker(symbol) for symbol in all_tickers}
+    elif cfg.universe_source == "fa-reconstructed":
+        initial_universe, rotation_plans, all_tickers = build_fa_reconstructed_universe(
+            db, cfg.fa_source_strategy, cfg.start_date, cfg.end_date, cfg.fa_model_version,
+            allow_warnings=cfg.allow_research_warnings,
+        )
+    elif cfg.universe_source == "random":
         rotation_dates = default_rotation_dates(
             cfg.start_date, cfg.end_date, interval_years=cfg.rotation_interval_years,
         )
@@ -79,6 +98,8 @@ def run_backtest_pipeline(cfg: BacktesterConfig, db: PostgreDB) -> BacktestPipel
             rotation_size=cfg.rotation_size,
             seed=cfg.random_seed,
         )
+    else:
+        raise ValueError(f"unsupported universe source: {cfg.universe_source}")
     print(f"[BACKTESTER] 초기 유니버스: {initial_universe}")
     print(f"[BACKTESTER] 교체 계획 {len(rotation_plans)}건: {[p.review_date for p in rotation_plans]}")
 
@@ -87,13 +108,20 @@ def run_backtest_pipeline(cfg: BacktesterConfig, db: PostgreDB) -> BacktestPipel
         list(all_tickers), start=download_start, end=download_end, show_progress=False,
     )
     if cfg.strategy_name == "fa_ta_momentum":
-        ohlcv_store = enrich_ohlcv_with_fa(db, ohlcv_store, cfg.end_date)
+        ohlcv_store = enrich_ohlcv_with_fa(db, ohlcv_store, cfg.end_date, model_version=cfg.fa_model_version)
     failed_tickers = [t for t in all_tickers if t not in ohlcv_store]
     if failed_tickers:
+        if cfg.universe_source != "random":
+            raise ValueError(f"FA backtest price downloads failed: {sorted(failed_tickers)}")
         print(f"[BACKTESTER] 다운로드 실패 종목 제외: {failed_tickers}")
         initial_universe, rotation_plans = drop_failed_tickers(
             initial_universe, rotation_plans, set(ohlcv_store.keys()),
         )
+    if cfg.universe_source != "random":
+        empty_period = [t for t,frame in ohlcv_store.items()
+                        if frame.loc[str(cfg.start_date):str(cfg.end_date)].empty]
+        if empty_period:
+            raise ValueError(f"FA backtest has no prices in evaluation period: {sorted(empty_period)}")
 
     backtest_calendar = pd.DatetimeIndex(kospi_index[str(cfg.start_date):str(cfg.end_date)].index)
     bond_returns = make_defensive_asset_returns(
@@ -112,14 +140,17 @@ def run_backtest_pipeline(cfg: BacktesterConfig, db: PostgreDB) -> BacktestPipel
         rotation_plans=rotation_plans,
         benchmark_returns=kospi_index.pct_change().fillna(0),
         defensive_asset_returns=bond_returns,
-        min_history_days=MIN_HISTORY_DAYS,
+        min_history_days=cfg.min_history_days,
         insufficient_history_policy=InsufficientHistoryPolicy.EXCLUDE.value,
+        use_prestart_history=True,
     )
 
     print("[BACKTESTER] 백테스트 실행 중... (시간이 걸릴 수 있습니다)")
     result = run_backtest(config, ohlcv_store)
     print(f"[BACKTESTER] 완료: {len(result.equity_curve):,}거래일")
     if result.excluded_tickers:
+        if cfg.universe_source != "random":
+            raise ValueError(f"FA backtest has insufficient price history: {sorted(result.excluded_tickers)}")
         print(f"[BACKTESTER] 최소 이력 부족으로 제외된 종목: {list(result.excluded_tickers.keys())}")
 
     performance = calc_performance(result, risk_free_rate=cfg.risk_free_rate)
@@ -147,4 +178,15 @@ def run_backtest_pipeline(cfg: BacktesterConfig, db: PostgreDB) -> BacktestPipel
         bond_equity=bond_equity,
         kospi_equity=kospi_equity,
         initial_universe=initial_universe,
+        input_manifest={"universe_source": cfg.universe_source, "strategy_name": cfg.strategy_name,
+            "fa_source_strategy": cfg.fa_source_strategy, "fa_model_version": cfg.fa_model_version,
+            "start_date": str(cfg.start_date), "end_date": str(cfg.end_date),
+            "all_tickers": sorted(all_tickers), "rotation_count": len(rotation_plans),
+            "prestart_indicator_history": True, "history_warmup_years": HISTORY_WARMUP_YEARS,
+            "min_history_days": cfg.min_history_days,
+            "research_reconstructed": cfg.universe_source == "fa-reconstructed",
+            "allow_research_warnings": cfg.allow_research_warnings,
+            "analysis_runs": list({r["run_id"]: {k:r[k] for k in ("run_id", "cutoff_date", "effective_date", "status_code", "model_version", "input_hash")}
+                for r in fetch_reconstructed_fa_selections(db, cfg.fa_source_strategy, cfg.end_date)}.values())
+                if cfg.universe_source == "fa-reconstructed" else []},
     )

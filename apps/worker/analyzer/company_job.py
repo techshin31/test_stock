@@ -4,6 +4,7 @@ from __future__ import annotations
 from bisect import bisect_left, bisect_right, insort
 from collections import defaultdict
 from datetime import date, timedelta
+import re
 from typing import Any
 
 import pandas as pd
@@ -34,7 +35,7 @@ _QUARTER_BY_REPORT = {"11013": 1, "11012": 2, "11014": 3, "11011": 4}
 
 _ACCOUNT_MAP: dict[str, tuple[str, tuple[str, ...], tuple[str, ...]]] = {
     "revenue": ("IS", ("ifrs_Revenue", "ifrs-full_Revenue"), ("매출액", "수익(매출액)")),
-    "operating_income": ("IS", ("dart_OperatingIncomeLoss",), ("영업이익",)),
+    "operating_income": ("IS", ("dart_OperatingIncomeLoss", "ifrs-full_ProfitLossFromOperatingActivities"), ("영업이익",)),
     "net_income": ("IS", ("ifrs_ProfitLoss", "ifrs-full_ProfitLoss"), ("당기순이익", "분기순이익", "반기순이익")),
     "total_assets": ("BS", ("ifrs_Assets", "ifrs-full_Assets"), ("자산총계",)),
     "total_liabilities": ("BS", ("ifrs_Liabilities", "ifrs-full_Liabilities"), ("부채총계",)),
@@ -91,10 +92,14 @@ def _account_row(rows: list[dict], metric: str) -> dict | None:
         if match is not None:
             return match
     for keyword in keywords:
-        match = next(
-            (row for row in candidates if keyword in str(row.get("account_nm") or "")),
-            None,
-        )
+        normalized_keyword = re.sub(r"\s+", "", keyword)
+        # Subtotals such as 기타투자영업이익 are not total operating profit.
+        # Accept the whole label, with optional parenthetical qualifiers only.
+        matches = [row for row in candidates if re.fullmatch(
+            re.escape(normalized_keyword) + r"(?:\([^)]*\))*",
+            re.sub(r"\s+", "", str(row.get("account_nm") or "")),
+        )]
+        match = matches[0] if len(matches) == 1 else None
         if match is not None:
             return match
     return None
@@ -111,7 +116,8 @@ def _extract_report_amounts(rows: list[dict]) -> tuple[dict[str, float | None], 
             continue
         current = _number(row.get("thstrm_amount"))
         if metric in _FLOW_METRICS:
-            cumulative[metric] = _number(row.get("thstrm_add_amount")) or current
+            added = _number(row.get("thstrm_add_amount"))
+            cumulative[metric] = added if added is not None else current
             individual_hint[metric] = current
         else:
             cumulative[metric] = current
@@ -540,7 +546,9 @@ def refresh_quarterly_scores(
         wics = wics_lookup(row["stock_code"], row["available_date"])
         status = statuses.get(row["stock_code"], {})
         row["company_status_code"] = status.get("status_code")
-        row["market_cap"] = _number(wics.get("mkt_val")) if wics else None
+        # WiseIndex MKT_VAL is million KRW; DART statement amounts are KRW.
+        market_cap_million = _number(wics.get("mkt_val")) if wics else None
+        row["market_cap"] = market_cap_million * 1_000_000 if market_cap_million is not None else None
         row["market_data_date"] = wics.get("base_date") if wics else None
         row["industry_code"] = wics.get("industry_code") if wics else None
         try:
@@ -571,7 +579,7 @@ def select_companies(
     company_risk_rows: list[dict] | None = None,
     as_of_date: date | None = None,
 ) -> list[dict]:
-    """Apply hard filters and select up to the configured count per industry."""
+    """Apply hard filters and rank all eligible companies per industry."""
     risk_by_stock = {
         row["stock_code"]: row for row in (company_risk_rows or [])
     }
@@ -607,6 +615,8 @@ def select_companies(
             < as_of_date - timedelta(days=config.scoring.max_company_fa_age_days)
         ):
             exclusion = "STALE_FA"
+        elif _ranking_number(fa.get("valid_financial_quarters")) < config.scoring.minimum_financial_quarters:
+            exclusion = "INSUFFICIENT_FINANCIAL_HISTORY"
         elif _ranking_number(fa.get("total_equity"), 0.0) <= 0 or fa.get("excluded_reason_code") == "CAPITAL_IMPAIRMENT":
             exclusion = "CAPITAL_IMPAIRMENT"
         elif _ranking_number(fa.get("score_confidence"), -1.0) < config.scoring.minimum_score_confidence:
@@ -619,6 +629,7 @@ def select_companies(
             exclusion = "BUY_BLOCKED"
 
         results.append({
+            "identity_registered": status is not None,
             "sector_result_id": sector_result["id"],
             "stock_code": stock_code,
             "company_quarter_fa_id": fa.get("id") if fa else None,
@@ -643,6 +654,9 @@ def select_companies(
                     else None
                 ),
                 "max_company_fa_age_days": config.scoring.max_company_fa_age_days,
+                "valid_financial_quarters": int(_ranking_number(fa.get("valid_financial_quarters"))) if fa else 0,
+                "minimum_financial_quarters": config.scoring.minimum_financial_quarters,
+                "financial_history_cutoff": as_of_date,
                 "risk_state": {
                     "risk_action_code": risk_state.get("risk_action_code"),
                     "reason_code": risk_state.get("reason_code"),
@@ -698,5 +712,8 @@ def run(
         company_risk_rows=risk_states,
         as_of_date=cutoff_date,
     )
-    insert_company_results(db, run_id, results)
+    # Unmapped WICS members are rejected above, but cannot be inserted into
+    # the company-result ledger whose identity foreign key is mandatory.
+    # Return them for the run's validation summary instead of inventing identities.
+    insert_company_results(db, run_id, [r for r in results if r["identity_registered"]])
     return results

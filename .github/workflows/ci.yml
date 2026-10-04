@@ -1,0 +1,84 @@
+name: Development checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python tests without external credentials
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.19'
+          enable-cache: true
+      - run: uv sync --frozen --dev
+      - run: uv run --frozen pytest tests -q
+        env:
+          MPLCONFIGDIR: ${{ runner.temp }}/matplotlib
+          NUMBA_CACHE_DIR: ${{ runner.temp }}/numba
+
+  dashboard:
+    name: Dashboard build, lint and browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+
+  postgres:
+    name: PostgreSQL schema, migrations and API integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: ci-only-local-test
+          POSTGRES_DB: quantpilot_db
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U admin -d quantpilot_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: '5433'
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: ci-only-local-test
+      POSTGRES_DB: quantpilot_db
+      QUANTPILOT_RUN_DB_INTEGRATION: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.19'
+          enable-cache: true
+      - run: uv sync --frozen --dev
+      - run: uv run --frozen pytest integration -q

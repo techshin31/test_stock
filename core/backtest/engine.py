@@ -334,11 +334,26 @@ def __preprocess_backtest(
     # 기간을 자른 후 빈 데이터프레임이 된 종목은 백테스트에서 제외한다.
     sliced = {ticker: df for ticker, df in sliced.items() if not df.empty}
     # 최소 이력 조건을 적용하고, 제외된 종목은 결과 객체에 남길 수 있도록 사유를 보관한다.
-    sliced, excluded_tickers = _filter_by_history(
-        sliced,
-        config.min_history_days,
-        config.insufficient_history_policy,
-    )
+    histories = {ticker: ohlcv_store[ticker].sort_index().loc[:_to_timestamp(config.end_date)].copy()
+                 for ticker in sliced} if config.use_prestart_history else sliced
+    if config.use_prestart_history:
+        entry_dates = {ticker: config.start_date for ticker in config.initial_universe}
+        for plan in sorted(config.rotation_plans, key=lambda p: p.review_date):
+            for ticker in plan.entries:
+                entry_dates.setdefault(ticker, plan.review_date)
+        # History available at the first permitted entry, never future bars.
+        history_at_entry = {ticker: df.loc[:_to_timestamp(entry_dates.get(ticker, config.start_date))]
+                            for ticker, df in histories.items()}
+        _, excluded_tickers = _filter_by_history(history_at_entry, config.min_history_days,
+                                                config.insufficient_history_policy)
+        sliced = {t:df for t,df in sliced.items() if t not in excluded_tickers}
+        histories = {t:df for t,df in histories.items() if t not in excluded_tickers}
+        for ticker, df in histories.items():
+            df.attrs["signal_start_date"] = _to_timestamp(entry_dates.get(ticker, config.start_date))
+    else:
+        sliced, excluded_tickers = _filter_by_history(sliced, config.min_history_days,
+                                                       config.insufficient_history_policy)
+        histories = sliced
     # 기간 필터와 최소 이력 필터를 통과한 종목이 없으면 백테스트를 진행할 수 없다.
     if not sliced:
         raise ValueError("no OHLCV rows remain inside the configured backtest period")
@@ -368,7 +383,7 @@ def __preprocess_backtest(
     # 워크포워드 윈도우 계산, 시장 국면 계산, 모멘텀 계산, 포트폴리오 신호 생성 등 전략 판단에 필요한 사전 계산을 수행한다.
     wf_windows: dict[str, list[WalkForwardWindow]] = {
         ticker: run_walk_forward(
-            # 해당 종목의 백테스트 기간 OHLCV로 IS/OOS 윈도우를 만든다.
+            # 지표용 과거 이력을 포함해 IS/OOS 윈도우를 만든다. 종료일 이후는 제외한다.
             ohlcv=ohlcv,
             # 워크포워드는 자체 기간으로 시장지수를 슬라이스하므로 원본 시장지수를 넘긴다.
             market_index=config.market_index,
@@ -377,24 +392,27 @@ def __preprocess_backtest(
             cap=config.cap,
             market=config.market,
         )
-        for ticker, ohlcv in sliced.items()
+        for ticker, ohlcv in histories.items()
     }
     # 워크포워드 결과를 반영해 각 종목별 국면을 계산한 뒤, calendar에 맞춰 빈 날짜는 직전 국면으로 채운다.
-    regime_dict: dict[str, pd.DataFrame] = {
-        ticker: _calc_regime_by_windows(df, market_index, wf_windows[ticker]).reindex(calendar).ffill()
-        for ticker, df in sliced.items()
+    full_regimes = {
+        ticker: _calc_regime_by_windows(df, config.market_index.reindex(df.index).ffill(), wf_windows[ticker])
+        for ticker, df in histories.items()
     }
+    regime_dict = {t:frame.reindex(calendar).ffill() for t,frame in full_regimes.items()}
+    indicator_close = pd.DataFrame({t:df["close"] for t,df in histories.items()}).sort_index().ffill()
     # 종가와 종목별 국면을 이용해 배분 우선순위로 쓸 모멘텀 점수를 계산한다.
     momentum_dict = calc_universe_momentum(
-        close=close,
-        regime_dict=regime_dict,
+        close=indicator_close,
+        regime_dict=full_regimes,
         tickers=list(sliced.keys()),
     )
+    momentum_dict = {t:frame.reindex(calendar) for t,frame in momentum_dict.items()}
     # 전략을 종목별로 실행해 calendar 기준 신호 테이블과 메타데이터를 만든다.
     portfolio_signals = make_portfolio_signals(
         strategy=config.strategy,
-        ohlcv_store=sliced,
-        regime_dict=regime_dict,
+        ohlcv_store=histories,
+        regime_dict=full_regimes,
         calendar=calendar,
     )
     # 날짜 x 티커 형태의 원 신호 테이블.

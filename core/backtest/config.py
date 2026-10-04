@@ -28,3 +28,4 @@ class BacktestConfig:
     defensive_asset_returns: pd.Series | None = None
     min_history_days: int = 252
     insufficient_history_policy: str = InsufficientHistoryPolicy.EXCLUDE.value
+    use_prestart_history: bool = False

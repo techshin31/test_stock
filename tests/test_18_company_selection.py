@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from apps.worker.analyzer.company_job import select_companies
 from apps.worker.analyzer.config import load_config
 
@@ -7,7 +9,7 @@ from apps.worker.analyzer.config import load_config
 def _fa(stock_code, fa_id, score, confidence=1.0):
     return {
         "id": fa_id, "stock_code": stock_code, "fa_score": score,
-        "score_confidence": confidence, "is_eligible": True,
+        "score_confidence": confidence, "is_eligible": True, "valid_financial_quarters": 8,
         "total_equity": 100, "available_date": "2026-05-15",
         "excluded_reason_code": None,
     }
@@ -91,3 +93,43 @@ def test_company_selection_excludes_stale_fundamental_scores():
     assert rows[0]["is_selected"] is False
     assert rows[0]["exclusion_reason_code"] == "STALE_FA"
     assert rows[0]["selection_detail"]["fa_age_days"] == 182
+
+
+def test_unregistered_member_is_audited_without_inserting_invalid_foreign_key(monkeypatch):
+    from apps.worker.analyzer import company_job as job
+    sectors=[{'id':1,'industry_code':'G4530'}]
+    members=[{'stock_code':'UNKNOWN','industry_code':'G4530','sector_code':'G45','company_size_code':'LARGE'}]
+    monkeypatch.setattr(job,'fetch_sector_results',lambda *a,**k:sectors)
+    monkeypatch.setattr(job,'fetch_latest_wics_snapshot',lambda *a:members)
+    monkeypatch.setattr(job,'fetch_latest_company_fa_as_of',lambda *a,**k:[])
+    monkeypatch.setattr(job,'fetch_company_statuses',lambda *a:[])
+    monkeypatch.setattr(job,'fetch_active_company_risk_states',lambda *a,**k:[])
+    writes=[]
+    monkeypatch.setattr(job,'insert_company_results',lambda db,run_id,rows:writes.append(rows))
+    results=job.run(None,1,date(2026,5,31),load_config())
+    assert writes==[[]]
+    assert results[0]['identity_registered'] is False
+    assert results[0]['exclusion_reason_code']=='MAPPING_ERROR'
+    assert results[0]['is_selected'] is False
+
+
+@pytest.mark.parametrize("quarters, selected", [(8, True), (7, False), (0, False), (None, False)])
+def test_financial_history_is_a_hard_filter_even_for_high_scores(quarters, selected):
+    fa = _fa("A", 1, 100)
+    if quarters is None:
+        fa.pop("valid_financial_quarters")
+    else:
+        fa["valid_financial_quarters"] = quarters
+    rows = select_companies(
+        [{"id": 77, "industry_code": "G4530"}],
+        [{"stock_code": "A", "sector_code": "G45", "industry_code": "G4530",
+          "company_size_code": "LARGE"}],
+        [fa], [{"stock_code": "A", "status_code": "ACTIVE", "market_type_code": "KOSPI"}],
+        load_config(), as_of_date=date(2026, 5, 31),
+    )
+    assert rows[0]["is_selected"] is selected
+    assert rows[0]["exclusion_reason_code"] == (None if selected else "INSUFFICIENT_FINANCIAL_HISTORY")
+    detail = rows[0]["selection_detail"]
+    assert detail["valid_financial_quarters"] == (quarters or 0)
+    assert detail["minimum_financial_quarters"] == 8
+    assert detail["financial_history_cutoff"] == date(2026, 5, 31)

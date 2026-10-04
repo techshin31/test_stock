@@ -136,6 +136,29 @@ def fetch_analysis_run(db: PostgreDB, run_id: int) -> dict | None:
     return db.fetch_one("SELECT * FROM fa_analysis_runs WHERE id = %s", (run_id,))
 
 
+def fetch_reconstructed_fa_selections(db: PostgreDB, strategy_name: str, end_date: date) -> list[dict]:
+    """Research-only reconstruction; retain empty monthly selections and QA status.
+
+    The latest version of each month must pass validation. Do not substitute an
+    older successful version for a failed latest version or mark it PUBLISHED.
+    """
+    return db.fetch_all(
+        """
+        WITH latest AS (
+          SELECT DISTINCT ON (r.analysis_month) r.*
+          FROM fa_analysis_runs r JOIN strategies s ON s.id=r.strategy_id
+          WHERE s.name=%s AND r.effective_date<=%s
+          ORDER BY r.analysis_month, r.run_version DESC
+        )
+        SELECT r.id AS run_id, r.cutoff_date, r.effective_date, r.status_code,
+               r.model_version, r.input_hash, c.stock_code, c.latest_available_date
+        FROM latest r LEFT JOIN fa_company_results c
+          ON c.run_id=r.id AND c.is_selected=TRUE
+        ORDER BY r.effective_date, c.stock_code
+        """, (strategy_name, end_date),
+    )
+
+
 def fetch_reusable_run(
     db: PostgreDB,
     strategy_id: int,

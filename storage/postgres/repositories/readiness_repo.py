@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from ..connection import PostgreDB
+from .financial_coverage import VALID_FINANCIAL_QUARTERS_CTE
 
 
 def fetch_schema_columns(db: PostgreDB, table_names: list[str]) -> list[dict]:
@@ -36,27 +37,26 @@ def fetch_macro_signal_coverage(db: PostgreDB, cutoff_date: date) -> list[dict]:
 
 def fetch_finance_industry_coverage(db: PostgreDB, cutoff_date: date) -> list[dict]:
     return db.fetch_all(
-        """
+        f"""
         WITH snapshot_date AS (
             SELECT MAX(base_date) AS base_date
             FROM wics_companies WHERE base_date <= %s
-        ), report_counts AS (
-            SELECT stock_code, COUNT(DISTINCT source_rcept_no) AS report_count
-            FROM financial_statements
-            WHERE available_date <= %s
-              AND source_rcept_no NOT LIKE 'LEGACY:%%'
-            GROUP BY stock_code
-        )
+        ), {VALID_FINANCIAL_QUARTERS_CTE}
         SELECT w.industry_code,
                COUNT(*) AS large_company_count,
-               COUNT(*) FILTER (WHERE COALESCE(r.report_count, 0) >= 8) AS eligible_company_count
+               COUNT(*) FILTER (
+                   WHERE COALESCE(r.report_count, 0) >= 8
+                     AND c.status_code = 'ACTIVE' AND c.market_type_code = 'KOSPI'
+               ) AS eligible_company_count
         FROM wics_companies w
         JOIN snapshot_date s ON s.base_date = w.base_date
-        JOIN companies c ON c.stock_code = w.stock_code
+        LEFT JOIN companies c ON c.stock_code = w.stock_code
         LEFT JOIN report_counts r ON r.stock_code = w.stock_code
         WHERE w.company_size_code = 'LARGE'
-          AND c.status_code = 'ACTIVE'
-          AND c.market_type_code = 'KOSPI'
+          AND (
+              (c.status_code = 'ACTIVE' AND c.market_type_code = 'KOSPI')
+              OR c.stock_code IS NULL OR c.market_type_code IS NULL
+          )
         GROUP BY w.industry_code
         ORDER BY w.industry_code
         """,
