@@ -58,7 +58,7 @@ Copy-Item apps/worker/.env.example apps/worker/.env
 | 구분 | 환경변수 |
 |---|---|
 | PostgreSQL | `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` |
-| 데이터 수집 | `DART_API_KEY`, `FRED_API_KEY`, `KTO_API_KEY` |
+| 데이터 수집 | `FRED_API_KEY`, `KTO_API_KEY` (기업 재무·공시는 키 불필요) |
 | 분석 전략 | `STRATEGY_NAME` (Analyzer 기본 `risk_neutral`, 현재 Live Trader는 `aggressive`) |
 | KIS 계좌 | `KIS_APP_KEY`, `KIS_APP_SECRET`, `KIS_DOMESTIC_STOCK_ACCOUNT_NO`, `KIS_DOMESTIC_STOCK_ACCOUNT_PRODUCT_CODE` |
 | 실전 주문 잠금 | `KIS_ENV=real`, `ALLOW_LIVE_ORDER=true` |
@@ -371,4 +371,4 @@ QuantPilot/
 - [FA/TA 운영 전략](docs/FA_TA_STRATEGY.md)
 - [Trader 운영 문서](obsidian/apps_trader/00_Trader_개요.md)
 
-공개 재무·희석 위험 대체 수집 경로와 실데이터 검증은 [API 없는 공식 DART 수집](docs/PUBLIC_DART_ALTERNATIVE_2026-10-04.md)을 참고하세요. 일반 기업 수집의 기본 출처는 `public`이며 DART API 키가 필요하지 않습니다.
+공개 재무·희석 위험 대체 수집 경로와 실데이터 검증은 [API 없는 공식 DART 수집](docs/PUBLIC_DART_ALTERNATIVE_2026-10-04.md)을 참고하세요. 기업 수집은 공식 공개 자료만 사용하며, 인증 DART API와 출처 선택 옵션은 제거했습니다.

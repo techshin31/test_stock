@@ -2,8 +2,6 @@
 
 from .commodities import download_all_commodities, download_copper, download_gold, download_wti
 from .company_data import (
-    collect_dart_events,
-    collect_financial_statements,
     load_dart_events_df,
     load_fa_metrics_df,
 )
@@ -45,8 +43,6 @@ __all__ = [
     "download_dollar_index",
     "download_all_fx",
     # FA (기업 재무제표 + DART 이벤트)
-    "collect_financial_statements",
-    "collect_dart_events",
     "load_fa_metrics_df",
     "load_dart_events_df",
     # WICS (섹터 분류)

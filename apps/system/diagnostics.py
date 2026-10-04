@@ -30,7 +30,7 @@ def diagnose(cutoff=None) -> dict:
     cutoff = cutoff or now.date()
     names = (
         "POSTGRES_HOST", "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB",
-        "DART_API_KEY", "KIS_APP_KEY", "KIS_APP_SECRET",
+        "KIS_APP_KEY", "KIS_APP_SECRET",
         "KIS_DOMESTIC_STOCK_ACCOUNT_NO", "KIS_DOMESTIC_STOCK_ACCOUNT_PRODUCT_CODE",
     )
     report = {

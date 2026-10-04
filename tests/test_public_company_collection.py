@@ -94,8 +94,6 @@ def test_partial_risk_download_never_writes_events_or_claims_complete_coverage(t
 def test_default_company_job_dispatches_public_and_bootstraps_active_risk_lookback(tmp_path,monkeypatch):
     calls=[]
     monkeypatch.setattr(public_company,'run',lambda *a,**kw:calls.append(kw) or {'status':'PASS'})
-    for name in ['collect_companies_from_wics','sync_company_status','collect_dart_events','collect_financial_statements']:
-        monkeypatch.setattr(company_job,name,lambda *a,**kw:pytest.fail('Default path called authenticated API/KRX'))
     assert company_job.run(DB(),years=[2026],dart_start_date='20260629',dart_end_date='20260630',cache_dir=tmp_path)['status']=='PASS'
     assert calls[0]['start']==date(2026,6,29)
 
@@ -147,3 +145,44 @@ def test_policy_collection_keeps_former_large_members_in_historical_scope(monkey
     monkeypatch.setattr(public_company,'refresh_company_risk_states',lambda *a:1)
     report=public_company.store_policy_events(HistoricalDB(),[{'corp_code':'00126380','rcept_no':'20260615000001'}],{code:1 for code in REPORT_TYPES},start=START,end=END,sizes=['LARGE'])
     assert writes[0]['stock_code']=='FORMER' and report['dart_events']==1
+
+
+@pytest.mark.parametrize('source', ['api', 'public'])
+def test_removed_source_option_is_rejected_before_database_or_network_access(monkeypatch, source):
+    from apps.worker import __main__ as worker
+    monkeypatch.setattr('sys.argv', ['worker', 'collect', 'company', '--company-source', source])
+    monkeypatch.setattr(worker, '_init', lambda: pytest.fail('Removed options must not initialize services'))
+    with pytest.raises(SystemExit) as caught:
+        worker.main()
+    assert caught.value.code == 2
+
+
+def test_legacy_source_environment_cannot_select_authenticated_collection(monkeypatch):
+    from apps.worker import __main__ as worker
+    monkeypatch.setenv('COMPANY_DATA_SOURCE', 'api')
+    monkeypatch.setenv('DART_API_KEY', 'unused-legacy-binding')
+    monkeypatch.setattr('sys.argv', ['worker', 'collect', 'company', '--years', '2026',
+                                     '--start', '2026-06-29', '--end', '2026-06-30', '--no-progress'])
+    db = SimpleNamespace(closed=False)
+    db.close = lambda: setattr(db, 'closed', True)
+    monkeypatch.setattr(worker, '_init', lambda: (SimpleNamespace(dart_start_date='20200101'), db))
+    calls = []
+    monkeypatch.setattr(public_company, 'run', lambda *a, **kw: calls.append(kw) or {'status': 'PASS'})
+    worker.main()
+    assert db.closed and len(calls) == 1
+    assert calls[0]['start'] == date(2026, 6, 29) and calls[0]['end'] == END
+
+
+def test_public_transport_failure_exits_nonzero_closes_db_and_reports_sanitized_error(monkeypatch, capsys):
+    from apps.worker import __main__ as worker
+    db = SimpleNamespace(closed=False)
+    db.close = lambda: setattr(db, 'closed', True)
+    monkeypatch.setattr(worker, '_init', lambda: (SimpleNamespace(dart_start_date='20260101'), db))
+    monkeypatch.setattr('sys.argv', ['worker', 'collect', 'company', '--years', '2026', '--no-progress'])
+    def fail(*a, **kw):
+        raise PublicDartError('PUBLIC_DART_TRANSPORT: HTTPError: HTTP 502')
+    monkeypatch.setattr(public_company, 'run', fail)
+    with pytest.raises(SystemExit) as caught:
+        worker.main()
+    assert caught.value.code == 1 and db.closed
+    assert capsys.readouterr().err == '[COLLECT FAILED] PUBLIC_DART_TRANSPORT: HTTPError: HTTP 502\n'

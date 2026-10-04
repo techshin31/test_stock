@@ -11,10 +11,8 @@ from apps.worker.__main__ import (
     _wics_date_list,
     run_collect,
 )
-from data.collectors.dart_collector import _classify_regular_report
 from data.collectors.fred_collector import _parse_vintage_observations
 from data.collectors.wics_collector import parse_wics_companies
-from data.loaders.company_data import _df_to_records
 from data.collectors.kto_collector import _parse_kto_tourist_items
 from data.preprocess.macro_signals import _series_to_records, _series_to_records_release_date
 from storage.postgres.repositories.dart_event_repo import (
@@ -49,10 +47,6 @@ def test_fred_vintages_preserve_release_and_revision_order():
     assert rows[1]["available_date"] == date(2026, 3, 12)
 
 
-def test_dart_generic_quarter_report_names_map_by_period_month():
-    assert _classify_regular_report("분기보고서 (2025.03)") == (
-        "REGULAR_REPORT", "Q1_REPORT"
-    )
 
 
 def test_wics_requested_code_is_saved_as_industry_not_parent_sector():
@@ -68,9 +62,6 @@ def test_wics_requested_code_is_saved_as_industry_not_parent_sector():
     row = parse_wics_companies("20260529", 4530, data).iloc[0]
     assert row["sector_code"] == "G45"
     assert row["industry_code"] == "G4530"
-    assert _classify_regular_report("[기재정정]분기보고서 (2025.09)") == (
-        "REGULAR_REPORT", "Q3_REPORT"
-    )
 
 
 def test_market_macro_is_available_on_next_krx_session():
@@ -106,26 +97,6 @@ def test_kto_tourist_parser_accepts_common_monthly_keys():
     assert series.loc[pd.Timestamp("2026-06-01")] == 1500
 
 
-def test_financial_raw_record_keeps_receipt_period_and_cumulative_values():
-    frame = pd.DataFrame([{
-        "account_id": "ifrs-full_Revenue",
-        "account_nm": "Revenue",
-        "thstrm_amount": "10,000",
-        "thstrm_add_amount": "30,000",
-    }])
-    report = {
-        "rcept_no": "202605150001",
-        "rcept_dt": date(2026, 5, 15),
-        "period_start": date(2026, 1, 1),
-        "period_end": date(2026, 3, 31),
-        "revision_no": 0,
-    }
-    record = _df_to_records(
-        frame, "005930", "00126380", 2026, "11013", "CFS", "IS", report
-    )[0]
-    assert record["source_rcept_no"] == "202605150001"
-    assert record["available_date"] == date(2026, 5, 15)
-    assert record["thstrm_add_amount"] == 30000
 
 
 def test_regular_report_lookup_is_versioned_and_period_specific():
@@ -407,49 +378,6 @@ def test_macro_job_uses_end_date_as_source_release_collection_date(monkeypatch):
     assert calls[0]["source_release_collected_date"] == date(2026, 6, 22)
 
 
-def test_company_job_collects_receipts_before_financials(monkeypatch):
-    calls = []
-    monkeypatch.setattr(company_job, "collect_companies_from_wics", lambda *args, **kwargs: 1)
-    monkeypatch.setattr(company_job, "sync_company_status", lambda *args, **kwargs: 1)
-    monkeypatch.setattr(
-        company_job,
-        "collect_dart_events",
-        lambda db, start, end, **kwargs: calls.append(("events", start, end)) or 2,
-    )
-    monkeypatch.setattr(
-        company_job,
-        "collect_financial_statements",
-        lambda *args, **kwargs: calls.append("financials") or 3,
-    )
-    monkeypatch.setattr(
-        company_job,
-        "refresh_company_risk_states",
-        lambda db, as_of_date: calls.append(("risk_states", as_of_date)) or 1,
-    )
-    monkeypatch.setattr(
-        company_job,
-        "rebuild_annual_fa_metrics",
-        lambda db: calls.append("rebuild_metrics") or 4,
-    )
-    result = company_job.run(
-        object(),
-        years=[2025],
-        dart_start_date="20250101",
-        dart_end_date="20250622",
-        show_progress=False, source="api",
-    )
-    assert calls == [
-        ("events", "20250101", "20250622"),
-        ("risk_states", date(2025, 6, 22)),
-        "financials",
-        "rebuild_metrics",
-    ]
-    assert result == {
-        "financial_statements": 3,
-        "dart_events": 2,
-        "company_risk_states": 1,
-        "annual_fa_metrics": 4,
-    }
 
 
 def test_wics_weekly_range_uses_last_krx_session_per_week():

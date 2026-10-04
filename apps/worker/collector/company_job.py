@@ -1,23 +1,11 @@
-"""기업 데이터 수집 Job.
-
-financial_statements / fa_metrics / dart_events 테이블을 채운다.
-- DART 이벤트: 접수번호별 정기공시와 정정공시를 증분 수집
-- 재무제표: 최신 미수집 접수번호의 분기 원본을 저장
-"""
+"""Collect official public financial filings and dilution-policy disclosures."""
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from data.loaders.company_data import (
-    collect_companies_from_wics,
-    collect_dart_events,
-    collect_financial_statements,
-    rebuild_annual_fa_metrics,
-    sync_company_status,
-)
-from apps.worker.company_risk import refresh_company_risk_states
+from apps.worker.collector import public_company
 from storage.postgres.connection import PostgreDB
 
 
@@ -28,76 +16,22 @@ def run(
     dart_end_date: str | None = None,
     show_progress: bool = True,
     company_size_codes: list[str] | None = None,
-    source: str = "public",
     cache_dir: Path = Path("logs/public-dart-xbrl"),
     output: Path = Path("reports/public-company-collection.json"),
 ) -> dict:
-    """재무제표 + DART 이벤트를 수집해 DB에 저장한다.
+    """Collect key-free public data; preserve PARTIAL status and source evidence.
 
-    Parameters
-    ----------
-    db : PostgreDB
-    years : list[int], optional
-        재무제표 수집 연도 목록. 미입력 시 올해 포함 최근 3개년.
-    dart_start_date : str
-        DART 이벤트 수집 시작일 (YYYYMMDD). 증분 수집이므로 실질적 하한선.
-    dart_end_date : str, optional
-        DART 이벤트 수집 종료일 (YYYYMMDD). 미입력 시 오늘.
-    show_progress : bool
-        tqdm 진행바 및 콘솔 출력 여부.
-
-    Returns
-    -------
-    dict[str, int]
-        {"financial_statements": 수집된 (종목·연도) 수, "dart_events": 수집된 이벤트 수}
+    Dates use YYYYMMDD. The end defaults to the Korean calendar date;
+    omitted years select that end year's latest three years.
     """
-    as_of_date = (
-        date.fromisoformat(f"{dart_end_date[:4]}-{dart_end_date[4:6]}-{dart_end_date[6:]}")
-        if dart_end_date
-        else datetime.now(ZoneInfo("Asia/Seoul")).date()
+    end = (datetime.strptime(dart_end_date, "%Y%m%d").date() if dart_end_date
+           else datetime.now(ZoneInfo("Asia/Seoul")).date())
+    start = datetime.strptime(dart_start_date, "%Y%m%d").date()
+    if start > end:
+        raise ValueError("collection start must not exceed end")
+    effective_years = years or [end.year - 2, end.year - 1, end.year]
+    return public_company.run(
+        db, start=start, end=end, years=effective_years,
+        company_size_codes=company_size_codes, cache_dir=cache_dir,
+        output=output, show_progress=show_progress,
     )
-    effective_years = years or [as_of_date.year - 2, as_of_date.year - 1, as_of_date.year]
-    effective_dart_end_date = dart_end_date or as_of_date.strftime("%Y%m%d")
-
-    if source == "public":
-        from apps.worker.collector import public_company
-        start = date.fromisoformat(f"{dart_start_date[:4]}-{dart_start_date[4:6]}-{dart_start_date[6:]}")
-        if start > as_of_date:
-            raise ValueError("collection start must not exceed end")
-        return public_company.run(db, start=start, end=as_of_date, years=effective_years,
-                                  company_size_codes=company_size_codes, cache_dir=cache_dir,
-                                  output=output, show_progress=show_progress)
-    if source != "api":
-        raise ValueError("company source must be public or api")
-    collect_companies_from_wics(db, show_progress=show_progress)
-    sync_company_status(db, show_progress=show_progress)
-
-    if show_progress:
-        print(f"[COMPANY] DART 이벤트 수집: {dart_start_date} ~ {effective_dart_end_date}")
-    event_count = collect_dart_events(
-        db, dart_start_date, effective_dart_end_date,
-        show_progress=show_progress,
-        company_size_codes=company_size_codes,
-    )
-    print(f"[COMPANY] DART 이벤트 완료: {event_count}건 저장")
-    risk_state_count = refresh_company_risk_states(db, as_of_date)
-    print(f"[COMPANY] 기업 위험상태 완료: {risk_state_count}개 이벤트 상태 upsert")
-
-    if show_progress:
-        print(f"[COMPANY] 분기 재무제표 수집 연도: {effective_years}")
-    fs_count = collect_financial_statements(
-        db,
-        effective_years,
-        show_progress=show_progress,
-        company_size_codes=company_size_codes,
-    )
-    print(f"[COMPANY] 분기 재무제표 완료: {fs_count}개 보고서 버전 저장")
-    rebuilt_metrics = rebuild_annual_fa_metrics(db)
-    print(f"[COMPANY] 연간 FA 캐시/이력 재생성 완료: {rebuilt_metrics}건")
-
-    return {
-        "financial_statements": fs_count,
-        "dart_events": event_count,
-        "company_risk_states": risk_state_count,
-        "annual_fa_metrics": rebuilt_metrics,
-    }

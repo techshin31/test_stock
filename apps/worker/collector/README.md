@@ -43,7 +43,6 @@ Copy-Item apps/worker/.env.example apps/worker/.env
 | `FRED_API_KEY` | `macro` | CPI 최초 발표일과 개정 이력(vintage) 수집에 필수 |
 | `KTO_API_KEY` | `macro` | 선택 시그널인 KR_TOURIST 외국인 관광객 월별 입국자 수 수집에 사용 |
 | `KTO_TOURIST_ENDPOINT` | `macro` | KTO API 엔드포인트를 직접 지정할 때 사용, 미입력 시 기본 data.go.kr 엔드포인트 사용 |
-| `DART_API_KEY` | `company` | 재무제표와 공시 이벤트 수집에 필수 |
 | `COMPANY_YEARS` | `company` | 기본 수집 연도, 예: `2023,2024,2025` |
 | `DART_START_DATE` | `company` | 공시 이벤트 수집 하한일, 기본값 `20200101` |
 | `SHOW_PROGRESS` | 전체 | `false`이면 진행바를 표시하지 않음 |
@@ -163,7 +162,7 @@ python -m apps.worker collect wics --force-refresh
 | `--start YYYY-MM-DD` | `macro`, `wics`, `company`, `all` | 매크로/WICS 시작일, company의 DART 하한일. `collect all`에서는 생략 시 전날 |
 | `--end YYYY-MM-DD` | 전체 | 매크로/WICS/DART 종료일, company 연도 범위 계산, readiness cutoff |
 | `--years YEAR ...` | `company`, `all` | 재무제표 수집 연도 직접 지정 |
-| `--company-size SIZE` | `company`, `all` | `LARGE`, `MID`, `SMALL`; 여러 번 지정 가능 |
+| `--company-size SIZE` | `company`, `all` | 기본 `LARGE`; `MID`, `SMALL`도 여러 번 지정 가능 |
 | `--wics-snapshot-frequency` | `wics`, `all` | `weekly` 또는 `daily`, 기본값 `weekly` |
 | `--force-refresh` | `wics`, `all` | 기수집 WICS 날짜도 다시 조회 |
 | `--check-readiness` | `all` | 수집 후 Analyzer 입력 준비도 JSON 출력 |
@@ -193,7 +192,6 @@ WICS 가격 수집은 종목별 출력 대신 `tqdm` 진행바로 표시된다. 
 - `KTO_API_KEY가 필요합니다`: 외국인 관광객 수집용 `KTO_API_KEY`를 설정한다.
   공공데이터포털 응답 구조가 바뀌면 `KTO_TOURIST_ENDPOINT`를 지정하고 콘솔 로그를
   확인한다.
-- `환경변수 DART_API_KEY가 필요합니다`: `DART_API_KEY`를 설정한다.
 - PostgreSQL 연결 실패: `docker compose -f storage/postgres/docker-compose.yml ps`와
   `apps/worker/.env`의 접속 정보를 확인한다.
 - 일부 외부 소스 실패: macro와 company 수집은 항목별 경고 후 계속 진행할 수
@@ -201,14 +199,14 @@ WICS 가격 수집은 종목별 출력 대신 `tqdm` 진행바로 표시된다. 
 - readiness `FAIL`: 각 `checks[].name`, `passed`, `detail`을 확인하고 부족한 기간의
   `macro`, `wics`, `company`를 다시 수집한다.
 
-## API가 막힌 환경의 기본 수집 경로
+## 공식 공개 재무·공시 수집
 
-기업 수집의 기본 출처는 `public`이다. 공식 공개 원본 XBRL로 재무를 받고,
+기업 수집은 공식 공개 자료만 사용한다. 공식 공개 원본 XBRL로 재무를 받고,
 공식 공개 주요사항 화면으로 기존 희석 위험 정책의 공시를 수집한다. 이 경로에는
 DART API 키가 필요 없다. `collect company`와 `collect all` 모두 같은 경로를 사용한다.
 
 ```bash
-python -m apps.worker collect company --company-source public \
+python -m apps.worker collect company \
   --start 2025-07-01 --end 2026-10-04 --years 2025 2026 \
   --company-size LARGE --no-progress
 ```
@@ -227,6 +225,5 @@ python -m apps.worker collect company --company-source public \
 모든 위험 공시를 수집했다고 해석하지 않는다. 정정·철회가 차단을 자동 해제하는 정책은
 포함하지 않으므로 보수적으로 차단 상태를 유지할 수 있다.
 
-기존 인증 API 경로는 `--company-source api`로 명시하면 사용할 수 있다. 공개 경로는
-인증 API의 오류를 숨기고 성공으로 바꾸는 방식이 아니라 별도의 공식 자료 경로다.
-8분기 미달 제외와 공시 기준일 검증은 두 경로 모두 동일하게 유지한다.
+인증 DART API 클라이언트, API 키 설정과 출처 선택 옵션은 제거했다. 공개 자료도
+전송·원본 검증 실패를 명시하며, 8분기 미달 제외와 공시 기준일 검증을 유지한다.

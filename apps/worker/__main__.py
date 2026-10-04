@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 import sys
 from datetime import date, datetime, timedelta
@@ -52,7 +51,7 @@ def _parse_args() -> argparse.Namespace:
         "--company-size",
         choices=["LARGE", "MID", "SMALL"],
         action="append",
-        help="기업 수집 WICS 규모 필터 (미입력: 전체)",
+        help="기업 수집 WICS 규모 필터 (미입력: LARGE)",
     )
     collect_p.add_argument(
         "--force-refresh",
@@ -60,9 +59,6 @@ def _parse_args() -> argparse.Namespace:
         help="기수집 WICS 스냅샷도 다시 조회해 교정 (wics 전용)",
     )
 
-    collect_p.add_argument("--company-source", choices=["public", "api"],
-                           default=os.getenv("COMPANY_DATA_SOURCE", "public"),
-                           help="재무·공시 출처 (기본 public: API 키 없는 공식 공개 자료)")
     collect_p.add_argument("--public-cache-dir", type=Path, default=Path("logs/public-dart-xbrl"))
     collect_p.add_argument("--company-report", type=Path, default=Path("reports/public-company-collection.json"))
 
@@ -241,7 +237,6 @@ def run_collect(args: argparse.Namespace) -> None:
                 dart_end_date=dart_end,
                 show_progress=show,
                 company_size_codes=args.company_size,
-                source=getattr(args, "company_source", "public"),
                 cache_dir=getattr(args, "public_cache_dir", Path("logs/public-dart-xbrl")),
                 output=getattr(args, "company_report", Path("reports/public-company-collection.json")),
             )
@@ -335,7 +330,6 @@ def run_readiness(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    from data.collectors.dart_collector import DartAPIError
     from data.collectors.public_dart_xbrl import PublicDartError
 
     args = _parse_args()
@@ -349,7 +343,7 @@ def main() -> None:
             run_audit()
         elif args.category == "readiness":
             run_readiness(args)
-    except (DartAPIError, PublicDartError) as exc:
+    except PublicDartError as exc:
         print(f"[COLLECT FAILED] {exc}", file=sys.stderr)
         raise SystemExit(1) from None
 
