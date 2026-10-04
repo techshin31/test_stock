@@ -11,7 +11,6 @@ from pathlib import Path
 class WorkerConfig:
     fred_api_key: str | None
     kto_api_key: str | None
-    dart_api_key: str | None
     company_years: list[int]
     dart_start_date: str  # YYYYMMDD
     show_progress: bool
@@ -48,7 +47,6 @@ def load_config(env_file: str | None = None) -> WorkerConfig:
     return WorkerConfig(
         fred_api_key=os.getenv("FRED_API_KEY"),
         kto_api_key=os.getenv("KTO_API_KEY"),
-        dart_api_key=os.getenv("DART_API_KEY"),
         company_years=company_years,
         dart_start_date=os.getenv("DART_START_DATE", "20200101"),
         show_progress=os.getenv("SHOW_PROGRESS", "true").lower() != "false",

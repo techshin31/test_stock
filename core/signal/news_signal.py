@@ -6,22 +6,18 @@ from pathlib import Path
 from typing import Dict
 from zoneinfo import ZoneInfo
 from core.data.news_collector import NaverNewsCollector
-from core.data.dart_collector import DartRealtimeCollector
 from core.analytics.sentiment import KeywordSentimentAnalyzer
 
 KST = ZoneInfo("Asia/Seoul")
 
 class NewsSignalGenerator:
-    """Fetches news and calculates sentiment scores for a list of tickers, with caching."""
+    """Calculate sentiment from Naver articles with a source-specific daily cache."""
     
     def __init__(self, cache_dir: Path):
         self.news_collector = NaverNewsCollector()
-        self.dart_collector = DartRealtimeCollector()
         self.analyzer = KeywordSentimentAnalyzer()
         self.cache_dir = cache_dir
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.dart_filings_cache = {}
-        self.dart_fetched_today = False
         self.sector_cache = {}
         
     def _fetch_sector(self, ticker: str) -> str:
@@ -53,7 +49,7 @@ class NewsSignalGenerator:
             return None
         
     def _get_cache_file(self, date: datetime.date) -> Path:
-        return self.cache_dir / f"news_sentiment_{date.isoformat()}.json"
+        return self.cache_dir / f"naver_news_sentiment_v1_{date.isoformat()}.json"
         
     def generate_signals(self, tickers: list[str], limit_per_ticker: int = 5) -> Dict[str, float]:
         """
@@ -74,11 +70,6 @@ class NewsSignalGenerator:
         results = {}
         updated = False
         
-        # Load DART filings once per day to save API limits
-        if not self.dart_fetched_today:
-            self.dart_filings_cache = self.dart_collector.fetch_today_filings()
-            self.dart_fetched_today = True
-        
         for ticker in tickers:
             if ticker in cache_data:
                 results[ticker] = cache_data[ticker]
@@ -89,14 +80,7 @@ class NewsSignalGenerator:
             # Fetch News
             news_items = self.news_collector.fetch_recent_news(ticker, limit=limit_per_ticker)
             
-            # Fetch DART (from today's market-wide cache)
-            raw_ticker = ticker.split('.')[0]
-            dart_items = self.dart_filings_cache.get(raw_ticker, [])
-            
-            # Combine
-            combined_items = news_items + dart_items
-            
-            score = self.analyzer.analyze_news_list(combined_items, industry_code=industry)
+            score = self.analyzer.analyze_news_list(news_items, industry_code=industry)
             
             results[ticker] = score
             cache_data[ticker] = score
