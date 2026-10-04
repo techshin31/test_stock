@@ -69,6 +69,43 @@ API 연결 때문에 전체 수집이 멈추는 문제는 이 경로로 피할 �
 사유를 남긴다. 데이터 준비도 및 분석 결과는 별도로 확인한다.
 
 현재 환경 증거: `/workspace/cloud-setup/api-alternative-20261004`.
-`company-collection.json`, `policy-source-events.json`, `policy-collection.json`,
+`company-collection.json`, `company-collection-repeat.json`, `policy-source-events.json`, `policy-collection.json`,
 `source-qa.json`, 원본 페이지 캐시, `unit-tests.log`, `db-tests.log`를 보존한다.
 실제 재무·위험 데이터는 DB에 있고 Git에는 코드·테스트·문서를 반영한다.
+
+## 대체 데이터 반영 후 FA 백테스트
+
+운영 DB를 읽기 전용 스냅샷으로 복사한
+`quantpilot_fa_research_20261004_922bd769`에서 13개월의 FA 분석을 다시 만들었다.
+18개 위험 상태를 각 분석 시점의 공시일과 차단 기간으로 평가했으며, 최종 선정 종목의
+8분기 재무·원본 접수번호·공시일 조건과 활성 위험 제외를 별도로 대조했다. 위반은 0건이다.
+전체 기간의 선정 이력이 있는 종목은 75개이고, 월별 분석의 선정 수는 38~49개다.
+
+| 항목 | 결과 |
+|---|---:|
+| 가격 기반 평가 기간 | 2025-10-01~2026-10-02, 243거래일 |
+| 초기 자산 | 10,000,000원 |
+| 최종 자산 | 13,241,956.67원 |
+| 총수익률 | +32.4196% |
+| 최대 낙폭 | -33.9261% |
+| Sharpe | 0.7809 |
+| 거래 | 71건 |
+| 월별 교체 | 12회 |
+| 동일 입력 재실행 | 자산 곡선·거래 내역·비중 모두 정확히 일치 |
+
+가격 원본은 기존 실제 CSV를 그대로 사용했고, 묶음 SHA256은
+`1c0c71035ee58338a9feb1faa92c7b10526f621409a00a1c508446ea3ce44405`다.
+위험 공시를 반영한 뒤에도 표시한 수익률·낙폭·거래 수는 이전 엄격 재무 검증 결과와 같다.
+같은 기간 KOSPI 수익률은 +102.6645%로, 이 결과는 전략의 시장 대비 우위를 보여주지 않는다.
+
+앞의 11개월은 전체 수집 대상의 가격 이력 준비도 때문에 WARNING이고 마지막 2개월은
+PASS다. 선정 종목의 조건과 백테스트 가격 이력은 통과했으며, 기존의 명시적 연구 모드로
+실행했다. 공개 화면의 정정 이력 완전성, 당시 상장 기업 전체의 구성 및 거시 데이터 빈티지
+검증이 끝난 것은 아니므로 실운용 승인 결과로 사용하지 않는다.
+
+증거는 `research-validation.json`, `research/backtest/metrics.json`,
+`research/backtest/report.md`, `research/backtest-audit.json`,
+`research/backtest-reproducibility.json`, `research/equity-curve.csv`,
+`research/trade-ledger.csv`, `research/weights.csv`에 보존했다.
+코드 검증은 Python 574개, 실제 PostgreSQL 통합 31개, 브라우저 7개 테스트와
+대시보드 lint/build가 통과했다.

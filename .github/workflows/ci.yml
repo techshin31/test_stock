@@ -17,9 +17,6 @@ jobs:
     name: Python tests without external credentials
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      MPLCONFIGDIR: ${{ runner.temp }}/matplotlib
-      NUMBA_CACHE_DIR: ${{ runner.temp }}/numba
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -28,6 +25,9 @@ jobs:
           enable-cache: true
       - run: uv sync --frozen --dev
       - run: uv run --frozen pytest tests -q
+        env:
+          MPLCONFIGDIR: ${{ runner.temp }}/matplotlib
+          NUMBA_CACHE_DIR: ${{ runner.temp }}/numba
 
   dashboard:
     name: Dashboard build, lint and browser tests
