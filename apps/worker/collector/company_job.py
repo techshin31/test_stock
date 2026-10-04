@@ -6,7 +6,9 @@ financial_statements / fa_metrics / dart_events 테이블을 채운다.
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from data.loaders.company_data import (
     collect_companies_from_wics,
@@ -26,7 +28,10 @@ def run(
     dart_end_date: str | None = None,
     show_progress: bool = True,
     company_size_codes: list[str] | None = None,
-) -> dict[str, int]:
+    source: str = "public",
+    cache_dir: Path = Path("logs/public-dart-xbrl"),
+    output: Path = Path("reports/public-company-collection.json"),
+) -> dict:
     """재무제표 + DART 이벤트를 수집해 DB에 저장한다.
 
     Parameters
@@ -49,11 +54,21 @@ def run(
     as_of_date = (
         date.fromisoformat(f"{dart_end_date[:4]}-{dart_end_date[4:6]}-{dart_end_date[6:]}")
         if dart_end_date
-        else date.today()
+        else datetime.now(ZoneInfo("Asia/Seoul")).date()
     )
     effective_years = years or [as_of_date.year - 2, as_of_date.year - 1, as_of_date.year]
     effective_dart_end_date = dart_end_date or as_of_date.strftime("%Y%m%d")
 
+    if source == "public":
+        from apps.worker.collector import public_company
+        start = date.fromisoformat(f"{dart_start_date[:4]}-{dart_start_date[4:6]}-{dart_start_date[6:]}")
+        if start > as_of_date:
+            raise ValueError("collection start must not exceed end")
+        return public_company.run(db, start=start, end=as_of_date, years=effective_years,
+                                  company_size_codes=company_size_codes, cache_dir=cache_dir,
+                                  output=output, show_progress=show_progress)
+    if source != "api":
+        raise ValueError("company source must be public or api")
     collect_companies_from_wics(db, show_progress=show_progress)
     sync_company_status(db, show_progress=show_progress)
 

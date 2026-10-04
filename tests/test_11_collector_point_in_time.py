@@ -436,7 +436,7 @@ def test_company_job_collects_receipts_before_financials(monkeypatch):
         years=[2025],
         dart_start_date="20250101",
         dart_end_date="20250622",
-        show_progress=False,
+        show_progress=False, source="api",
     )
     assert calls == [
         ("events", "20250101", "20250622"),

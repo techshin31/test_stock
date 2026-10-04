@@ -11,11 +11,11 @@ from apps.worker.config import load_config, build_db_config
 from core.utils.io import write_json
 from data.collectors.public_dart_xbrl import PublicDartClient, PublicDartError, parse_archive
 from storage.postgres.connection import PostgreDB
-from storage.postgres.repositories.company_repo import upsert_companies
+from storage.postgres.repositories.company_repo import upsert_companies, fetch_all_companies
 from storage.postgres.repositories.financial_repo import fetch_collected_receipts
 
 
-def run(db, client, *, start, end, years, stock_codes=None, output=None):
+def run(db, client, *, start, end, years, stock_codes=None, output=None, show_progress=True, allow_no_new_filings=False):
     if stock_codes is None:
         stock_codes = [r["stock_code"] for r in db.fetch_all("""
             SELECT stock_code FROM wics_companies
@@ -27,18 +27,23 @@ def run(db, client, *, start, end, years, stock_codes=None, output=None):
                    risk_disclosure_coverage="NOT_COLLECTED", failures=[], manifests=[])
     if not stock_codes:
         raise PublicDartError("PUBLIC_DART_NO_REQUESTED_COMPANIES")
+    existing_status = {r["stock_code"]: r for r in fetch_all_companies(db)}
     try:
         for code in stock_codes:
             company = client.company(code)
+            if code in existing_status:
+                if company["corp_code"] != existing_status[code]["corp_code"]:
+                    raise PublicDartError("PUBLIC_DART_REGISTRY_IDENTITY")
+                company["status_code"] = existing_status[code]["status_code"]
             upsert_companies(db, [company])
             summary["companies"] += 1
             if company["market_type_code"] != "KOSPI":
                 summary["skipped_non_kospi"] += 1
                 continue
             filings = client.filings(company, start, end)
-            if not any(f.period_end.year in years for f in filings):
-                summary["failures"].append(dict(stock_code=code, reason="NO_ELIGIBLE_FINANCIAL_FILINGS"))
             collected = fetch_collected_receipts(db, code)
+            if not any(f.period_end.year in years for f in filings) and not (allow_no_new_filings and collected):
+                summary["failures"].append(dict(stock_code=code, reason="NO_ELIGIBLE_FINANCIAL_FILINGS"))
             for f in filings:
                 if f.period_end.year not in years:
                     continue
@@ -79,8 +84,9 @@ def run(db, client, *, start, end, years, stock_codes=None, output=None):
                 summary["manifests"].append(manifest)
                 if output:
                     write_json(Path(output), summary)
-            print(json.dumps({k:summary[k] for k in ["companies","reports","financial_rows","cached_reports"]} | {
-                "stock_code":code,"failures":len(summary["failures"])}, ensure_ascii=False), flush=True)
+            if show_progress:
+                print(json.dumps({k:summary[k] for k in ["companies","reports","financial_rows","cached_reports"]} | {
+                    "stock_code":code,"failures":len(summary["failures"])}, ensure_ascii=False), flush=True)
         summary["status"] = "PARTIAL" if summary["failures"] else "PASS"
         return summary
     except Exception:

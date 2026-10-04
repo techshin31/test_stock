@@ -200,3 +200,33 @@ WICS 가격 수집은 종목별 출력 대신 `tqdm` 진행바로 표시된다. 
   있으므로 콘솔 로그와 readiness JSON을 함께 확인한다.
 - readiness `FAIL`: 각 `checks[].name`, `passed`, `detail`을 확인하고 부족한 기간의
   `macro`, `wics`, `company`를 다시 수집한다.
+
+## API가 막힌 환경의 기본 수집 경로
+
+기업 수집의 기본 출처는 `public`이다. 공식 공개 원본 XBRL로 재무를 받고,
+공식 공개 주요사항 화면으로 기존 희석 위험 정책의 공시를 수집한다. 이 경로에는
+DART API 키가 필요 없다. `collect company`와 `collect all` 모두 같은 경로를 사용한다.
+
+```bash
+python -m apps.worker collect company --company-source public \
+  --start 2025-07-01 --end 2026-10-04 --years 2025 2026 \
+  --company-size LARGE --no-progress
+```
+
+공개 경로에서 규모를 생략하면 기본 LARGE만 수집한다. MID/SMALL은 `--company-size`로
+명시한다. `--public-cache-dir`은 원본 캐시 위치, `--company-report`는 실행·출처·실패
+사유를 담는 JSON 위치다. 성공은 종료 코드 0, 원본 부재 등 부분 완료는 2, 전송·검증
+실패로 실행이 중단되면 1이다. 일부 기업의 재무가 없으면 다른 기업과 위험 공시 수집은
+진행하며, JSON에 미해결 기업을 남긴다. 기존 연결 재무와 별도 재무를 섞어 채우지 않는다.
+
+위험 공시의 공개 출처는 `engopendart.fss.or.kr/disclosureinfo/mainMatter/list.do`이며,
+유상증자(11306), 유무상증자(11308), 전환사채(11324), 신주인수권부사채(11325),
+교환사채(11326)를 조회한다. 이를 기존 90일 매수 차단 정책에 연결한다. 일일 수집에서도
+최소 90일을 다시 조회하고, 기간 내 과거·현재 규모 조건을 충족한 종목을 포함한다. 모든 종류·페이지의 접수번호·기업코드·공시일을 검증한 뒤
+저장하고, 원본 페이지 SHA256을 기록한다. 이 범위를 `POLICY_SCOPE_ONLY`로 표시하며
+모든 위험 공시를 수집했다고 해석하지 않는다. 정정·철회가 차단을 자동 해제하는 정책은
+포함하지 않으므로 보수적으로 차단 상태를 유지할 수 있다.
+
+기존 인증 API 경로는 `--company-source api`로 명시하면 사용할 수 있다. 공개 경로는
+인증 API의 오류를 숨기고 성공으로 바꾸는 방식이 아니라 별도의 공식 자료 경로다.
+8분기 미달 제외와 공시 기준일 검증은 두 경로 모두 동일하게 유지한다.

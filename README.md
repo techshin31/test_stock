@@ -370,3 +370,5 @@ QuantPilot/
 - [Backtester 실행 가이드](apps/backtester/README.md)
 - [FA/TA 운영 전략](docs/FA_TA_STRATEGY.md)
 - [Trader 운영 문서](obsidian/apps_trader/00_Trader_개요.md)
+
+공개 재무·희석 위험 대체 수집 경로와 실데이터 검증은 [API 없는 공식 DART 수집](docs/PUBLIC_DART_ALTERNATIVE_2026-10-04.md)을 참고하세요. 일반 기업 수집의 기본 출처는 `public`이며 DART API 키가 필요하지 않습니다.

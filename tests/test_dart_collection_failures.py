@@ -224,7 +224,7 @@ def test_company_job_skips_downstream_work_after_event_failure(monkeypatch):
     for name in ["refresh_company_risk_states", "collect_financial_statements", "rebuild_annual_fa_metrics"]:
         monkeypatch.setattr(company_job, name, lambda *args, **kwargs: downstream.append(args))
     with pytest.raises(dart.DartAPIError):
-        company_job.run(object(), years=[2025], dart_end_date="20251231", show_progress=False)
+        company_job.run(object(), years=[2025], dart_end_date="20251231", show_progress=False, source="api")
     assert downstream == []
 
 
