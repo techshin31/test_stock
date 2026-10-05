@@ -58,8 +58,8 @@ uv run python -m apps.worker readiness --require-ready
 준비도 PASS 이후 [Analyzer 가이드](../apps/worker/analyzer/README.md)에 따라 분석·
 검증·발행하고 [Backtester 가이드](../apps/backtester/README.md)에 따라
 `--universe-source fa-published`로 실행한다. 입력 부족이나 수집 실패를 빈 성공으로
-처리해서는 안 된다. DART의 `AUTH`, `QUOTA`, `PROXY` 오류를 구분하여 원인을 먼저
-해소한다. HTTPS 프록시 장애는 프록시 서비스의 라우팅·연결 설정 확인이 필요할 수 있다.
+처리해서는 안 된다. 인증형 DART API는 제거되었으며 공식 공개 XBRL·정책 공시를
+사용한다. 원본 재무 결손·충돌은 제외 사유로 보존하고, 전송 실패는 성공으로 처리하지 않는다.
 
 ## 주문 모드와 운영 완료 조건
 
@@ -84,3 +84,76 @@ QUANTPILOT_RUN_DB_INTEGRATION=1 uv run --frozen pytest integration -q
 DB 연동 검사는 고유한 임시 DB를 생성·삭제할 권한이 필요하다. 빈 DB 초기화,
 반복 초기화, 불완전한 DB 보호와 SQL 실패 시 트랜잭션 전체 롤백을 실제 PostgreSQL에서
 검증한다. 기존 애플리케이션 DB의 데이터는 테스트에서 변경하지 않는다.
+
+## 통합 실행 명령
+
+저장소 루트에서 실행한다. 기존 자료의 최초 적재가 끝났다면 다음 순서로 시작한다.
+
+```bash
+uv run python -m apps.system prepare
+uv run python -m apps.system run
+uv run python -m apps.system run --mode simulate --watch --interval 300
+```
+
+`prepare`는 직전 완료 거래일을 cutoff로 사용하는 `aggressive` 분석을 실행한다.
+기본 적용일은 다음 준비 가능한 KRX 거래일이며 `--effective-date YYYY-MM-DD`로
+명시할 수 있다. 과거 적용일·휴장일·아직 완료되지 않은 cutoff는 거부한다.
+준비도 PASS와 분석 PASS를 모두 확인한 후 현재 설정된 DB의 운영 유니버스에 발행하고
+시점·유니버스 정합성을 감사한다. 이미 발행된 동일 분석은 재사용한다. 분석 발행은
+클라우드 환경 게시와 별개이며, 연구 검증에는 별도 DB를 사용한다.
+
+`prepare --collect`는 분석 전 증분 수집을 추가한다. `run --collect --watch`는 거래일마다
+수집 및 준비가 처음 성공할 때까지 재시도하고 이후에는 수집을 반복하지 않는다.
+기존 원본의 CFS 결손·중복 사실 충돌·적격 공시 없음에 해당하는 PARTIAL만 허용하며,
+그 경우에도 8분기 요건과 준비도·분석 PASS를 통과해야 한다. HTTP 오류나 불완전한
+정책 공시 수집은 중단한다. 최초 장기 이력 적재는 이 증분 명령의 역할이 아니다.
+
+`run`은 KST 기준 KRX 거래일 08:00~15:20에만 준비하며, 09:00~15:20에만 매매 주기를
+실행한다. 휴장·시간 외에는 WAITING, 장전에는 PREPARED를 기록한다. `--watch`가
+없으면 한 번 실행한다. 기본 반복 간격은 300초, 최소 30초이며 Ctrl+C로 종료한다.
+중복 watcher와 주기는 프로세스 잠금으로 차단한다. 수집·Trader 자식 프로세스에는
+15분 제한이 있다. 준비 실패·Trader 실패·오래된 결과·운영 상태 이상은 BLOCKED와
+종료 코드 2로 기록한다. 반복 모드에서는 다음 주기에 재시도한다. BLOCKED 중에는
+자동 주문과 포지션 위험청산이 실행되지 않을 수 있으므로 보유 계좌는 운영자가 확인해야 한다.
+
+결과는 `logs/system/preparation.json`, `logs/system/<mode>/cycle.json`에 기록한다.
+반복 실행 상태는 `logs/system/watch.heartbeat.json`으로 확인한다. Trader 로그와 FA
+후보는 `logs/dry_run/`, `logs/simulate/`, `logs/paper/`로 분리하며 후보의 모델·전략·
+실행 환경·신호일을 검증한다. 오래된 `logs/fa_candidates.json`은 더 이상 읽지 않는다.
+DRY_RUN·SIMULATE·PAPER는 현재 FA v1.1을 검증하고 REAL의 기존 모델·승격 잠금은 유지한다.
+
+DRY_RUN은 매 실행 가상 현금을 기준으로 계획만 계산한다. 실제 계좌 잔고와 체결을
+검증하지 않으며 상태를 누적하지 않는다. 기본 현금은 1,000만 원이고
+`DRY_RUN_INITIAL_CASH`로 바꿀 수 있다. SIMULATE는 `SIM_INITIAL_CASH`(기본 5억 원),
+`SIM_ACCOUNT_PATH`의 영속 가상계좌를 사용한다. 두 모드의 금액을 비교하려면 초기
+현금을 맞추고 새 가상계좌 파일로 시작한다. 기존 파일을 삭제해 운영 이력을 지우지 않는다.
+
+이 통합 watcher는 준비·매매 주기를 연결한다. 기존 `scheduler.py`의 EOD 보고서와
+장기 운영 승격 증거는 별도 기능이며 두 watcher를 동시에 실행하지 않는다.
+
+## KIS 모의투자 연결 준비
+
+모의투자용으로 발급한 아래 값을 환경 설정 또는 Git에서 제외된 `.env`에 등록한다.
+키 값·계좌번호를 문서나 채팅에 붙이지 않는다.
+
+| 변수 | 용도 |
+|---|---|
+| `KIS_APP_KEY` | 모의투자 앱 키 |
+| `KIS_APP_SECRET` | 모의투자 앱 시크릿 |
+| `KIS_DOMESTIC_STOCK_ACCOUNT_NO` | 계좌 앞 8자리 |
+| `KIS_DOMESTIC_STOCK_ACCOUNT_PRODUCT_CODE` | 계좌 뒤 2자리, 기본 `01` |
+| `KIS_ENV` | `paper` |
+| `ALLOW_LIVE_ORDER` | `false` |
+
+KIS 모의투자 HTTPS 목적지는 `openapivts.koreainvestment.com:29443`이다.
+인증정보가 없으면 `paper-check`는 MISSING_PAPER_CREDENTIALS로 중단한다.
+정보를 등록한 뒤 다음 명령으로 실제 인증과 잔고 응답 형식만 확인한다.
+
+```bash
+uv run python -m apps.system paper-check --output logs/system/paper-check.json
+```
+
+이 검사는 항상 `mock=True`를 사용하고 주문을 보내지 않으며 최대 60초로 제한한다.
+출력에는 비밀값이나 잔고 금액을 넣지 않는다. 연결 PASS는 모의 주문 체결·정산 검증이나
+운영 승격을 뜻하지 않는다. 직접 모의 주문을 실행할 때만 `run --mode paper` 또는
+`run --mode paper --watch`를 명시한다. 새 통합 명령에는 REAL 모드가 없다.
