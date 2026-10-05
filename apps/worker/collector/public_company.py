@@ -45,6 +45,8 @@ def run(db, *, start: date, end: date, years: list[int], company_size_codes=None
         summary["status"] = "FAILED"
         raise
     finally:
+        from apps.worker.collector.monitor import record_collection
+        record_collection(summary, db)
         if output:
             write_json(Path(output), summary)
 

@@ -1,0 +1,145 @@
+{
+  "source": "DART_PUBLIC",
+  "status": "PARTIAL",
+  "start": "2025-07-01",
+  "end": "2026-10-04",
+  "company_size_codes": [
+    "LARGE"
+  ],
+  "risk_disclosure_coverage": "POLICY_SCOPE_ONLY",
+  "finance": {
+    "source": "DART_PUBLIC_ORIGINAL_XBRL",
+    "status": "PARTIAL",
+    "companies": 100,
+    "reports": 0,
+    "financial_rows": 0,
+    "cached_reports": 475,
+    "skipped_non_kospi": 12,
+    "risk_disclosure_coverage": "NOT_COLLECTED",
+    "failures": [
+      {
+        "stock_code": "024110",
+        "receipt": "20250814002963",
+        "reason": "XBRL_CONFLICTING_DUPLICATE_FACT"
+      },
+      {
+        "stock_code": "024110",
+        "receipt": "20251114002185",
+        "reason": "XBRL_CONFLICTING_DUPLICATE_FACT"
+      },
+      {
+        "stock_code": "024110",
+        "receipt": "20260814004009",
+        "reason": "XBRL_CONFLICTING_DUPLICATE_FACT"
+      },
+      {
+        "stock_code": "032830",
+        "receipt": "20250813000585",
+        "reason": "XBRL_CONFLICTING_DUPLICATE_FACT"
+      },
+      {
+        "stock_code": "032830",
+        "receipt": "20251114002091",
+        "reason": "XBRL_CONFLICTING_DUPLICATE_FACT"
+      },
+      {
+        "stock_code": "088980",
+        "reason": "NO_ELIGIBLE_FINANCIAL_FILINGS"
+      },
+      {
+        "stock_code": "323410",
+        "receipt": "20250814003580",
+        "reason": "XBRL_CFS_BALANCE_MISSING"
+      },
+      {
+        "stock_code": "323410",
+        "receipt": "20251114001942",
+        "reason": "XBRL_CFS_BALANCE_MISSING"
+      },
+      {
+        "stock_code": "323410",
+        "receipt": "20260318000884",
+        "reason": "XBRL_CFS_BALANCE_MISSING"
+      },
+      {
+        "stock_code": "323410",
+        "receipt": "20260515002001",
+        "reason": "XBRL_CFS_BALANCE_MISSING"
+      },
+      {
+        "stock_code": "323410",
+        "receipt": "20260814000011",
+        "reason": "XBRL_CFS_BALANCE_MISSING"
+      },
+      {
+        "stock_code": "323410",
+        "receipt": "20260814002834",
+        "reason": "XBRL_CFS_BALANCE_MISSING"
+      }
+    ],
+    "manifests": []
+  },
+  "risk_start": "2025-07-01",
+  "dart_events": 18,
+  "risk_report_codes": [
+    "11306",
+    "11308",
+    "11324",
+    "11325",
+    "11326"
+  ],
+  "risk_source_row_counts": {
+    "11306": 102,
+    "11308": 0,
+    "11324": 82,
+    "11325": 2,
+    "11326": 45
+  },
+  "risk_source_pages": [
+    {
+      "report_code": "11306",
+      "page": 1,
+      "sha256": "93b1e634f45d4bdec8aa306ee73dcbc416c23f5b6cb86ecf708b5e376ef78b47",
+      "bytes": 362063,
+      "total_rows": 102
+    },
+    {
+      "report_code": "11306",
+      "page": 2,
+      "sha256": "dcebee73cbb75d579ffd39a31625ad4f3cf6f336d53ae101b6c3d68c8015fcac",
+      "bytes": 11090,
+      "total_rows": 102
+    },
+    {
+      "report_code": "11308",
+      "page": 1,
+      "sha256": "17377333e909c5b0277f9af2506fd5ab45c6fbcbd9eaefad84282873875864c3",
+      "bytes": 7007,
+      "total_rows": 0
+    },
+    {
+      "report_code": "11324",
+      "page": 1,
+      "sha256": "6873e9b4fdda7c7abd37ad37b8fc1f3293a2905dd9cd4bf8275def446a3fe70b",
+      "bytes": 822503,
+      "total_rows": 82
+    },
+    {
+      "report_code": "11325",
+      "page": 1,
+      "sha256": "ab9dedfe5d203ef73bcbc41339492e6fd8096e9a346b5120eb7dea3b44b77ef6",
+      "bytes": 30913,
+      "total_rows": 2
+    },
+    {
+      "report_code": "11326",
+      "page": 1,
+      "sha256": "fff25b4fe9fe2b7aeb397fd72f4cb8fd995eef9698c0bf38981287d5626b15eb",
+      "bytes": 414032,
+      "total_rows": 45
+    }
+  ],
+  "risk_scope_stock_count": 132,
+  "company_risk_states": 18,
+  "annual_fa_metrics": 389
+}

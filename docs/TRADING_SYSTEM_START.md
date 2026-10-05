@@ -1,4 +1,4 @@
-# 자동매매 시스템 초기 구축
+# 자동매매 시스템 설정과 운영 검증
 
 기존 QuantPilot의 수집·분석·백테스트·매매 구성 위에 초기 설정, 진단, 격리 검증
 경로를 추가했다. 아래 검증은 소프트웨어 개발 기반에 대한 것이다. 실제 데이터로
@@ -98,7 +98,7 @@ uv run python -m apps.system run --mode simulate --watch --interval 300
 `prepare`는 직전 완료 거래일을 cutoff로 사용하는 `aggressive` 분석을 실행한다.
 기본 적용일은 다음 준비 가능한 KRX 거래일이며 `--effective-date YYYY-MM-DD`로
 명시할 수 있다. 과거 적용일·휴장일·아직 완료되지 않은 cutoff는 거부한다.
-준비도 PASS와 분석 PASS를 모두 확인한 후 현재 설정된 DB의 운영 유니버스에 발행하고
+준비도 PASS, 최신 공개 공시 수집 증거와 분석 PASS를 확인한 후 현재 설정된 DB의 운영 유니버스에 발행하고
 시점·유니버스 정합성을 감사한다. 이미 발행된 동일 분석은 재사용한다. 분석 발행은
 클라우드 환경 게시와 별개이며, 연구 검증에는 별도 DB를 사용한다.
 
@@ -114,7 +114,8 @@ uv run python -m apps.system run --mode simulate --watch --interval 300
 중복 watcher와 주기는 프로세스 잠금으로 차단한다. 수집·Trader 자식 프로세스에는
 15분 제한이 있다. 준비 실패·Trader 실패·오래된 결과·운영 상태 이상은 BLOCKED와
 종료 코드 2로 기록한다. 반복 모드에서는 다음 주기에 재시도한다. BLOCKED 중에는
-자동 주문과 포지션 위험청산이 실행되지 않을 수 있으므로 보유 계좌는 운영자가 확인해야 한다.
+신규 진입을 차단하며 장중에는 보유분 위험관리와 대사를 별도로 시도한다.
+위험 점검이 실패하거나 일부만 완료되면 운영자가 보유 계좌를 확인해야 한다.
 
 결과는 `logs/system/preparation.json`, `logs/system/<mode>/cycle.json`에 기록한다.
 반복 실행 상태는 `logs/system/watch.heartbeat.json`으로 확인한다. Trader 로그와 FA
@@ -128,8 +129,8 @@ DRY_RUN은 매 실행 가상 현금을 기준으로 계획만 계산한다. 실�
 `SIM_ACCOUNT_PATH`의 영속 가상계좌를 사용한다. 두 모드의 금액을 비교하려면 초기
 현금을 맞추고 새 가상계좌 파일로 시작한다. 기존 파일을 삭제해 운영 이력을 지우지 않는다.
 
-이 통합 watcher는 준비·매매 주기를 연결한다. 기존 `scheduler.py`의 EOD 보고서와
-장기 운영 승격 증거는 별도 기능이며 두 watcher를 동시에 실행하지 않는다.
+이 통합 watcher는 준비·매매·마감 보고서를 연결한다. 장기 운영 승격 증거는 실제
+관측 로그를 기반으로 별도로 심사하며, 기존 `scheduler.py`와 동시에 실행하지 않는다.
 
 ## KIS 모의투자 연결 준비
 
@@ -201,3 +202,57 @@ DRY_RUN은 계획 관측 보고서이며 계좌 수익률을 만들지 않는다
 대시보드의 조회 환경 선택은 PAPER·DRY_RUN·SIMULATE·REAL 기록을 분리해서 읽는다.
 실제 실행 모드나 주문 권한을 바꾸지 않는다. 자동 실행 단계·차단 사유·보유분 위험관리
 결과는 읽기 전용 `/api/workflow` 및 운영 요약에서 확인할 수 있다.
+
+## 재무 결손·수집 최신성·전략 진단
+
+```bash
+uv run python -m apps.system data-quality --output logs/system/data-quality.json
+uv run python -m apps.system strategy-review --directory /path/to/backtest \
+  --benchmark /path/to/kospi.csv --output reports/strategy-review.json
+```
+
+`data-quality`는 직전 완료 거래일 기준 최신 LARGE 구성종목의 유효 재무 분기 수,
+지원 시장·상태, 제외 사유와 수집 기록을 읽기 전용으로 확인한다. `eligible_source_history`는
+원천 8분기 조건이며 FA 점수·가격·위험 상태까지 통과한 매수 적격 판정이 아니다.
+불충분한 이력과 원본 결손은 채워 넣지 않는다. 원본 결손이 남아도 전체 운영 준비도와
+개별 종목 조건을 별도로 검사한다.
+
+회사 수집 성공·부분 성공·실패는 DB 식별별 `logs/collection/`에 저장한다.
+`COLLECTION_HEALTH_DIR`로 위치를 바꿀 수 있다. 준비 단계는 최근 2일 이내 기록,
+cutoff 포함 범위와 다섯 정책 공시 유형의 원본 페이지 증거를 요구한다. 알려진 원본
+재무 결손만 있는 PARTIAL을 허용하며 전송 실패·증거 누락·오래된 기록은 차단한다.
+`doctor --require-data`에도 이 조건을 적용한다. 첫 적용이나 복원 뒤에는 회사 수집을
+다시 실행해 새 DB의 증거를 생성한다. 다른 DB의 기록을 복사해 통과시키지 않는다.
+
+`strategy-review`는 `equity-curve.csv`, `weights.csv`, `trade-ledger.csv`와 실제 벤치마크
+종가를 사용한다. 날짜·결측·비중·회전율을 검증하고 앞 2/3과 뒤 1/3의 성과, MDD,
+추가 비용 10/30/50bp와 운영 비중 한도 차이를 보고한다. Sharpe의 무위험수익률은 0이다.
+진단 성공 PASS는 전략 승인과 다르며 `promotion_status`는 BLOCKED다.
+이미 관측한 경로의 사후 진단이므로 독립적인 최적화·외부 체결·수익성 검증을 대체하지 않는다.
+
+## 백업과 격리 복원
+
+```bash
+uv run python -m apps.system backup --directory /path/to/new-backup \
+  --source-cache /path/to/public-dart-cache
+uv run python -m apps.system restore --directory /path/to/new-backup
+```
+
+PostgreSQL `pg_dump`·`pg_restore`가 PATH에 필요하다. 이 클라우드의 pgserver 설치 경로도
+지원한다. 명령은 30분 제한이며 DB 비밀번호를 명령 인자로 넘기지 않는다.
+새 0700 디렉터리에 DB 덤프와 공개 원본 캐시를 0600으로 보존한다. 공개 캐시만
+지정하며 일반 프로젝트 디렉터리·설정·계좌 파일을 지정하지 않는다. SHA256 이름의
+`.bin`·`.json`에는 원본 XBRL ZIP·페이지·요청 메타데이터가 포함된다. 숨김 파일과
+토큰·자격증명 파일은 제외하고 DB의 `user_broker_credentials` 데이터도 제외한다.
+키는 별도 환경 설정에서 다시 등록한다. 백업에는 사용자·거래 자료가 포함될 수 있으므로
+공개 게시하거나 Git에 넣지 않는다.
+
+복원은 덤프·아카이브 체크섬을 검증한 뒤 새 `quantpilot_restore_...` DB에만 실행한다.
+기존 이름과 원래 운영 DB는 거부한다. 중간 실패 시 새 DB는 조사용으로 남긴다.
+원본 행 수가 변하지 않은 백업은 제외 테이블을 고려해 복원 행 수를 비교하며,
+공개 원본 파일 집합·크기·SHA256도 검증한다. 행 수 비교는 전체 값의 독립 대사를
+대체하지 않는다. 기존 DB·원본 캐시·자격증명 설정은 수정하지 않는다.
+복원 DB를 사용할 때는 접속 대상을 의도적으로 변경하고 수집·진단을 다시 수행한다.
+
+최신 구현·검증·남은 조건은 [2026-10-05 개선 결과](IMPROVEMENTS_STATUS_2026-10-05.md)를
+기준으로 읽고, 과거 감사·성과 보고서는 해당 시점의 기록으로 취급한다.

@@ -109,6 +109,10 @@ def prepare(*, effective_date: date | None = None, collect=False,
             write_json(output, report)
             if report["readiness"]["status"] != "PASS":
                 raise WorkflowBlocked("INPUTS_NOT_READY")
+            from apps.worker.collector.monitor import collection_health
+            report["collection_health"] = collection_health(cutoff, db=db, now=now_kst())
+            if report["collection_health"]["status"] != "PASS":
+                raise WorkflowBlocked("COLLECTION_EVIDENCE_NOT_READY")
             report["stage"] = "ANALYZE"
             write_json(output, report)
             config = load_config(STRATEGY)
@@ -121,7 +125,7 @@ def prepare(*, effective_date: date | None = None, collect=False,
                 raise WorkflowBlocked("ANALYSIS_NOT_PASS")
             report["stage"] = "PUBLISH"
             write_json(output, report)
-            published = universe_job.publish(db, context.run_id, config)
+            published = universe_job.publish(db, context.run_id, config, now_kst=now_kst())
             report["publication"] = {"run_id": published.run_id,
                                      "active_count": len(published.active_symbols),
                                      "already_published": published.already_published}

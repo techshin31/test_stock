@@ -1,0 +1,217 @@
+{
+  "status": "PASS",
+  "cutoff": "2026-10-02",
+  "collection": {
+    "status": "PASS",
+    "checked_at": "2026-10-05T23:06:26.333472+09:00",
+    "source_status": "PARTIAL",
+    "risk_scope": "POLICY_SCOPE_ONLY",
+    "source_end": "2026-10-05",
+    "financial_gaps": [
+      {
+        "stock_code": "024110",
+        "receipt": "20250814002963",
+        "reason": "XBRL_CONFLICTING_DUPLICATE_FACT"
+      },
+      {
+        "stock_code": "024110",
+        "receipt": "20251114002185",
+        "reason": "XBRL_CONFLICTING_DUPLICATE_FACT"
+      },
+      {
+        "stock_code": "024110",
+        "receipt": "20260814004009",
+        "reason": "XBRL_CONFLICTING_DUPLICATE_FACT"
+      },
+      {
+        "stock_code": "032830",
+        "receipt": "20250813000585",
+        "reason": "XBRL_CONFLICTING_DUPLICATE_FACT"
+      },
+      {
+        "stock_code": "032830",
+        "receipt": "20251114002091",
+        "reason": "XBRL_CONFLICTING_DUPLICATE_FACT"
+      },
+      {
+        "stock_code": "088980",
+        "reason": "NO_ELIGIBLE_FINANCIAL_FILINGS"
+      },
+      {
+        "stock_code": "323410",
+        "receipt": "20250814003580",
+        "reason": "XBRL_CFS_BALANCE_MISSING"
+      },
+      {
+        "stock_code": "323410",
+        "receipt": "20251114001942",
+        "reason": "XBRL_CFS_BALANCE_MISSING"
+      },
+      {
+        "stock_code": "323410",
+        "receipt": "20260318000884",
+        "reason": "XBRL_CFS_BALANCE_MISSING"
+      },
+      {
+        "stock_code": "323410",
+        "receipt": "20260515002001",
+        "reason": "XBRL_CFS_BALANCE_MISSING"
+      },
+      {
+        "stock_code": "323410",
+        "receipt": "20260814000011",
+        "reason": "XBRL_CFS_BALANCE_MISSING"
+      },
+      {
+        "stock_code": "323410",
+        "receipt": "20260814002834",
+        "reason": "XBRL_CFS_BALANCE_MISSING"
+      }
+    ],
+    "reason": null
+  },
+  "companies": [
+    {
+      "stock_code": "028300",
+      "company_name": "HLB",
+      "status_code": "ACTIVE",
+      "market_type_code": "KOSDAQ",
+      "validated_quarters": 0,
+      "eligible_source_history": false,
+      "exclusion_reason": "UNSUPPORTED_MARKET_OR_STATUS"
+    },
+    {
+      "stock_code": "036930",
+      "company_name": "JUSUNG ENGINEERING",
+      "status_code": "ACTIVE",
+      "market_type_code": "KOSDAQ",
+      "validated_quarters": 0,
+      "eligible_source_history": false,
+      "exclusion_reason": "UNSUPPORTED_MARKET_OR_STATUS"
+    },
+    {
+      "stock_code": "039030",
+      "company_name": "EO Technics",
+      "status_code": "ACTIVE",
+      "market_type_code": "KOSDAQ",
+      "validated_quarters": 0,
+      "eligible_source_history": false,
+      "exclusion_reason": "UNSUPPORTED_MARKET_OR_STATUS"
+    },
+    {
+      "stock_code": "058470",
+      "company_name": "LEENO Industrial Inc",
+      "status_code": "ACTIVE",
+      "market_type_code": "KOSDAQ",
+      "validated_quarters": 0,
+      "eligible_source_history": false,
+      "exclusion_reason": "UNSUPPORTED_MARKET_OR_STATUS"
+    },
+    {
+      "stock_code": "062040",
+      "company_name": "SANIL ELECTRIC",
+      "status_code": "ACTIVE",
+      "market_type_code": "KOSPI",
+      "validated_quarters": 5,
+      "eligible_source_history": false,
+      "exclusion_reason": "FEWER_THAN_EIGHT_VALID_QUARTERS"
+    },
+    {
+      "stock_code": "086520",
+      "company_name": "ECOPRO",
+      "status_code": "ACTIVE",
+      "market_type_code": "KOSDAQ",
+      "validated_quarters": 0,
+      "eligible_source_history": false,
+      "exclusion_reason": "UNSUPPORTED_MARKET_OR_STATUS"
+    },
+    {
+      "stock_code": "088980",
+      "company_name": "Macquarie Korea Infrastructure Fund",
+      "status_code": "ACTIVE",
+      "market_type_code": "KOSPI",
+      "validated_quarters": 0,
+      "eligible_source_history": false,
+      "exclusion_reason": "FEWER_THAN_EIGHT_VALID_QUARTERS"
+    },
+    {
+      "stock_code": "108490",
+      "company_name": "ROBOTIS",
+      "status_code": "ACTIVE",
+      "market_type_code": "KOSDAQ",
+      "validated_quarters": 0,
+      "eligible_source_history": false,
+      "exclusion_reason": "UNSUPPORTED_MARKET_OR_STATUS"
+    },
+    {
+      "stock_code": "196170",
+      "company_name": "Alteogen",
+      "status_code": "ACTIVE",
+      "market_type_code": "KOSDAQ",
+      "validated_quarters": 0,
+      "eligible_source_history": false,
+      "exclusion_reason": "UNSUPPORTED_MARKET_OR_STATUS"
+    },
+    {
+      "stock_code": "222800",
+      "company_name": "SIMMTECH",
+      "status_code": "ACTIVE",
+      "market_type_code": "KOSDAQ",
+      "validated_quarters": 0,
+      "eligible_source_history": false,
+      "exclusion_reason": "UNSUPPORTED_MARKET_OR_STATUS"
+    },
+    {
+      "stock_code": "240810",
+      "company_name": "WONIK IPS",
+      "status_code": "ACTIVE",
+      "market_type_code": "KOSDAQ",
+      "validated_quarters": 0,
+      "eligible_source_history": false,
+      "exclusion_reason": "UNSUPPORTED_MARKET_OR_STATUS"
+    },
+    {
+      "stock_code": "277810",
+      "company_name": "Rainbow Robotics",
+      "status_code": "ACTIVE",
+      "market_type_code": "KOSDAQ",
+      "validated_quarters": 0,
+      "eligible_source_history": false,
+      "exclusion_reason": "UNSUPPORTED_MARKET_OR_STATUS"
+    },
+    {
+      "stock_code": "323410",
+      "company_name": "KakaoBank",
+      "status_code": "ACTIVE",
+      "market_type_code": "KOSPI",
+      "validated_quarters": 0,
+      "eligible_source_history": false,
+      "exclusion_reason": "FEWER_THAN_EIGHT_VALID_QUARTERS"
+    },
+    {
+      "stock_code": "403870",
+      "company_name": "HPSP",
+      "status_code": "ACTIVE",
+      "market_type_code": "KOSDAQ",
+      "validated_quarters": 0,
+      "eligible_source_history": false,
+      "exclusion_reason": "UNSUPPORTED_MARKET_OR_STATUS"
+    },
+    {
+      "stock_code": "440110",
+      "company_name": "FADU",
+      "status_code": "ACTIVE",
+      "market_type_code": "KOSDAQ",
+      "validated_quarters": 0,
+      "eligible_source_history": false,
+      "exclusion_reason": "UNSUPPORTED_MARKET_OR_STATUS"
+    }
+  ],
+  "coverage": {
+    "eligible": 85,
+    "total": 100,
+    "supported_active_kospi": 88
+  },
+  "read_only": true,
+  "company_list_scope": "excluded only; full read-only per-company report retained in environment evidence"
+}

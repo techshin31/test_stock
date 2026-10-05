@@ -24,8 +24,9 @@ def dependencies(workflow, monkeypatch):
     db = SimpleNamespace(fetch_one=lambda *a: {'status_code': 'PASS'}, close=lambda: calls.append('close'))
     monkeypatch.setattr('apps.worker.__main__._init', lambda: (None, db))
     monkeypatch.setattr(readiness, 'run', lambda *a: SimpleNamespace(to_dict=lambda: {'status': 'PASS'}))
+    monkeypatch.setattr('apps.worker.collector.monitor.collection_health', lambda *a, **k: {'status': 'PASS'})
     monkeypatch.setattr(pipeline, 'run', lambda *a, **k: (calls.append('analyze') or SimpleNamespace(run_id=7, model_version='FA_V1_1')))
-    monkeypatch.setattr(universe_job, 'publish', lambda *a: (calls.append('publish') or SimpleNamespace(run_id=7, active_symbols=('005930',), already_published=False)))
+    monkeypatch.setattr(universe_job, 'publish', lambda *a, **k: (calls.append('publish') or SimpleNamespace(run_id=7, active_symbols=('005930',), already_published=False)))
     monkeypatch.setattr(operations, 'audit_operational_state', lambda *a: SimpleNamespace(to_dict=lambda: {'status': 'PASS'}))
     return db, calls
 

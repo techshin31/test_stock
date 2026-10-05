@@ -4,6 +4,7 @@ import argparse
 from datetime import date
 import json
 import math
+import re
 from pathlib import Path
 import time
 import signal
@@ -22,6 +23,21 @@ def main(argv=None) -> int:
     local.add_argument("--output", type=Path)
     paper = commands.add_parser("paper-check", help="KIS 모의투자 인증·잔고 조회만 검증 (주문 없음)")
     paper.add_argument("--output", type=Path)
+    quality = commands.add_parser("data-quality", help="재무 분기 수·제외 사유·공개 공시 수집 최신성 조회")
+    quality.add_argument("--cutoff", type=date.fromisoformat)
+    quality.add_argument("--output", type=Path)
+    research = commands.add_parser("strategy-review", help="기존 백테스트의 기간별 성과·비용·집중도 진단")
+    research.add_argument("--directory", type=Path, required=True)
+    research.add_argument("--benchmark", type=Path, required=True)
+    research.add_argument("--output", type=Path)
+    backup = commands.add_parser("backup", help="DB와 선택적 공개 원본 캐시 백업")
+    backup.add_argument("--directory", type=Path, required=True)
+    backup.add_argument("--source-cache", type=Path)
+    backup.add_argument("--output", type=Path)
+    restore = commands.add_parser("restore", help="체크섬 검증 후 새 격리 DB에만 복원")
+    restore.add_argument("--directory", type=Path, required=True)
+    restore.add_argument("--database", help="quantpilot_restore_ 접두사의 새 DB 이름")
+    restore.add_argument("--output", type=Path)
     prepare = commands.add_parser("prepare", help="완료된 거래일 자료 검증·FA 분석·PASS 결과 발행")
     prepare.add_argument("--effective-date", type=date.fromisoformat)
     prepare.add_argument("--collect", action="store_true", help="분석 전 일상 증분 수집 실행")
@@ -96,7 +112,25 @@ def main(argv=None) -> int:
                 scheduler_heartbeat.stop()
             if scheduler_lock:
                 scheduler_lock.release()
-    if args.command == "doctor":
+    if args.command in {"data-quality", "strategy-review", "backup", "restore"}:
+        try:
+            if args.command == "data-quality":
+                from apps.system.quality import check_quality
+                result = check_quality(args.cutoff)
+            elif args.command == "strategy-review":
+                from apps.system.strategy_review import review
+                result = review(args.directory, args.benchmark)
+            else:
+                from apps.system import recovery
+                result = (recovery.backup(args.directory, args.source_cache) if args.command == "backup"
+                          else recovery.restore(args.directory, args.database))
+        except Exception as exc:
+            # DB and HTTP exception text can include credentials.
+            message = str(exc) if isinstance(exc, (ValueError, RuntimeError)) else ""
+            result = {"status": "BLOCKED", "error_type": type(exc).__name__,
+                      "reason": message if re.fullmatch(r"[A-Z][A-Z0-9_]+", message) else "DEPENDENCY_FAILED"}
+        passed = result["status"] == "PASS"
+    elif args.command == "doctor":
         from apps.system.diagnostics import diagnose
 
         result = diagnose(args.cutoff)
