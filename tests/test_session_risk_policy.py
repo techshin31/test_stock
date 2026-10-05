@@ -52,7 +52,7 @@ def test_failed_preparation_still_runs_risk_cycle(monkeypatch, tmp_path):
     assert len(calls)==1 and calls[0][-1]=='--risk-only'
     report=json.loads((tmp_path/'logs/system/simulate/cycle.json').read_text())
     assert report['status']=='BLOCKED'
-    assert report['risk_management']['status']=='COMPLETED'
+    assert report['risk_management']['status']=='UNVERIFIED'
 
 
 def test_risk_only_exits_held_position_without_market_or_fa(monkeypatch, tmp_path):

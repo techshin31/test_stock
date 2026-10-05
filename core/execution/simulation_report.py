@@ -32,7 +32,7 @@ def build_simulation_report(
     *,
     initial_cash: float | None = None,
 ) -> dict:
-    account_path = log_dir / "sim_account.json"
+    account_path = Path(os.getenv("SIM_ACCOUNT_PATH") or log_dir / "sim_account.json")
     decision_path = log_dir / "decision_state.json"
     account = _read_json(account_path)
     decision = _read_json(decision_path)

@@ -177,3 +177,27 @@ PAPER 정책을 외부 주문 없이 비교하려면 `apps.system run --mode sim
 기본 로컬 정책은 유지하며, 명시한 경우 PAPER와 같은 손절·트레일링·비중·리밸런싱 및
 인버스 헤지 설정을 재현한다. REAL에서는 이 옵션을 거부한다. 비교에는 같은 초기
 현금·같은 가격·같은 정책을 사용하고 가상 체결 비용과 실제 체결 차이는 별도로 평가한다.
+
+## 인증·감독·마감 보고서·관제
+
+KIS 인증은 10초 제한의 요청을 사용하며 `token.dat` pickle 캐시는 읽지 않는다.
+새 JSON 토큰은 계좌·모의/실 서버·키 식별별로 분리한 `logs/credentials/`에 0600으로
+저장한다. 키·시크릿 원문은 저장하지 않는다. 인증 오류는 안전한 오류 유형만 기록한다.
+`KIS_TOKEN_CACHE_DIR`로 전용 비공개 디렉터리를 지정할 수 있다.
+
+`apps.system run --mode simulate --supervise`는 통합 watcher를 감독한다. 진행 파일이
+30분 동안 바뀌지 않거나 프로세스가 실패하면 자신이 생성한 프로세스를 종료하고 최대
+3회 복구한다. 단순 heartbeat와 진행 정체는 별도로 판정한다. 사용자 종료·잠금 충돌은
+복구 대상으로 삼지 않는다. `--collect`·`--paper-policy`도 전달할 수 있다.
+기존 스케줄러와 통합 watcher는 같은 전역 scheduler 잠금·heartbeat를 사용한다.
+종료·timeout 시 하위 프로세스를 정리하며, 새 supervisor는 기존 supervisor와도 잠금을 공유한다.
+
+15:30 이후 오늘의 실제 관측 로그가 있을 때만 EOD를 생성한다. PAPER는 기존 공식
+성과 보고서 경로를 사용하고, SIMULATE는 실제 가상계좌·비용·상태 검사를 기록한다.
+DRY_RUN은 계획 관측 보고서이며 계좌 수익률을 만들지 않는다. 성공한 날짜는 재생성하지
+않고 실패는 다음 주기에 재시도한다. 파일은 `reports/promotion/<mode>/daily/`와
+`latest.json`, 상태는 `logs/<mode>/eod_report_status.json`에 저장한다.
+
+대시보드의 조회 환경 선택은 PAPER·DRY_RUN·SIMULATE·REAL 기록을 분리해서 읽는다.
+실제 실행 모드나 주문 권한을 바꾸지 않는다. 자동 실행 단계·차단 사유·보유분 위험관리
+결과는 읽기 전용 `/api/workflow` 및 운영 요약에서 확인할 수 있다.
