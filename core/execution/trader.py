@@ -22,6 +22,7 @@ from core.analytics.paper_portfolio_cap_shadow import (
 from core.analytics.paper_shadow_reentry import evaluate_paper_shadow_reentry
 from core.broker.kis_api import KisBroker, normalize_symbol
 from core.broker.simulation import LocalSimulationBroker
+from core.broker.dry_run import DryRunBroker
 from core.constant.types import Tickers
 from core.execution.order_planning import OrderPlanningMixin
 from core.execution.order_execution import OrderExecutionMixin
@@ -57,7 +58,8 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
         dry_run=False,
         force_rebalance=False,
     ):
-        self.broker = LocalSimulationBroker() if simulate else KisBroker(mock=mock)
+        from apps.backtester.config import load_env
+        load_env()
         db_config = {
             'host': os.getenv('POSTGRES_HOST', 'localhost'),
             'port': int(os.getenv('POSTGRES_PORT', '5433')),
@@ -68,6 +70,8 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
         if not db_config['password']:
             raise ValueError("POSTGRES_PASSWORD 환경변수가 필요합니다.")
         self.db = PostgreDB(db_config)
+        self.broker = (DryRunBroker() if dry_run else
+                       LocalSimulationBroker() if simulate else KisBroker(mock=mock))
         self.execution_venue = (
             "DRY_RUN"
             if dry_run
@@ -177,10 +181,10 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
 
     @staticmethod
     def _fa_model_for_venue(execution_venue: str) -> str:
-        """Permit the candidate FA model only in the explicitly PAPER venue."""
+        """Validate the current model in non-REAL venues; retain the REAL gate."""
         return (
             PAPER_TRADING_MODEL_VERSION
-            if execution_venue == "PAPER"
+            if execution_venue in {"PAPER", "DRY_RUN", "SIMULATE"}
             else REAL_TRADING_MODEL_VERSION
         )
 
@@ -242,7 +246,7 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
                 fa_candidates.append(ticker)
         
         self._write_json_state(
-            Path("logs") / "fa_candidates.json",
+            self.log_dir / "fa_candidates.json",
             {
                 "source": "published_fa",
                 "run_id": published_run["id"],
@@ -251,6 +255,8 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
                 "minimum_fa_score": self.strategy.FA_SCORE_MIN,
                 "minimum_score_confidence": self.strategy.MIN_SCORE_CONFIDENCE,
                 "score_model_code": self.fa_model_version,
+                "execution_venue": self.execution_venue,
+                "strategy": self.strategy_name,
             },
         )
         logging.info(f"프리마켓 FA 필터링 완료. 관심 종목 {len(fa_candidates)}개 저장.")
@@ -467,10 +473,14 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
         dependency_errors = []
 
         try:
-            with open("logs/fa_candidates.json", "r", encoding="utf-8") as f:
+            with (self.log_dir / "fa_candidates.json").open("r", encoding="utf-8") as f:
                 candidate_payload = json.load(f)
             if candidate_payload.get("source") != "published_fa":
                 raise ValueError("legacy/unverified FA candidate file")
+            if (candidate_payload.get("score_model_code") != self.fa_model_version
+                    or candidate_payload.get("execution_venue") != self.execution_venue
+                    or candidate_payload.get("strategy") != self.strategy_name):
+                raise ValueError("FA candidate model/venue/strategy mismatch")
             if candidate_payload.get("signal_date") != signal_date.isoformat():
                 raise ValueError(
                     "FA candidate signal_date mismatch: "

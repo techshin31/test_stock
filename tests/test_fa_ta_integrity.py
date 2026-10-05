@@ -237,10 +237,11 @@ def test_live_candidates_require_published_pass_run():
     assert "c.is_selected = TRUE" in trader.db.queries[1]
 
 
-def test_v11_fa_model_is_restricted_to_paper_venue():
+def test_current_fa_model_can_be_validated_without_changing_real_model():
     assert LiveTrader._fa_model_for_venue("PAPER") == PAPER_TRADING_MODEL_VERSION
     assert LiveTrader._fa_model_for_venue("REAL") == REAL_TRADING_MODEL_VERSION
-    assert LiveTrader._fa_model_for_venue("DRY_RUN") == REAL_TRADING_MODEL_VERSION
+    assert LiveTrader._fa_model_for_venue("DRY_RUN") == PAPER_TRADING_MODEL_VERSION
+    assert LiveTrader._fa_model_for_venue("SIMULATE") == PAPER_TRADING_MODEL_VERSION
     assert FA_MODEL_VERSION == REAL_TRADING_MODEL_VERSION
 
 

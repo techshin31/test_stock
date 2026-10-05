@@ -173,7 +173,7 @@ def draw_dashboard(last_mode, next_run_time, execution_mode):
     else:
         print(" [첫 매매 사이클 대기 중...]")
 
-    fa_file = PROJECT_ROOT / "logs" / "fa_candidates.json"
+    fa_file = PROJECT_ROOT / "logs" / execution_mode.lower() / "fa_candidates.json"
     if fa_file.exists():
         try:
             fa = json.loads(fa_file.read_text(encoding="utf-8"))
@@ -478,7 +478,8 @@ def check_and_run_cold_start(live=False, dry_run=True, simulate=False, now=None)
     now = now or _now_kst()
     if not is_trading_day(now):
         return None
-    state_file = PROJECT_ROOT / "logs" / "fa_candidates.json"
+    venue = "DRY_RUN" if dry_run else "SIMULATE" if simulate else "REAL" if live else "PAPER"
+    state_file = PROJECT_ROOT / "logs" / venue.lower() / "fa_candidates.json"
     after_premarket = now.hour > 8 or (now.hour == 8 and now.minute >= 30)
     is_fresh = state_file.exists() and datetime.datetime.fromtimestamp(
         state_file.stat().st_mtime, tz=KST

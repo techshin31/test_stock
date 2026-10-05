@@ -157,13 +157,35 @@ uv run python run_live_trader.py --mock
 uv run python run_live_trader.py --mock --premarket
 ```
 
-`run_live_trader.py`에서 모드를 생략하면 주문 없는 DRY_RUN입니다. 이 모드도
-계좌·시장 데이터 조회에는 DB와 KIS 설정이 필요합니다. 인증정보 없는 초기 검증에는
-`apps.system local-check`를 사용하세요. 로컬 시뮬레이션 상태와 로그는
+`run_live_trader.py`에서 모드를 생략하면 주문 없는 DRY_RUN입니다. KIS 키 없이
+가상 현금 1,000만 원(`DRY_RUN_INITIAL_CASH`)으로 계획을 계산하며 실제 계좌를 조회하지
+않습니다. DB·발행된 FA 분석·시장 데이터는 필요합니다. 합성 입력만 사용하는 초기
+검증에는 `apps.system local-check`를 사용하세요. 로컬 시뮬레이션 상태와 로그는
 `logs/simulate/`에 저장되며, 주문 식별 키가 같은 재실행은 기존 체결을 반환합니다.
 직접 실행 CLI의 Telegram 알림은 `--notify`를 지정할 때만 활성화됩니다.
 
-### 자동 실행
+### 데이터 준비부터 자동 실행
+
+```bash
+# 자료 준비도 검사 → aggressive FA 분석 → PASS 결과 유니버스 발행
+uv run python -m apps.system prepare
+# 증분 수집까지 필요하면 prepare에 --collect 추가
+
+# 거래일/장중에 준비 → 후보 생성 → 주문 계획을 1회 검증 (KIS 키 불필요)
+uv run python -m apps.system run
+# 로컬 가상매매 반복 실행. 종료는 Ctrl+C
+uv run python -m apps.system run --mode simulate --watch --interval 300
+# KIS 모의투자 인증과 잔고 조회만 검사 (주문 없음)
+uv run python -m apps.system paper-check
+```
+
+`prepare`는 설정된 DB에 분석 결과와 운영 유니버스를 기록합니다. 별도 검증 DB가
+필요하면 `POSTGRES_DB`를 지정하세요. `run --collect`는 거래일별 준비가 처음 성공할
+때까지 증분 수집하며 이후 주기에서는 분석 입력을 다시 검증합니다. `BLOCKED`는
+자동복구 완료가 아니라 확인이 필요한 중단 상태입니다. KIS 연결 설정과 실행 시간,
+결과 파일은 [자동매매 시작 안내](docs/TRADING_SYSTEM_START.md)를 참고하세요.
+
+### 기존 스케줄러 실행
 
 Scheduler는 KRX 거래일 08:30에 장전 준비를 실행하고, 09:00~15:20에는 매분
 매매 사이클을 실행합니다. 대시보드는 `실제 주문`과 `주문 후보`를 분리하고,
