@@ -6,7 +6,7 @@ another venue policy.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Mapping
 
 
@@ -72,6 +72,8 @@ def resolve_strategy_policy(
 ) -> StrategyPolicy:
     """Resolve an audited strategy policy without cross-venue leakage."""
     venue = str(execution_venue or "").upper()
+    if venue in {"DRY_RUN", "SIMULATE"} and environment.get("VALIDATION_STRATEGY_POLICY") == "paper":
+        return replace(resolve_strategy_policy("PAPER", environment), status="PAPER_POLICY_VALIDATION")
     if venue != "PAPER":
         return StrategyPolicy(
             code="non_paper_legacy_guardrails_v1",

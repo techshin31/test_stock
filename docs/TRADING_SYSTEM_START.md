@@ -157,3 +157,23 @@ uv run python -m apps.system paper-check --output logs/system/paper-check.json
 출력에는 비밀값이나 잔고 금액을 넣지 않는다. 연결 PASS는 모의 주문 체결·정산 검증이나
 운영 승격을 뜻하지 않는다. 직접 모의 주문을 실행할 때만 `run --mode paper` 또는
 `run --mode paper --watch`를 명시한다. 새 통합 명령에는 REAL 모드가 없다.
+
+## 데이터 장애 중 위험관리와 주문 시점 검사
+
+통합 실행의 준비·장전 단계가 실패해도 장중에는 `--risk-only` 경로로 계좌 대사와
+보유분의 가격 기반 손절·트레일링을 시도한다. 이 경로는 FA·일봉·시장 국면을 요청하지
+않고 매도만 계획한다. 계좌/DB 조회 불가나 미정산 주문은 계속 차단하고 결과에 남긴다.
+준비 실패 상태는 BLOCKED로 유지하며 위험관리 실행 결과는 `risk_management`에 기록한다.
+위험 평가 완료율은 Trader의 `data_health.risk_check_coverage`로 확인한다.
+
+KIS 주문은 매 주문의 DB 선점 전과 해시키 처리 후 실제 전송 직전에 거래일·세션·
+09:00~15:20 시간 범위와 중지 설정을 재확인한다. `TRADING_CONTROL_PATH` 또는 기본
+`logs/system/trading-control.json`은 매번 읽는다. `{"entries_paused":true}`는 매수만,
+`{"orders_paused":true}`는 모든 주문을 막는다. 파일이 손상되면 모든 주문을 차단한다.
+Telegram 알림 활성화와 실계좌 승격 조건은 기존 명시적 경로를 사용한다.
+
+PAPER 정책을 외부 주문 없이 비교하려면 `apps.system run --mode simulate --paper-policy`
+또는 `run_live_trader.py --simulate --paper-policy`를 사용한다. DRY_RUN도 지원한다.
+기본 로컬 정책은 유지하며, 명시한 경우 PAPER와 같은 손절·트레일링·비중·리밸런싱 및
+인버스 헤지 설정을 재현한다. REAL에서는 이 옵션을 거부한다. 비교에는 같은 초기
+현금·같은 가격·같은 정책을 사용하고 가상 체결 비용과 실제 체결 차이는 별도로 평가한다.

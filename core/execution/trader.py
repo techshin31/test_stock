@@ -2,6 +2,7 @@ import logging
 import json
 import os
 import re
+import math
 import pandas as pd
 import datetime
 from collections import Counter
@@ -123,7 +124,7 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
         # The hedge policy is deliberately unavailable outside PAPER. It must
         # earn its own evidence before any future REAL-mode approval.
         self.inverse_hedge_enabled = (
-            self.execution_venue == "PAPER"
+            (self.execution_venue == "PAPER" or self.strategy_policy.status == "PAPER_POLICY_VALIDATION")
             and os.getenv("PAPER_INVERSE_HEDGE_ENABLED", "true").lower() == "true"
         )
         # Do not even parse hedge environment overrides outside its permitted
@@ -295,6 +296,47 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
         self._append_operational_health(dashboard_state)
 
         return fa_candidates
+
+    def run_risk_batch(self):
+        """Reconcile and evaluate held positions without FA, OHLCV or market regime."""
+        balance = self.broker.get_balance()
+        positions = balance["positions"]
+        total = float(balance["total_asset"])
+        self.last_global_order_pause = None
+        if not getattr(self.broker, "is_simulated", False):
+            self._sync_balance_and_positions(balance, total)
+            self._reconcile_open_orders(positions)
+            self._reconcile_trade_history_with_db()
+            self._assert_no_unresolved_orders()
+        peaks = self._update_risk_peaks(positions)
+        orders, checked = [], 0
+        for ticker, position in positions.items():
+            current = float(position.get("current_price") or 0)
+            average = float(position.get("avg_price") or 0)
+            if current <= 0 or average <= 0 or not math.isfinite(current + average):
+                continue
+            weight = position["qty"] * current / total if total > 0 else 0
+            target, detail = self.strategy.evaluate_position_risk(
+                current_position=weight, average_price=average, current_price=current,
+                peak_price=peaks.get(ticker))
+            checked += 1
+            if target == 0 and detail["signal_reason"] != "RISK_CLEAR":
+                order = {"type": "SELL", "ticker": ticker, "qty": position["qty"],
+                         "expected_price": current, "reason": detail["signal_reason"],
+                         "price_reference_source": "BROKER_BALANCE"}
+                order["idempotency_key"] = self._idempotency_key(order)
+                orders.append(order)
+        self.last_order_candidates = orders
+        self.last_data_health = {"risk_checks_total": len(positions), "risk_checks_completed": checked,
+                                 "risk_check_coverage": checked / len(positions) if positions else 1,
+                                 "entry_circuit_breaker": "PREPARATION_UNAVAILABLE"}
+        self._write_json_state(self.log_dir / "dashboard_state.json", {
+            "execution_mode": self.execution_venue, "strategy": self.strategy_name,
+            "account_scope": self.broker.masked_account, "cash": balance["cash"], "total_eval": total,
+            "positions": [{"ticker": ticker, **position} for ticker, position in positions.items()],
+            "data_health": self.last_data_health, "operational_status": "RISK_ONLY",
+            "updated_at": _now_kst().isoformat(), "order_candidates": self._candidate_order_summary(orders)})
+        return orders
 
     def run_daily_batch(self):
         logging.info(f"[{datetime.datetime.now()}] 실전 매매 배치 시작 (Intraday)")

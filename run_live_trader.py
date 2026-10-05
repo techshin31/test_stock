@@ -190,9 +190,15 @@ def main():
         "--confirm-liquidate", choices=["LIQUIDATE"],
         help="전체 청산 확인 문자열. --liquidate와 함께 LIQUIDATE를 입력해야 함",
     )
+    action_group.add_argument("--risk-only", action="store_true", help="보유분 대사·가격 기반 위험청산만 실행")
+    parser.add_argument("--paper-policy", action="store_true", help="DRY_RUN/SIMULATE에서 PAPER 정책 재현")
     args = parser.parse_args()
     if not (args.live or args.mock or args.simulate):
         args.dry_run = True
+    if args.paper_policy:
+        if not (args.dry_run or args.simulate):
+            parser.error("--paper-policy requires DRY_RUN or SIMULATE")
+        os.environ["VALIDATION_STRATEGY_POLICY"] = "paper"
     if args.live and args.dry_run:
         parser.error("--live and --dry-run cannot be combined; DRY_RUN always uses mock")
     if args.liquidate and args.dry_run:
@@ -330,7 +336,7 @@ def main():
             bot.send_message(msg)
             return
         else:
-            orders = trader.run_daily_batch()
+            orders = trader.run_risk_batch() if args.risk_only else trader.run_daily_batch()
             # dry_run이 아닌 경우에만 실제 주문 제출
             if not getattr(args, 'dry_run', False) and orders:
                 execution_results = trader._execute_orders(orders)

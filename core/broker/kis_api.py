@@ -54,6 +54,8 @@ class KisBroker:
     """
 
     def __init__(self, mock: bool = True):
+        from core.execution.session_guard import now_kst
+        self.order_session_date = now_kst().date()
         load_dotenv()
         self.key = os.getenv("KIS_APP_KEY")
         self.secret = os.getenv("KIS_APP_SECRET")
@@ -320,6 +322,10 @@ class KisBroker:
             # This call is deliberately made once. Retrying an ambiguous market-order
             # response can create a duplicate order at the broker.
             self._rate_limit()
+            from core.execution.session_guard import submission_blocker
+            blocked = submission_blocker(side, session=getattr(self, "order_session_date", None))
+            if blocked:
+                raise BrokerResponseError(f"ORDER_SESSION_BLOCKED: {blocked}")
             response = requests.post(
                 f"{self.broker.base_url}/uapi/domestic-stock/v1/trading/order-cash",
                 headers={
