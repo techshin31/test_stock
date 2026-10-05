@@ -27,7 +27,8 @@ def diagnose(cutoff=None) -> dict:
     """Inspect development prerequisites; never initialize a broker or write DB data."""
     load_env()
     now = datetime.now(ZoneInfo("Asia/Seoul"))
-    cutoff = cutoff or now.date()
+    from core.utils.trading_calendar import previous_krx_trading_day
+    cutoff = cutoff or previous_krx_trading_day(now.date())
     names = (
         "POSTGRES_HOST", "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB",
         "KIS_APP_KEY", "KIS_APP_SECRET",
@@ -73,7 +74,9 @@ def diagnose(cutoff=None) -> dict:
             report["development_ready"] = True
             readiness = check_data(ReadOnlyDatabase(conn), cutoff).to_dict()
             report["data_readiness"] = readiness
-            report["data_ready"] = readiness["status"] == "PASS"
+            from apps.worker.collector.monitor import collection_health
+            report["collection_health"] = collection_health(cutoff, now=now)
+            report["data_ready"] = readiness["status"] == "PASS" and report["collection_health"]["status"] == "PASS"
     except (psycopg.Error, ValueError, OSError) as exc:
         report["database"] = {"status": "BLOCKED", "error_type": type(exc).__name__}
         report["development_ready"] = False

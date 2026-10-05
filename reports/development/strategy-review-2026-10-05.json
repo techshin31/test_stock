@@ -1,0 +1,150 @@
+{
+  "status": "PASS",
+  "purpose": "RESEARCH_DIAGNOSTICS_ONLY",
+  "strategy": {
+    "sessions": 243,
+    "return_pct": 32.41956668193926,
+    "max_drawdown_pct": -33.926149320558764,
+    "sharpe": 0.8432545663225303
+  },
+  "benchmark": {
+    "sessions": 243,
+    "return_pct": 102.66448511771063,
+    "max_drawdown_pct": -38.63042960479466,
+    "sharpe": 1.6168839672183344
+  },
+  "chronological_periods": [
+    {
+      "period": "EARLIER_TWO_THIRDS",
+      "start": "2025-10-01",
+      "end": "2026-06-05",
+      "strategy": {
+        "sessions": 162,
+        "return_pct": 83.99618686157801,
+        "max_drawdown_pct": -20.33166724939237,
+        "sharpe": 2.041063893837364
+      },
+      "benchmark": {
+        "sessions": 162,
+        "return_pct": 136.1397886836388,
+        "max_drawdown_pct": -19.894662107505678,
+        "sharpe": 3.202362401155141
+      }
+    },
+    {
+      "period": "LATER_ONE_THIRD",
+      "start": "2026-06-08",
+      "end": "2026-10-02",
+      "strategy": {
+        "sessions": 81,
+        "return_pct": -28.031352746695926,
+        "max_drawdown_pct": -33.92614932055875,
+        "sharpe": -2.844638291155227
+      },
+      "benchmark": {
+        "sessions": 81,
+        "return_pct": -14.176053833424762,
+        "max_drawdown_pct": -38.63042960479463,
+        "sharpe": -0.34017228376159536
+      }
+    }
+  ],
+  "cost_stress": [
+    {
+      "additional_cost_bps": 0,
+      "sessions": 243,
+      "return_pct": 32.41956668193926,
+      "max_drawdown_pct": -33.926149320558764,
+      "sharpe": 0.8432545663225303
+    },
+    {
+      "additional_cost_bps": 10,
+      "sessions": 243,
+      "return_pct": 31.416147173410856,
+      "max_drawdown_pct": -34.098871022212194,
+      "sharpe": 0.8267304252030532
+    },
+    {
+      "additional_cost_bps": 30,
+      "sessions": 243,
+      "return_pct": 29.430717741404,
+      "max_drawdown_pct": -34.443119181644676,
+      "sharpe": 0.7936911130594761
+    },
+    {
+      "additional_cost_bps": 50,
+      "sessions": 243,
+      "return_pct": 27.473515469426534,
+      "max_drawdown_pct": -34.78577908341747,
+      "sharpe": 0.7606681846393335
+    }
+  ],
+  "sharpe_risk_free_rate": 0.0,
+  "cost_stress_method": "fixed observed trade path; extra proportional turnover cost; no liquidity/fill simulation",
+  "drawdown_window": {
+    "peak": "2026-06-17",
+    "trough": "2026-10-02",
+    "drawdown_pct": -33.92614932055874
+  },
+  "concentration": {
+    "maximum_stock_weight": 0.39,
+    "sessions_above_paper_cap": 216,
+    "mean_cash_weight": 0.1980994461676206
+  },
+  "trade_reason_counts": {
+    "TA_MOMENTUM_LOSS": 28,
+    "DYNAMIC_ENTRY_40%": 17,
+    "FA_SCORE_DETERIORATED": 5,
+    "FORCED_EXIT": 4,
+    "DYNAMIC_ENTRY_11%": 3,
+    "DYNAMIC_ENTRY_19%": 2,
+    "DYNAMIC_ENTRY_14%": 2,
+    "DYNAMIC_ENTRY_39%": 1,
+    "DYNAMIC_ENTRY_12%": 1,
+    "DYNAMIC_ENTRY_16%": 1,
+    "DYNAMIC_ENTRY_10%": 1,
+    "DYNAMIC_ENTRY_17%": 1,
+    "DYNAMIC_ENTRY_18%": 1,
+    "DYNAMIC_ENTRY_25%": 1,
+    "DYNAMIC_ENTRY_20%": 1,
+    "DYNAMIC_ENTRY_22%": 1,
+    "DYNAMIC_ENTRY_32%": 1
+  },
+  "runtime_policies": {
+    "PAPER": {
+      "code": "paper_recovery_cap15_hard20_band20_v1",
+      "status": "PAPER_RECOVERY_PROVISIONAL",
+      "selected_experiment": "F_CAP15_HARD20_BAND20",
+      "max_position_weight": 0.15,
+      "rebalance_band": 0.2,
+      "stop_loss_pct": 0.2,
+      "trailing_stop_enabled": false,
+      "trailing_stop_pct": 0.08,
+      "paper_only": true
+    },
+    "REAL": {
+      "code": "non_paper_legacy_guardrails_v1",
+      "status": "UNCHANGED",
+      "selected_experiment": "NOT_APPLICABLE",
+      "max_position_weight": 0.15,
+      "rebalance_band": 0.1,
+      "stop_loss_pct": 0.1,
+      "trailing_stop_enabled": true,
+      "trailing_stop_pct": 0.08,
+      "paper_only": false
+    }
+  },
+  "promotion_status": "BLOCKED",
+  "promotion_reasons": [
+    "DRAWDOWN_EXCEEDS_20_PERCENT",
+    "BENCHMARK_UNDERPERFORMANCE",
+    "LATER_PERIOD_UNDERPERFORMANCE",
+    "BACKTEST_EXCEEDS_RUNTIME_POSITION_CAP",
+    "EXTERNAL_PAPER_AND_LONG_TERM_OBSERVATION_REQUIRED"
+  ],
+  "limitations": [
+    "chronological split is retrospective, not an independent tuned holdout",
+    "no parameter optimization or production policy changes",
+    "no asset return attribution without validated trade prices"
+  ]
+}
