@@ -147,7 +147,7 @@ def prepare(*, effective_date: date | None = None, collect=False,
                 write_json(output, report)
 
 
-def run_cycle(*, mode="dry-run", collect=False, output=None):
+def run_cycle(*, mode="dry-run", collect=False, output=None, paper_policy=False):
     """One session-aware cycle; PAPER is explicit, REAL is not an option here."""
     if mode not in MODES:
         raise ValueError("mode must be dry-run, simulate or paper")
@@ -156,6 +156,8 @@ def run_cycle(*, mode="dry-run", collect=False, output=None):
         now = now_kst()
         report = {"status": "RUNNING", "stage": "SESSION_GATE", "mode": MODES[mode],
                   "started_at": now.isoformat(), "broker_orders_enabled": mode == "paper"}
+        flag = {"dry-run": "--dry-run", "simulate": "--simulate", "paper": "--mock"}[mode]
+        policy_flags = ["--paper-policy"] if paper_policy and mode != "paper" else []
         try:
             write_json(output, report)
             if not is_krx_trading_day(now.date().isoformat()) or not time(8, 0) <= now.time() < time(15, 20):
@@ -176,8 +178,7 @@ def run_cycle(*, mode="dry-run", collect=False, output=None):
                                      "prepared_at": now_kst().isoformat()})
             report["stage"] = "PREMARKET"
             write_json(output, report)
-            flag = {"dry-run": "--dry-run", "simulate": "--simulate", "paper": "--mock"}[mode]
-            rc = run_process([str(PROJECT_ROOT / "run_live_trader.py"), flag, "--premarket"])
+            rc = run_process([str(PROJECT_ROOT / "run_live_trader.py"), flag, *policy_flags, "--premarket"])
             if rc:
                 raise WorkflowBlocked(f"PREMARKET_EXIT_{rc}")
             current = now_kst()
@@ -188,7 +189,7 @@ def run_cycle(*, mode="dry-run", collect=False, output=None):
             write_json(output, report)
             dashboard = PROJECT_ROOT / "logs" / MODES[mode].lower() / "dashboard_state.json"
             previous_mtime = dashboard.stat().st_mtime_ns if dashboard.exists() else None
-            rc = run_process([str(PROJECT_ROOT / "run_live_trader.py"), flag])
+            rc = run_process([str(PROJECT_ROOT / "run_live_trader.py"), flag, *policy_flags])
             if rc:
                 raise WorkflowBlocked(f"TRADER_EXIT_{rc}")
             if not dashboard.exists() or dashboard.stat().st_mtime_ns == previous_mtime:
@@ -204,6 +205,17 @@ def run_cycle(*, mode="dry-run", collect=False, output=None):
         except Exception as exc:
             report.update(status="BLOCKED", error_type=type(exc).__name__,
                           reason=str(exc) if isinstance(exc, WorkflowBlocked) else "DEPENDENCY_FAILED")
+            current = now_kst()
+            if (report["stage"] in {"PREPARE", "PREMARKET"}
+                    and current.date() == now.date()
+                    and time(9) <= current.time() < time(15, 20)):
+                try:
+                    rc = run_process([str(PROJECT_ROOT / "run_live_trader.py"), flag,
+                                      *policy_flags, "--risk-only"])
+                    report["risk_management"] = {"status": "COMPLETED" if rc == 0 else "BLOCKED",
+                                                  "exit_code": rc}
+                except Exception as risk_error:
+                    report["risk_management"] = {"status": "BLOCKED", "error_type": type(risk_error).__name__}
             raise WorkflowBlocked(f"{report['stage']}: {report['reason']}") from None
         finally:
             report["finished_at"] = now_kst().isoformat()

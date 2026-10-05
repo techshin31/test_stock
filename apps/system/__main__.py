@@ -29,6 +29,7 @@ def main(argv=None) -> int:
     cycle.add_argument("--mode", choices=["dry-run", "simulate", "paper"], default="dry-run")
     cycle.add_argument("--collect", action="store_true", help="거래일마다 첫 준비 성공까지 증분 수집 실행")
     cycle.add_argument("--watch", action="store_true", help="중단할 때까지 실행, 미지정 시 1회")
+    cycle.add_argument("--paper-policy", action="store_true", help="DRY_RUN/SIMULATE에서 PAPER 정책 재현")
     cycle.add_argument("--interval", type=float, default=300)
     cycle.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
@@ -48,7 +49,8 @@ def main(argv=None) -> int:
                 try:
                     result = (prepare_session(effective_date=args.effective_date, collect=args.collect,
                                               output=args.output) if args.command == "prepare" else
-                              run_cycle(mode=args.mode, collect=args.collect, output=args.output))
+                              run_cycle(mode=args.mode, collect=args.collect, output=args.output,
+                                        paper_policy=args.paper_policy))
                     code = 0
                 except (WorkflowBlocked, ProcessAlreadyRunning) as exc:
                     result = {"status": "BLOCKED", "reason": str(exc)}

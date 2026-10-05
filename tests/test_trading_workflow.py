@@ -121,7 +121,8 @@ def test_cycle_stops_after_failed_premarket(workflow, monkeypatch):
     monkeypatch.setattr(wf, 'run_process', lambda args: (phases.append(args) or 1))
     with pytest.raises(wf.WorkflowBlocked, match='PREMARKET_EXIT_1'):
         wf.run_cycle()
-    assert len(phases) == 1
+    assert len(phases) == 2
+    assert phases[-1][-1] == '--risk-only'
     assert json.loads((workflow / 'logs/system/dry-run/cycle.json').read_text())['status'] == 'BLOCKED'
 
 

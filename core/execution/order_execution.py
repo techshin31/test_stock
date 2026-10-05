@@ -37,6 +37,11 @@ class OrderExecutionMixin:
         results = []
 
         for order in orders:
+            from core.execution.session_guard import submission_blocker
+            blocked = submission_blocker(order["type"], session=getattr(self.broker, "order_session_date", None))
+            if blocked:
+                results.append({**order, "status": "SKIPPED", "message": blocked})
+                continue
             prerequisites_met, missing_exits = self._hedge_exit_prerequisites_met(
                 order, results
             )
