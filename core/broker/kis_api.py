@@ -80,7 +80,8 @@ class KisBroker:
 
         self.acc_no = f"{acc_no_front}-{acc_no_back}"
         self.masked_account = f"***{acc_no_front[-4:]}-{acc_no_back}"
-        self.broker = mojito.KoreaInvestment(
+        from core.broker.auth import authenticated_client
+        self.broker = authenticated_client(mojito.KoreaInvestment,
             api_key=self.key,
             api_secret=self.secret,
             acc_no=self.acc_no,

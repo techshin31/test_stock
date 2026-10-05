@@ -571,8 +571,9 @@ function Reports({ overview, reports, selectedDate, reportDetail, loading, error
 }
 
 function App() {
+  const [mode, setMode] = useState('PAPER')
   const [activeTab, setActiveTab] = useState('market')
-  const overviewResource = useRemoteResource('/api/overview')
+  const overviewResource = useRemoteResource(`/api/overview?mode=${mode}`)
   const { data: overview, error: overviewError, loading: overviewLoading, refresh: loadOverview } = overviewResource
   const [reports, setReports] = useState([])
   const [reportsError, setReportsError] = useState('')
@@ -586,7 +587,7 @@ function App() {
   const exchangeResource = useRemoteResource('/api/exchange-rate', { enabled: activeTab === 'market' })
   const regimeResource = useRemoteResource('/api/market-regime', { enabled: activeTab === 'market' })
   const sectorResource = useRemoteResource('/api/sectors', { enabled: activeTab === 'sectors' })
-  const journalResource = useRemoteResource('/api/journal', { enabled: activeTab === 'journal' })
+  const journalResource = useRemoteResource(`/api/journal?mode=${mode}`, { enabled: activeTab === 'journal' })
   const marketResources = [['시장 지수', indicesResource], ['시장 폭', breadthResource], ['시장 업종', marketSectorsResource], ['환율', exchangeResource], ['시장 국면', regimeResource]]
   const marketLoading = marketResources.some(([, resource]) => resource.loading)
   const activeResources = activeTab === 'market' ? marketResources
@@ -598,19 +599,19 @@ function App() {
     setReportsLoading(true)
     try {
       setReportsError('')
-      setReportDetail(await requestJson(`/api/reports/${encodeURIComponent(date)}`, signal))
+      setReportDetail(await requestJson(`/api/reports/${encodeURIComponent(date)}`, signal, mode))
     } catch (error) {
       if (error.name !== 'AbortError') setReportsError(error.message)
     } finally {
       if (!signal?.aborted) setReportsLoading(false)
     }
-  }, [])
+  }, [mode])
 
   const loadReports = useCallback(async (signal) => {
     setReportsLoading(true)
     try {
       setReportsError('')
-      const payload = await requestJson('/api/reports', signal)
+      const payload = await requestJson('/api/reports', signal, mode)
       setReports(payload)
       setSelectedDate((current) => current || payload[0]?.date || '')
     } catch (error) {
@@ -618,7 +619,7 @@ function App() {
     } finally {
       if (!signal?.aborted) setReportsLoading(false)
     }
-  }, [])
+  }, [mode])
 
   // Reports tab data
   useEffect(() => {
@@ -694,7 +695,7 @@ function App() {
         </nav>
         <div className="sidebar__footer">
           <div><Server size={16} /><span>읽기 전용 모드</span></div>
-          <p>안전 설계로 주문 및 모드 변경은 이 화면에서 차단됩니다.</p>
+          <p>실행 환경별 결과를 조회합니다. 주문과 실제 실행 모드 변경은 지원하지 않습니다.</p>
         </div>
       </aside>
 
@@ -715,7 +716,7 @@ function App() {
         <header className="topbar hero-topbar">
           <div className="hero-topbar__main">
             <div className="hero-topbar__eyebrow">
-              <span className="hero-badge">PAPER</span>
+              <span className="hero-badge">{mode}</span>
               <span className="hero-divider">/</span>
               <span>{overview?.dashboard?.account_scope || '계좌 상태 미확인'}</span>
               <span className="hero-divider">·</span>
@@ -731,7 +732,16 @@ function App() {
           </div>
           <div className="topbar__status">
             <StatusChip state={operationalStatus}>{operationalStatus}</StatusChip>
-            <span className="mode-badge">PAPER MODE</span>
+            <label className="mode-badge">조회 환경{' '}
+              <select aria-label="조회 환경" value={mode} onChange={(event) => {
+                setMode(event.target.value); setReports([]); setSelectedDate(''); setReportDetail(null)
+              }}>
+                <option value="PAPER">KIS 모의투자</option>
+                <option value="DRY_RUN">주문 계획</option>
+                <option value="SIMULATE">로컬 가상매매</option>
+                <option value="REAL">실계좌 기록</option>
+              </select>
+            </label>
             <button
               className="icon-button"
               type="button"
@@ -744,6 +754,13 @@ function App() {
         </header>
 
         <div className="page-content">
+          {overview?.workflow && overview.workflow.status !== 'NOT_STARTED' && (
+            <div className="state-block" role="status">
+              <strong>자동 실행 · {overview.workflow.status}</strong>
+              <p>{overview.workflow.stage} {overview.workflow.reason || ''}</p>
+              {overview.workflow.risk_management && <p>보유분 위험관리: {overview.workflow.risk_management.status}</p>}
+            </div>
+          )}
           {overview?.runtime?.state !== 'AVAILABLE' && overview?.runtime ? (
             <div className="state-block" role="status">
               <strong>{overview.runtime.state === 'NOT_STARTED' ? '운영 미시작' : '운영 데이터 준비 중'}</strong>

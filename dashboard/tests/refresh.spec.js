@@ -130,3 +130,21 @@ test('runtime with activity but no snapshot shows data preparation', async ({ pa
   await expect(page.getByText('운영 데이터 준비 중', { exact: true })).toBeVisible()
   await expect(page.getByText('운영 미시작', { exact: true })).toHaveCount(0)
 })
+
+test('mode selection scopes requests and displays the selected execution record', async ({ page }) => {
+  const requested = []
+  await mockApi(page, async (route, path) => {
+    if (path !== '/api/overview') return false
+    const mode = new URL(route.request().url()).searchParams.get('mode')
+    requested.push(mode)
+    await route.fulfill({ json: { ...initialOverview, mode, workflow: {
+      mode, status: 'BLOCKED', stage: 'PREPARE', reason: 'INPUTS_NOT_READY',
+    } } })
+    return true
+  })
+  await page.goto('/')
+  await page.getByLabel('조회 환경').selectOption('SIMULATE')
+  await expect(page.locator('.hero-badge')).toHaveText('SIMULATE')
+  await expect(page.getByText('자동 실행 · BLOCKED')).toBeVisible()
+  await expect.poll(() => requested.at(-1)).toBe('SIMULATE')
+})

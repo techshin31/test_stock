@@ -6,6 +6,7 @@ import json
 import math
 from pathlib import Path
 import time
+import signal
 
 from core.utils.io import write_json
 
@@ -30,6 +31,7 @@ def main(argv=None) -> int:
     cycle.add_argument("--collect", action="store_true", help="거래일마다 첫 준비 성공까지 증분 수집 실행")
     cycle.add_argument("--watch", action="store_true", help="중단할 때까지 실행, 미지정 시 1회")
     cycle.add_argument("--paper-policy", action="store_true", help="DRY_RUN/SIMULATE에서 PAPER 정책 재현")
+    cycle.add_argument("--supervise", action="store_true", help="진행 정체 감지·최대 3회 복구하며 반복 실행")
     cycle.add_argument("--interval", type=float, default=300)
     cycle.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
@@ -39,8 +41,28 @@ def main(argv=None) -> int:
         if args.command == "run" and (not math.isfinite(args.interval) or args.interval < 30):
             parser.error("--interval must be finite and at least 30 seconds")
         watch_lock = heartbeat = None
+        scheduler_lock = scheduler_heartbeat = None
+        if args.command == "run" and args.supervise:
+            from apps.system.supervisor import supervise
+            arguments = ["--mode", args.mode, "--interval", str(args.interval)]
+            if args.collect:
+                arguments.append("--collect")
+            if args.paper_policy:
+                arguments.append("--paper-policy")
+            if args.output:
+                parser.error("--supervise uses the canonical cycle output; omit --output")
+            return supervise(arguments, mode=args.mode)
+        previous_signal = signal.getsignal(signal.SIGTERM)
+        def terminate(_signum, _frame):
+            raise KeyboardInterrupt
+        signal.signal(signal.SIGTERM, terminate)
         try:
             if args.command == "run" and args.watch:
+                from apps.system.workflow import MODES
+                scheduler_lock = ProcessInstanceLock(PROJECT_ROOT / "logs/scheduler.instance.lock", MODES[args.mode],
+                                                       label="scheduler").acquire()
+                scheduler_heartbeat = ProcessHeartbeat(PROJECT_ROOT / "logs" / MODES[args.mode].lower() /
+                                                        "scheduler_runtime.json", MODES[args.mode], label="scheduler").start()
                 watch_lock = ProcessInstanceLock(PROJECT_ROOT / "logs/system/watch.lock", args.mode,
                                                  label="automated trading watcher").acquire()
                 heartbeat = ProcessHeartbeat(PROJECT_ROOT / "logs/system/watch.heartbeat.json", args.mode,
@@ -65,10 +87,15 @@ def main(argv=None) -> int:
         except KeyboardInterrupt:
             return 130
         finally:
+            signal.signal(signal.SIGTERM, previous_signal)
             if heartbeat:
                 heartbeat.stop()
             if watch_lock:
                 watch_lock.release()
+            if scheduler_heartbeat:
+                scheduler_heartbeat.stop()
+            if scheduler_lock:
+                scheduler_lock.release()
     if args.command == "doctor":
         from apps.system.diagnostics import diagnose
 

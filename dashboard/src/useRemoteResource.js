@@ -4,7 +4,7 @@ import { requestJson } from './dataClient.js'
 // Each endpoint owns its refresh status. A failed request retains the last
 // successful payload but never changes its timestamp or marks it as current.
 export function useRemoteResource(path, { enabled = true, refreshMs = 30_000 } = {}) {
-  const [resource, setResource] = useState({ data: null, error: '', lastSuccess: null, loading: true })
+  const [resource, setResource] = useState({ path: null, data: null, error: '', lastSuccess: null, loading: true })
   const current = useRef({ sequence: 0, controller: null })
 
   const refresh = useCallback(async () => {
@@ -20,11 +20,12 @@ export function useRemoteResource(path, { enabled = true, refreshMs = 30_000 } =
     try {
       const data = await requestJson(path, controller.signal)
       if (sequence !== current.current.sequence || controller.signal.aborted) return
-      setResource({ data, error: '', lastSuccess: new Date().toISOString(), loading: false })
+      setResource({ path, data, error: '', lastSuccess: new Date().toISOString(), loading: false })
     } catch (error) {
       if (sequence !== current.current.sequence || (controller.signal.aborted && !timedOut)) return
       setResource((previous) => ({
         ...previous,
+        path,
         error: timedOut ? '응답 대기 시간이 초과되었습니다.' : error.message || '데이터 요청에 실패했습니다.',
         loading: false,
       }))
@@ -35,6 +36,7 @@ export function useRemoteResource(path, { enabled = true, refreshMs = 30_000 } =
 
   useEffect(() => {
     if (!enabled) return undefined
+    setResource({ path, data: null, error: '', lastSuccess: null, loading: true })
     const requestState = current.current
     refresh()
     const interval = refreshMs ? window.setInterval(refresh, refreshMs) : null
@@ -43,7 +45,8 @@ export function useRemoteResource(path, { enabled = true, refreshMs = 30_000 } =
       requestState.controller?.abort()
       if (interval !== null) window.clearInterval(interval)
     }
-  }, [enabled, refresh, refreshMs])
+  }, [enabled, path, refresh, refreshMs])
 
-  return { ...resource, refresh }
+  return resource.path === path ? { ...resource, refresh }
+    : { data: null, error: '', lastSuccess: null, loading: true, refresh }
 }

@@ -190,7 +190,7 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
         )
 
     def run_premarket_batch(self):
-        logging.info(f"[{datetime.datetime.now()}] 프리마켓 FA 필터링 시작")
+        logging.info(f"[{_now_kst()}] 프리마켓 FA 필터링 시작")
         signal_date = previous_krx_trading_day(_today_kst())
         published_run, published_candidates = self._load_published_fa_candidates(signal_date)
         tickers = [f"{row['stock_code']}.KS" for row in published_candidates]
@@ -273,7 +273,7 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
                 logging.warning(f"대시보드 상태 로드 실패: {e}")
         
         timeline = dashboard_state.setdefault("timeline", [])
-        timeline.append(f"[{datetime.datetime.now().strftime('%H:%M')}] ☀️ 프리마켓 우량주(FA) {len(fa_candidates)}개 발굴 완료")
+        timeline.append(f"[{_now_kst().strftime('%H:%M')}] ☀️ 프리마켓 우량주(FA) {len(fa_candidates)}개 발굴 완료")
         dashboard_state["timeline"] = timeline[-5:] # 최근 5개 유지
         dashboard_state["execution_mode"] = self.execution_venue
         dashboard_state["strategy"] = self.strategy_name
@@ -339,7 +339,7 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
         return orders
 
     def run_daily_batch(self):
-        logging.info(f"[{datetime.datetime.now()}] 실전 매매 배치 시작 (Intraday)")
+        logging.info(f"[{_now_kst()}] 실전 매매 배치 시작 (Intraday)")
         self.last_global_order_pause = None
         
         # 1. 잔고 조회
@@ -435,7 +435,7 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
             logging.warning(f"누적 슬리피지 조회 실패: {e}")
             total_slippage = 0.0
             
-        dashboard_state["updated_at"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        dashboard_state["updated_at"] = _now_kst().strftime('%Y-%m-%d %H:%M:%S')
         dashboard_state["cash"] = cash
         dashboard_state["total_eval"] = total_eval
         dashboard_state["positions"] = [
@@ -500,7 +500,7 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
             logging.warning(f"{unresolved_error}; this scan will not create new orders")
             timeline = dashboard_state.setdefault("timeline", [])
             timeline.append(
-                f"[{datetime.datetime.now():%H:%M}] 미정산 주문 보호: "
+                f"[{_now_kst():%H:%M}] 미정산 주문 보호: "
                 "모든 신규 주문 일시 중지 (정산 후 자동 해제)"
             )
             dashboard_state["timeline"] = timeline[-5:]
@@ -935,7 +935,7 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
         )
         dashboard_state["last_error"] = "; ".join(dependency_errors) or None
         self._write_json_state(dashboard_path, dashboard_state)
-        print(f"[{datetime.datetime.now()}] 배치 종료")
+        print(f"[{_now_kst()}] 배치 종료")
         return orders
 
     def update_intraday_dashboard(self, execution_results):
@@ -984,9 +984,9 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
                 )
 
         timeline = dashboard_state.setdefault("timeline", [])
-        timeline.append(f"[{datetime.datetime.now().strftime('%H:%M')}] ⚡ {summary}")
+        timeline.append(f"[{_now_kst().strftime('%H:%M')}] ⚡ {summary}")
         dashboard_state["timeline"] = timeline[-5:]
-        dashboard_state["updated_at"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        dashboard_state["updated_at"] = _now_kst().strftime('%Y-%m-%d %H:%M:%S')
         actual_orders = self._daily_order_summary()
         candidates = list(getattr(self, "last_order_candidates", []) or [])
         dashboard_state["execution_mode"] = self.execution_venue
@@ -1189,10 +1189,10 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
         dashboard_path = self.log_dir / "dashboard_state.json"
         state = self._read_json_state(dashboard_path)
         state.setdefault("timeline", []).append(
-            f"[{datetime.datetime.now():%H:%M}] 실행 오류: {error}"
+            f"[{_now_kst():%H:%M}] 실행 오류: {error}"
         )
         state["timeline"] = state["timeline"][-5:]
-        state["updated_at"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        state["updated_at"] = _now_kst().strftime('%Y-%m-%d %H:%M:%S')
         state["execution_mode"] = self.execution_venue
         state["operational_status"] = "ERROR"
         state["last_error"] = str(error)
@@ -1494,7 +1494,7 @@ class LiveTrader(OrderPlanningMixin, OrderExecutionMixin, OrderReconciliationMix
                 "selected": float(target_positions.get(ticker, 0.0)) > 0.0,
             })
         payload = {
-            "updated_at": datetime.datetime.now().isoformat(timespec="seconds"),
+            "updated_at": _now_kst().isoformat(timespec="seconds"),
             "mode": self.execution_venue,
             "strategy": self.strategy_name,
             "market_regime": market_regime,

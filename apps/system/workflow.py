@@ -53,11 +53,8 @@ def run_process(arguments, *, timeout=900):
     env = dict(os.environ, PYTHONPATH=str(PROJECT_ROOT), PYTHONUTF8="1")
     env.pop("DART_API_KEY", None)
     env.pop("COMPANY_DATA_SOURCE", None)
-    return subprocess.run(
-        [sys.executable, *arguments], cwd=PROJECT_ROOT, env=env,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout,
-        check=False,
-    ).returncode
+    from apps.system.processes import run_bounded
+    return run_bounded([sys.executable, *arguments], cwd=PROJECT_ROOT, env=env, timeout=timeout)
 
 
 def prepare(*, effective_date: date | None = None, collect=False,
@@ -160,6 +157,11 @@ def run_cycle(*, mode="dry-run", collect=False, output=None, paper_policy=False)
         policy_flags = ["--paper-policy"] if paper_policy and mode != "paper" else []
         try:
             write_json(output, report)
+            from apps.system.operations import finish_session
+            eod = finish_session(now, MODES[mode])
+            if eod is not None:
+                report.update(status="PASS", stage="EOD_FINISHED", eod=eod)
+                return report
             if not is_krx_trading_day(now.date().isoformat()) or not time(8, 0) <= now.time() < time(15, 20):
                 report.update(status="WAITING", reason="OUTSIDE_KRX_SESSION")
                 return report
@@ -214,6 +216,12 @@ def run_cycle(*, mode="dry-run", collect=False, output=None, paper_policy=False)
                                       *policy_flags, "--risk-only"])
                     report["risk_management"] = {"status": "COMPLETED" if rc == 0 else "BLOCKED",
                                                   "exit_code": rc}
+                    if rc == 0:
+                        dashboard = PROJECT_ROOT / "logs" / MODES[mode].lower() / "dashboard_state.json"
+                        state = json.loads(dashboard.read_text()) if dashboard.exists() else {}
+                        coverage = (state.get("data_health") or {}).get("risk_check_coverage")
+                        report["risk_management"].update(risk_check_coverage=coverage,
+                            status="COMPLETED" if coverage == 1 else "PARTIAL" if coverage is not None else "UNVERIFIED")
                 except Exception as risk_error:
                     report["risk_management"] = {"status": "BLOCKED", "error_type": type(risk_error).__name__}
             raise WorkflowBlocked(f"{report['stage']}: {report['reason']}") from None

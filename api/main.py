@@ -49,7 +49,7 @@ ANALYSIS_ROOT = PROJECT_ROOT / "reports" / "analysis"
 LOG_ROOT = PROJECT_ROOT / "logs"
 SEOUL = ZoneInfo("Asia/Seoul")
 REPORT_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-ReportMode = Literal["DRY_RUN", "PAPER", "REAL"]
+ReportMode = Literal["DRY_RUN", "SIMULATE", "PAPER", "REAL"]
 STOCK_NAME_CACHE_SECONDS = 60 * 60
 _stock_name_cache: dict[str, str] = {}
 _stock_name_cache_loaded_at: float | None = None
@@ -337,7 +337,26 @@ def get_overview(mode: ReportMode = "PAPER"):
         ),
         "eod_report_status": eod_status,
         "system_readiness": _system_readiness(mode),
+        "workflow": get_workflow_status(mode),
     }
+
+
+@app.get("/api/workflow")
+def get_workflow_status(mode: ReportMode = "PAPER"):
+    import time
+    name = mode.lower().replace("_", "-")
+    path = LOG_ROOT / "system" / name / "cycle.json"
+    try:
+        data = json.loads(path.read_text())
+        if data.get("mode") != mode:
+            return {"status": "UNKNOWN", "mode": mode}
+        safe = {key: data.get(key) for key in (
+            "status", "stage", "reason", "mode", "started_at", "finished_at", "risk_management")}
+        if data.get("status") == "RUNNING" and time.time() - path.stat().st_mtime > 1800:
+            safe.update(status="STALLED", reason="PROGRESS_NOT_UPDATED")
+        return safe
+    except (OSError, ValueError, AttributeError):
+        return {"status": "NOT_STARTED", "mode": mode}
 
 
 @app.get("/api/system-readiness")
